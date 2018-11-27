@@ -23,8 +23,9 @@ class AddPermissionStateChange(BaseStateChange):
         return False
 
     def implement(self, actor, target):
-        permission = PermissionsItem.objects.create(resource=target, 
-            actor=self.permission_actor, action_type=self.permission_type)
+        permission = PermissionsItem.objects.create(owner=actor,
+            resource=target, actor=self.permission_actor, 
+            action_type=self.permission_type)
         return permission
 
 

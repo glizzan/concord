@@ -40,6 +40,9 @@ INSTALLED_APPS = [
     'resources',
     'permission_resources',
     'actions',
+    'conditionals',
+    'toyfrontend',
+    'communities',
 ]
 
 MIDDLEWARE = [

@@ -34,7 +34,8 @@ class PermissionResourceClient(BaseActionClient):
     # Create only
 
     def create_permission_resource(self, permitted_object):
-        return PermissionsResource.objects.create(permitted_object=permitted_object)
+        return PermissionsResource.objects.create(owner=self.actor,
+            permitted_object=permitted_object)
 
     # State changes
 

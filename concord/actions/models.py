@@ -33,6 +33,11 @@ class Action(models.Model):
     status = models.CharField(max_length=5, choices=ACTION_STATUS_CHOICES, 
         default='draft')
 
+    # Basics
+
+    def __str__(self):
+        return "Action %s by %s on %s " % (self.change_type, self.actor, self.target)
+
     # Steps of action execution
 
     def validate_action(self):
@@ -44,10 +49,7 @@ class Action(models.Model):
     
     def check_permissions(self):
         """Checks that action is permissable."""
-        if has_permission(action=self):
-            self.status = "approved"
-        else:
-            self.status = "rejected"
+        self.status = has_permission(action=self)
         self.save()
 
     def implement_action(self):
@@ -63,13 +65,17 @@ class Action(models.Model):
         # hack for now, create change from change_type and change_data
         self.change = create_change_object(self.change_type, self.change_data)
 
+        current_result = None 
+
         # now go through steps
         if self.status == "draft":
-            self.validate_action()
-        if self.status == "sent":
-            self.check_permissions()
+            current_result = self.validate_action()
+        if self.status in ["sent", "waiting"]:
+            current_result = self.check_permissions()
         if self.status == "approved":
-            return self.implement_action()
+            current_result = self.implement_action()
+        
+        return self.pk, current_result
 
 
 # Helper method until we can call Action directly using change field
@@ -77,3 +83,28 @@ def create_action(change, target, actor):
     return Action.objects.create(actor=actor, target=target, 
         change_type=change.get_change_type(), change_data=change.get_change_data())
     
+
+OWNER_CHOICES = (
+    ('ind', 'Individually Owned'),
+    ('com', 'Community Owned'),
+)
+
+class PermissionedModel(models.Model):
+
+    owner = models.CharField(max_length=200)
+    owner_type = models.CharField(max_length=3, choices=OWNER_CHOICES, 
+        default='ind')
+
+    class Meta:
+        abstract = True
+
+    def get_owner(self):
+        return self.owner
+
+    def get_unique_id(self):
+        # App name + model name + pk
+        contentType = ContentType.objects.get_for_model(self)
+        return "_".join([contentType.app_label, contentType.model, str(self.pk)])
+
+    # TODO: add a method that overrides save and checks whether it's 
+    # called from a BaseStateChange object.

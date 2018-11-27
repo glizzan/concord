@@ -13,100 +13,13 @@ DONE
 DONE
 
 5. Manual Approval
-IN PROGRESS
+DONE (see write up below - 'About Conditionals')
 
+6. Toy Front End
+IN PROGRESS - pausing for now because it annoys me
 
-- maybe each permission has a "conditional" field? 
-then what is the "condition"?
-
--- the condition itself needs to resolve into yes or no eventually
--- ideally it's easily extensible
--- options:
------ check if user has attribute (maintainer label)
------ check if enough time has expired
------ check if user not on blocklist
------ check if something has a particular value (can be used for various votes, also
-potentially for chaining actions?  but the condition is on the permission not the action)
-
-where is this set?  it seems like it ought to be set on the action, since we'll need to apply it to each action, and yet the specifics would be on the permission, no?  but maybe it's in the change_data somehow.
-
-or maybe an additional "conditional" field, linked to status?
-
-okay, so theoretically you could have a permission that sets the conditional data within the change field.
-
-ooooooookay what if the condition is orthogonal to permissions?  no but then if the condition is "user has attribute" it's getting conceptual separated from permission
-
-no I think it ought to be defined in permissions so that you can look at the full list of rules for changing state.  
-
-What does a user *see* when a condition has been activated though?
-
-1) a permission is set on a resource that says all new items need mod approval.
-2) buffy attempts to add an item, this causes her action to be set to "waiting" because
-her change object (created by the client) "has a conditional field" (something on the base change, default = false)
-3) how does the mod approve the action?
-
-options:
-- conditional actions resource [or maybe generic action resource?]?  but then do you have to set the permissions on that separately?  and how does the action know to check the action resource?
-- change the action itself with another action?  but action models aren't themselves governed by permissions
-
-Ideally we could reuse permissions, so that we could set "approval from has label 'mod'" to like five different permissions rather than redoing it constantly.
-
-Also... how does "has label 'mod'" fit into the context?  I guess all resources belong to a community.
-
-
-Okay, options *again*:
-
-- create a conditions model, with a type and data.  when a permission has a condition create a new instance/row of the condition and link it to the action.
-
-Okay:
---- where is the info coming from?
---- who needs access to the info?
-
-The info is coming from:
---- what kind of actions should have the condition apply to them?  permissions resource
---- what the specific condition is?  permissions resource
-
-Who needs access to the info:
---- whether the condition is met?  the action itself
-
-*****
-
-Okay, IF there is a condition on the action THEN we check for its existence in the ConditionalActions Resource for a given resource/item.  (ConditionalActions Resource and Items are part of the core, like Permissions Resource.)
-
-A conditional actions item has a condition_met() method which returns yes/no/waiting and that's the thing that the action itself queries.
-
-The specifics of the conditional action are specified by, what?  Condition Object?  Referenced by permission?  Sure.  Like, "condition_type, condition_data".
-
-How are permissions on a conditional action set tho?  By the condition itself?
-
-1) a permission is set on a resource with a condition that says all new items need mod approval.
-2) buffy attempts to add an item.  due to the condition, her action is set to "waiting" and linked to a ConditionalActionResource.
-3) a mod for the resource checks the conditionalactionresource and sees an active action.  
-4) the mod wants to set "approved" to true on the conditionalactionresource item.
-option 1: that item gets "permission condition change label = mod" set on it, ugh yet another layer
-option 2: the condition itself checks for the mod label 
-
-pros of option 2: seems simpler for now, but less able to recurse?  well let's try it
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-100. Possible extentensions:
-- complex action (adding label, for instance)
-- improve separateness of client
-- different options for default permissions system?
-- make a display
+7. Communities
+IN PROGRESS - 
 
 
 # Open Questions
@@ -119,10 +32,20 @@ Right now, using add_item for both RC and PRC, they take different parameters in
 
 3.  How do we "short-circuit" the permissions resource system?  We don't want to recursively create prs for prs for prs forever. 
 
-We could say, if not otherwise specified, the PR system is the "default" system, which
-is completely private to the creator.  So you only create a permissions resource if you
-want to override that completely private system (which you can do on object creation in the UI, which means users don't have to think about this).
+The default permission system is how permissions are handled in the absence of a PR.  For 
+individually owned objects, the default permission is that the owner has all permissions 
+and everyone else has none.  For community owned objects, the default permission depends
+on how the community is configured.  
 
+This system assumes that all PermissionedModel objects have an owner.  This is easy enough
+to assign for resource-like objects, we can just make the creator the default owner, but what about things like permission resources, actions, and conditionalactions?  These are set automatically by the system.  They can be overridden, but by default:
+
+The owner of a permission resource is the actor who created the resource.
+The owner of a permission item is the actor who set the permission item on the resource.
+The owner of a ConditionalTemplate is the actor who set the condition on the permission.
+The owner of the conditional action is the actor who set the condition on the permission, aka the owner of the condition template.
+The owner of the permission set on the conditional action which is set on a permission
+which is set on a target is (JESUS CHRIST) is the actor who set the condition on the permission (aka the owner of the conditional action which the permission is set on).
 
 
 # Architectural Notes
@@ -130,8 +53,6 @@ want to override that completely private system (which you can do on object crea
 - Generally speaking, apps only intereact with each other through their clients and you can only import things from appname/client.py.
 
 - There are certain 'core' apps that are re-used by each other, for instance, all apps rely on the action app, which return relies on the permissions_resources app.  [Make dependency map?]
-
-
 
 
 # A Complete List of Valid State Changes
@@ -144,12 +65,27 @@ CREATION:
 
 UPDATING:
 
-- for all models except those explicitly stated below, they can only be updated via the implement method of a change object instantiated on an action model
+- for all models except those explicitly stated below, they can only be updated via the implement method of a StatusChange object instantiated on an action model
 
 - action models: can save their own status in methods called by the take_action meta-method
 
+- NOTE: creating an object with a relationship to an existing object counts as a state change, for instance adding an item to a resource or a permission to a condition
+
 OTHER:
 
-- user account data is created and saved separately
+- peripheral data is created and saved separately, for instance user account data, notifications/email, etc.
 
-- notifications/settings/email data is created and saved separately
+
+# How to create a new app with permissioned resources in it
+
+1.  Create the standard app using django startapp, add to settings, etc.
+
+2.  Model should subclass PermissionedModel from actions.py
+
+3.  Need to create a client.py to allow other apps to interact with it
+
+4.  Need to create a state_changes.py to allow models to change state.
+
+
+
+

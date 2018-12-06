@@ -46,6 +46,27 @@ class ConditionalClient(BaseActionClient):
 
     # Read only
 
+    def get_condition_template_for_permission(self, permission_pk):
+        result = ConditionTemplate.objects.filter(conditioned_object=permission_pk,
+            conditioning_choices="permission")
+        if result:
+            return result[0]
+        return None
+
+    def get_condition_template_for_owner(self, community_pk):
+        result = ConditionTemplate.objects.filter(conditioned_object=community_pk,
+            conditioning_choices="community_owner")
+        if result:
+            return result[0]
+        return None
+
+    def get_condition_template_for_governor(self, community_pk):
+        result = ConditionTemplate.objects.filter(conditioned_object=community_pk,
+            conditioning_choices="community_governor")
+        if result:
+            return result[0]
+        return None
+
     def get_condition_item_given_action(self, action_pk):
         # HACK
         condition_items = ApprovalCondition.objects.filter(action=action_pk)
@@ -53,54 +74,45 @@ class ConditionalClient(BaseActionClient):
             condition_items = VoteCondition.objects.filter(action=action_pk)
         return condition_items[0] if condition_items else None
 
-    def get_condition_template_given_permission(self, permission_pk):
-        result = ConditionTemplate.objects.filter(conditioned_object=permission_pk,
-            conditioned_object_type="permission")
-        if result:
-            return result[0]
-        return None
-
-    def get_condition_template_given_community(self, community_pk):
-        result = ConditionTemplate.objects.filter(conditioned_object=community_pk,
-            conditioned_object_type="community")
-        if result:
-            return result[0]
-        return None
-
     def getVoteCondition(self, pk):
         vote_object = VoteCondition.objects.get(pk=pk)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
     # Create only
+    def condition_lookup_helper(self, lookup_string):
+        condition_dict = {
+            "approvalcondition": ApprovalCondition,
+            "votecondition": VoteCondition
+        }
+        return condition_dict[lookup_string]
 
-    # TODO: Does this logic really belong here?  Shouldn't a client just be a pointer
-    # to business logic implemented elsewhere?  But the logic here is state change logic.
-    # IMPORTANT: note that the permission referenced here is the permission controlling
-    # changes to the conditional, not the permission the conditional is being set on.
-
-    def set_permission_on_condition_item(self, condition_item, action, condition_template):
-        if condition_template.permission_data is not None:
-            from permission_resources.client import PermissionResourceClient
-            # HACK! wow this needs to be cleaned up
-            prc = PermissionResourceClient(actor=condition_template.get_owner())
-            pr = prc.create_permission_resource(permitted_object=condition_item)
-            prc.set_target(target=pr)
-            permission_dict = json.loads(condition_template.permission_data)
-            action_pk, permission = prc.add_permission(
-                permission_type=permission_dict["permission_type"],
-                permission_actor=permission_dict["permission_actor"])
-
+    # FIXME: this feels like too much logic for the client, but where should it go?
     def create_condition_item(self, condition_template, action):
+        """
+        This method is a little wonky, because we want to include the permission that goes on 
+        the condition action item *in* the template but we *don't* want to put it through the
+        permissions pipeline when instantiating.
+        """
+
+        # Instantiate condition object
         data_dict = json.loads(condition_template.condition_data)
-        if condition_template.condition_type == "approvalcondition":
-            condition_item = ApprovalCondition.objects.create(action=action.pk, 
-                owner=condition_template.get_owner(), **data_dict)
-            self.set_permission_on_condition_item(condition_item, 
-                action, condition_template)
-        elif condition_template.condition_type == "votecondition":
-            condition_item = VoteCondition.objects.create(action=action.pk, 
-                owner=condition_template.get_owner(), **data_dict)
-            self.set_permission_on_condition_item(condition_item, action, condition_template)
+        conditionModel = self.condition_lookup_helper(condition_template.condition_type)
+        condition_item = conditionModel.objects.create(action=action.pk, 
+                owner=condition_template.get_owner(), owner_type=condition_template.owner_type,
+                **data_dict)
+
+        # Add permission
+        if condition_template.permission_data is not None:
+            permission_dict = json.loads(condition_template.permission_data)
+            # HACK to prevent permission addition from going through permissions pipeline
+            from permission_resources.models import PermissionsItem
+            PermissionsItem.objects.create(
+                permitted_object=condition_item,
+                actors = json.dumps(permission_dict["permission_actor"]),
+                change_type = permission_dict["permission_type"],
+                owner = condition_template.get_owner(),
+                owner_type = condition_template.owner_type)
+
         return condition_item
 
     def get_or_create_condition_item(self, condition_template, action):
@@ -109,20 +121,34 @@ class ConditionalClient(BaseActionClient):
             condition_item  = self.create_condition_item(condition_template, action)
         return condition_item 
 
+    def override_owner_if_target_is_owned_by_community(self, target):
+        # FIXME: don't like the way this abstraction is leaking
+        if target.owner_type == "ind":
+            return self.actor
+        else:
+            return target.owner
+
     def createApprovalCondition(self, action):
-        return ApprovalCondition.objects.create(owner=self.actor, action=action)
+        owner = self.override_owner_if_target_is_owned_by_community(action.target)
+        approval_object = ApprovalCondition.objects.create(owner=owner, action=action.pk)
+        return ApprovalConditionClient(target=approval_object, actor=self.actor)
 
     def createVoteCondition(self, action, **kwargs):
-        vote_object = VoteCondition.objects.create(owner=self.actor, action=action,
-            **kwargs)
+        owner = self.override_owner_if_target_is_owned_by_community(action.target)
+        vote_object = VoteCondition.objects.create(owner=owner, action=action.pk, **kwargs)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
     # Stage changes
 
     def addConditionToGovernors(self, condition_type, permission_data=None, target=None, condition_data=None):
         change = sc.AddConditionStateChange(condition_type, condition_data, 
-            permission_data, "community")
+            permission_data, "community_governor")
         return self.create_and_take_action(change, target)        
+
+    def addConditionToOwners(self, condition_type, permission_data=None, target=None, condition_data=None):
+        change = sc.AddConditionStateChange(condition_type, condition_data, 
+            permission_data, "community_owner")
+        return self.create_and_take_action(change, target) 
 
     # Note that the permission is the target here
     def addConditionToPermission(self, condition_type, permission_data=None, target=None, condition_data=None):

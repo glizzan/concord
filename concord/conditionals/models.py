@@ -28,6 +28,7 @@ ApproveStateChange, etc.
 
 import datetime
 import json
+import decimal
 
 from django.db import models
 from django.utils import timezone
@@ -55,6 +56,7 @@ class ConditionModel(PermissionedModel):
 class ApprovalCondition(ConditionModel):
 
     approved = models.BooleanField(null=True)  # Null by default
+    self_approval_allowed = models.BooleanField(default=False)
 
     def condition_status(self):
         if self.approved == True:
@@ -86,7 +88,7 @@ class VoteCondition(ConditionModel):
 
     # voting period in hours, default is 168 hours aka one week
     voting_starts = models.DateTimeField(auto_now_add=True)
-    voting_period = models.IntegerField(default=168)
+    voting_period = models.FloatField(default=168)
 
     def current_results(self):
         results = { "yeas": self.yeas, "nays": self.nays }
@@ -114,8 +116,8 @@ class VoteCondition(ConditionModel):
         self.voted = json.dumps(voted)
 
     def voting_time_remaining(self):
-        seconds_passed = (timezone.now() - self.voting_starts).seconds
-        hours_passed = seconds_passed / 3600
+        microseconds_passed = (timezone.now() - self.voting_starts).microseconds
+        hours_passed = microseconds_passed / 360000000
         return self.voting_period - hours_passed
 
     def voting_deadline(self):
@@ -132,7 +134,7 @@ class VoteCondition(ConditionModel):
         return False
 
     def condition_status(self):
-        if self.voting_time_remaining() < 0:
+        if self.voting_time_remaining() <= 0:
             if self.require_majority or not self.allow_abstain:
                 if self.yeas_have_majority():
                     return "approved"
@@ -149,9 +151,19 @@ class VoteCondition(ConditionModel):
 ##########################
 
 class ConditionTemplate(PermissionedModel):
+    """
+    condition_type - one of the concrete ConditionModel types specified in this file
+    condition_data - configures a condition that isn't simply using defaults, for instance
+                     making the voting period longer or setting self-approval to True
+    permission_data - this data is used to create a permissions resource for the condition,
+                     otherwise the default permission is used  
+    conditioned_object - pk of the thing the condition is set on
+    conditioning_choices - currently only 'permission' or (less likely) 'community_governor', 
+                    'community_owner'
+    """
 
     condition_type = models.CharField(max_length=400)  # Replace with choices field???
     condition_data = models.CharField(max_length=400, blank=True, null=True)
     permission_data = models.CharField(max_length=400, blank=True, null=True)
-    conditioned_object = models.IntegerField()  # Assumes this is a permission, big integer field?
-    conditioned_object_type = models.CharField(max_length=15, default="permission")
+    conditioned_object = models.IntegerField()  
+    conditioning_choices = models.CharField(max_length=18, default="permission")

@@ -32,20 +32,15 @@ Right now, using add_item for both RC and PRC, they take different parameters in
 
 3.  How do we "short-circuit" the permissions resource system?  We don't want to recursively create prs for prs for prs forever. 
 
-The default permission system is how permissions are handled in the absence of a PR.  For 
-individually owned objects, the default permission is that the owner has all permissions 
-and everyone else has none.  For community owned objects, the default permission depends
-on how the community is configured.  
+The default permission system is how permissions are handled in the absence of a PR.  For individually owned objects, the default permission is that the owner has all permissions and everyone else has none.  For community owned objects, the default permission depends on how the community is configured.  
 
-This system assumes that all PermissionedModel objects have an owner.  This is easy enough
-to assign for resource-like objects, we can just make the creator the default owner, but what about things like permission resources, actions, and conditionalactions?  These are set automatically by the system.  They can be overridden, but by default:
+This system assumes that all PermissionedModel objects have an owner.  This is easy enough to assign for resource-like objects, we can just make the creator the default owner, but what about things like permission resources, actions, and conditionalactions?  These are set automatically by the system.  They can be overridden, but by default:
 
 The owner of a permission resource is the actor who created the resource.
 The owner of a permission item is the actor who set the permission item on the resource.
 The owner of a ConditionalTemplate is the actor who set the condition on the permission.
 The owner of the conditional action is the actor who set the condition on the permission, aka the owner of the condition template.
-The owner of the permission set on the conditional action which is set on a permission
-which is set on a target is (JESUS CHRIST) is the actor who set the condition on the permission (aka the owner of the conditional action which the permission is set on).
+The owner of the permission set on the conditional action which is set on a permission which is set on a target is (JESUS CHRIST) is the actor who set the condition on the permission (aka the owner of the conditional action which the permission is set on).
 
 
 # Architectural Notes

@@ -36,7 +36,8 @@ class Action(models.Model):
     # Basics
 
     def __str__(self):
-        return "Action %s by %s on %s " % (self.change_type, self.actor, self.target)
+        return "%s action %s by %s on %s " % (self.status, self.change_type, self.actor, 
+            self.target)
 
     # Steps of action execution
 
@@ -94,6 +95,10 @@ class PermissionedModel(models.Model):
     owner = models.CharField(max_length=200)
     owner_type = models.CharField(max_length=3, choices=OWNER_CHOICES, 
         default='ind')
+    
+    # Permission-related fields
+    foundational_permission_enabled = models.BooleanField(default=False)
+    governing_permission_enabled = models.BooleanField(default=True)
 
     class Meta:
         abstract = True

@@ -1,69 +1,112 @@
-def check_condition(action, permission):
+from actions.state_changes import foundational_changes
+
+
+def check_conditional(action, condition_template):
     from conditionals.client import ConditionalClient
+    conditionalClient = ConditionalClient(actor="system")
 
     # Does the permission have a condition?  If no, just approve it.
-    cc = ConditionalClient(actor=action.actor) 
-    condition_template = cc.get_condition_template_given_permission(permission_pk=permission.pk)
     if not condition_template:
         return "approved"
 
-    # If it does have a condition, does this action already have a condition action
-    # instance?  If no, make one.
-    condition_item = cc.get_or_create_condition_item(condition_template=condition_template,
-        action=action)
+    # Does this action already have a condition action instance?  If no, make one.
+    condition_item = conditionalClient.get_or_create_condition_item(
+        condition_template=condition_template, action=action)
 
     return condition_item.condition_status()
 
-def get_permissions_resource(action):
-    from permission_resources.client import PermissionResourceClient
-    prc = PermissionResourceClient(actor=action.actor)
-    return prc.get_permission_resource(permitted_object=action.target)
 
-def check_individual_default_permission(action):
-    """For individuals, the default permission is that the owner
-    can do anything and everyone else can do nothing."""
-    if action.actor == action.target.get_owner():
-        return "approved"
-    return "rejected"
-
-def check_community_default_permission(action):
-    """
-    Checks whether the actor is authorized by the default permission by
-    checking the target owner's authority handler.
-    """
-    from communities.client import CommunityClient
-    cc = CommunityClient(actor="view_only")
-    return cc.does_actor_have_default_permission_on_community(action)
-
-def check_default_permission(action, resource):
-    '''For now, the default permission is the owner can do everything and no
-    one else can do anything.  Use it unless explicitly overridden.'''
-    if resource and resource.ignore_defaults:
-        return "rejected"
+def shortcut_for_individual_ownership(action):
     if action.target.owner_type == "ind":
-        return check_individual_default_permission(action)
-    elif action.target.owner_type == "com":
-        return check_community_default_permission(action)
-    return "rejected"
+        if action.actor == action.target.owner:
+            return "approved"
+        return "rejected"
 
-def get_applicable_permissions(action):
-    applicable_permissions = []
-    resource = get_permissions_resource(action)
-    if resource:
-        for permission in resource.permissionsitem_set.all():  # Needs to be through client
-            if permission.match_action_type(action.change_type):
-                applicable_permissions.append(permission)
-    return resource, applicable_permissions
+
+def find_specific_permissions(action):
+    # Returns matched permission or None.
+    from permission_resources.client import PermissionResourceClient
+    permissionClient = PermissionResourceClient(actor="system")
+    return permissionClient.get_specific_permissions(action.target, action.change_type)
+
+
+def foundational_permission_pipeline(action):
+
+    individual_result = shortcut_for_individual_ownership(action)
+    if individual_result:
+        return individual_result
+
+    from communities.client import CommunityClient
+    communityClient = CommunityClient(actor="system") 
+    community = communityClient.get_owner(action.target)
+    has_authority = communityClient.has_foundational_authority(community, action.actor)
+    if not has_authority:
+        return "rejected"   
+
+    from conditionals.client import ConditionalClient
+    conditionalClient = ConditionalClient(actor="system")
+    condition_template = conditionalClient.get_condition_template_for_owner(community.pk)
+
+    return check_conditional(action, condition_template)
+
+# TODO: there should be one permission per action with multiple actors within the permission
+# but for now we allow multiple with one actor each
+def specific_permission_pipeline(action, specific_permissions):
+
+    # If actor does not match specific permission, reject
+    from permission_resources.client import PermissionResourceClient
+    permissionClient = PermissionResourceClient(actor="system")
+
+    matching_permission = None
+    for permission in specific_permissions:
+        if permissionClient.actor_matches_permission(action.actor, permission):
+            matching_permission = permission
+            break
+
+    if not matching_permission:
+        return "rejected"
+
+    from conditionals.client import ConditionalClient
+    conditionalClient = ConditionalClient(actor="system")
+    condition_template = conditionalClient.get_condition_template_for_permission(matching_permission.pk)
+
+    return check_conditional(action, condition_template)
+
+
+def governing_permission_pipeline(action):
+    individual_result = shortcut_for_individual_ownership(action)
+    if individual_result:
+        return individual_result
+
+    from communities.client import CommunityClient
+    communityClient = CommunityClient(actor="system") 
+    community = communityClient.get_owner(action.target)
+    has_authority = communityClient.has_governing_authority(community, action.actor)
+    if not has_authority:
+        return "rejected"
+
+    from conditionals.client import ConditionalClient
+    conditionalClient = ConditionalClient(actor="system")
+    condition_template = conditionalClient.get_condition_template_for_governor(community.pk)
+
+    return check_conditional(action, condition_template)
+
 
 def has_permission(action):
 
-    resource, applicable_permissions = get_applicable_permissions(action)
+    # Check for criteria indicating we should use the foundational permission pipeline
+    if action.change_type in foundational_changes() or action.target.foundational_permission_enabled:
+        return foundational_permission_pipeline(action)
 
-    # For each permission, look for matching actor and return result of first match.
-    for permission in applicable_permissions:
-        if permission.match_actor(action.actor):
-            return check_condition(action, permission)
+    # Check for existence of specific permission, if found use specific permission pipeline
+    specific_permissions = find_specific_permissions(action)
+    if specific_permissions:
+        return specific_permission_pipeline(action, specific_permissions)
 
-    # If we didn't match a permission above (perhaps because there aren't any!) check
-    # the default permission (basically, see if actor is owner) and return result.
-    return check_default_permission(action, resource)
+    # Check that object allows us to use governing permission, if yes, use governing pipeline
+    if action.target.governing_permission_enabled:
+        return governing_permission_pipeline(action)
+
+    # If none of the above is enabled, reject action
+    return "rejected"
+

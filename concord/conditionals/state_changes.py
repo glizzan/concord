@@ -12,23 +12,25 @@ from conditionals.models import ConditionTemplate
 class AddConditionStateChange(BaseStateChange):
     name = "conditional_addcondition"
 
-    def __init__(self, condition_type, condition_data, permission_data, conditioned_object_type):
+    def __init__(self, condition_type, condition_data, permission_data, conditioning_choices):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else "{}"
         self.permission_data = permission_data
-        self.conditioned_object_type = conditioned_object_type
+        self.conditioning_choices = conditioning_choices
 
     def validate(self, actor, target):
         return True
 
     def implement(self, actor, target):
+        self.owner = actor if target.owner_type == "ind" else target.get_owner()
         return ConditionTemplate.objects.create(
-            owner = actor, 
+            owner = self.owner, 
+            owner_type = target.owner_type,
             condition_type=self.condition_type,
             condition_data=self.condition_data,
             permission_data=self.permission_data,
             conditioned_object=target.pk,
-            conditioned_object_type=self.conditioned_object_type
+            conditioning_choices=self.conditioning_choices
         )
 
 class RemoveConditionStateChange(BaseStateChange):
@@ -38,7 +40,7 @@ class RemoveConditionStateChange(BaseStateChange):
         self.condition_pk = condition_pk
         # TODO: maybe add ability to remove condition by giving the target's ID & type?
         # self.conditioned_object = conditioned_object
-        # self.conditioned_object_type = conditioned_object_type
+        # self.conditioning_choices = conditioning_choices
 
     def validate(self, actor, target):
         # If we add ability to remove by giving target, check that target == conditioned object
@@ -93,6 +95,16 @@ class ApproveStateChange(BaseStateChange):
     name = "conditional_approvecondition"
 
     def validate(self, actor, target):
+
+        # If approval condition allows self approval, we can simply return True here.
+        if target.self_approval_allowed:
+            return True
+            
+        from actions.models import Action
+        action = Action.objects.get(pk=target.action)
+        if action.actor == actor:
+            return False
+
         return True
 
     def implement(self, actor, target):

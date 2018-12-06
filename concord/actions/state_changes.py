@@ -51,6 +51,44 @@ class ChangeOwnerStateChange(BaseStateChange):
         return target
 
 
+class EnableFoundationalPermissionStateChange(BaseStateChange):
+    name = "base_enablefoundationalpermissionchange"
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.foundational_permission_enabled = True
+        target.save()
+        return target
+
+
+class DisableFoundationalPermissionStateChange(BaseStateChange):
+    name = "base_disablefoundationalpermissionchange"
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.foundational_permission_enabled = False
+        target.save()
+        return target
+
+
+# TODO: create and add governing_permission_state_change here
+def foundational_changes():
+    from communities.state_changes import (AddGovernorStateChange, AddOwnerStateChange,
+        AddGovernorRoleStateChange, AddOwnerRoleStateChange)
+    return [EnableFoundationalPermissionStateChange.name, 
+        DisableFoundationalPermissionStateChange.name, AddGovernorStateChange.name,
+        AddOwnerStateChange.name, AddGovernorRoleStateChange.name, AddOwnerRoleStateChange.name]
+
 
 # Hacky, but works for now.  Whatever we decide here, we probably need to expose it
 # for those working with permissions so they're not having to get the strings
@@ -59,23 +97,42 @@ def create_change_object(change_type, change_data):
 
     from resources.state_changes import (AddItemResourceStateChange, RemoveItemResourceStateChange,
         ChangeResourceNameStateChange)
-    from permission_resources.state_changes import AddPermissionStateChange, RemovePermissionStateChange
+    from permission_resources.state_changes import (AddPermissionStateChange, RemovePermissionStateChange,
+        AddActorToPermissionStateChange, RemoveActorFromPermissionStateChange, AddRoleToPermissionStateChange,
+        RemoveRoleFromPermissionStateChange)
     from conditionals.state_changes import (AddConditionStateChange, RemoveConditionStateChange,
         AddVoteStateChange, ApproveStateChange)
-    from communities.state_changes import ChangeNameStateChange
+    from communities.state_changes import (ChangeNameStateChange, AddGovernorStateChange,
+        AddOwnerStateChange, AddGovernorRoleStateChange, AddOwnerRoleStateChange,
+        AddRoleStateChange, RemoveRoleStateChange, AddPeopleToRoleStateChange, 
+        RemovePeopleFromRoleStateChange)
 
     state_changes_dict = {
         "resource_additem": AddItemResourceStateChange, 
         "resource_removeitem": RemoveItemResourceStateChange,
         "resource_changename": ChangeResourceNameStateChange,
-        "permissionresource_addpermission": AddPermissionStateChange, 
-        "permissionresource_removepermission": RemovePermissionStateChange,
+        "permissionitem_addpermission": AddPermissionStateChange, 
+        "permissionitem_removepermission": RemovePermissionStateChange,
+        "permissionitem_addactortopermission": AddActorToPermissionStateChange,
+        "permissionitem_removeactorfrompermission": RemoveActorFromPermissionStateChange,
+        "permissionitem_addroletopermission": AddRoleToPermissionStateChange,
+        "permissionitem_removerolefrompermission": RemoveRoleFromPermissionStateChange,
         "conditionalvote_addvote": AddVoteStateChange,
         "conditional_addcondition": AddConditionStateChange,
         "conditional_removecondition": RemoveConditionStateChange,
         "conditional_approvecondition": ApproveStateChange,
         "community_changename": ChangeNameStateChange,
-        "base_ownerchange": ChangeOwnerStateChange
+        "community_addgovernor": AddGovernorStateChange,
+        "community_addowner": AddOwnerStateChange,
+        "community_addgovernorrole": AddGovernorRoleStateChange,
+        "community_addownerrole": AddOwnerRoleStateChange,
+        "community_addrole": AddRoleStateChange,
+        "community_removerole": RemoveRoleStateChange,
+        "community_addpeopletorole": AddPeopleToRoleStateChange,
+        "community_removepeoplefromrole": RemovePeopleFromRoleStateChange,
+        "base_ownerchange": ChangeOwnerStateChange,
+        "base_enablefoundationalpermissionchange": EnableFoundationalPermissionStateChange,
+        "base_disablefoundationalpermissionchange": DisableFoundationalPermissionStateChange
     }
 
     changeObject = state_changes_dict[change_type]

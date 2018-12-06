@@ -1,180 +1,8 @@
+import json
+
 from django.db import models
 
 from actions.models import PermissionedModel
-
-"""
-### OWNERSHIP
-
-Communities are a very special type of resource.  Through communities,
-individuals may collaboratively own resources and manage their collective
-spaces and relationships.
-
-To understand how communities own resources, let's first discuss the
-simpler case of an individually owned resource.  An individual who owns
-a resource object may attach a permissions resource to that object,
-granting other individuals specific abilities regarding it.  For instance,
-an individual who owns a post object may grant others the right to edit
-it, attach comments to it, etc.  They may even nest permissions on the
-object, for instance, an owner might allow a friend to help decide who
-else can comment on the post.  But they can always revoke those permissions,
-because as owner are the ultimate or foundational authority on what 
-happens to the object.
-
-This is instantiated practically through the 'default permission' which
-all objects have.  This default permission is used when no permissions
-resource is set on an object, or when the a default permissions resource
-is set but permissions for a specific action are not set.  (PRs contain
-an option, 'ignore_defaults', which when set to true prevents the 
-default_permission from being used in the latter case.)  The default
-permission for an individually owned object is simple: if the actor is
-the owner, they have permission for whatever they want to do, and if the
-actor is not the owner, they do not have any permission.
-
-This scheme is complicated by the existence of communities.  If a
-community owns a resource, how does the default permission get resolved?
-You can't check the action's actor against the object's owner because
-the community itself cannot act - only individuals within the community
-can do so.  You might ask, do we need to set a default permission?  Can't we
-always make sure to set permissions resources?  The problem with this
-approach is that permissions resources can themselves be acted upon and
-therefore require their own permissions schema, either a nested permissions
-resource or a default permission.  You nest as many permissions resources
-as you like but they must always terminate in a default permission.  It
-cannot be turtles all the way down.
-
-Communities have their own distinct way of handling the default permission
-system called the AuthorityHandler.  The AuthorityHandler always specifies
-two things.  First, which individuals may respond to actions which
-trigger the default permission, which we'll refer to here as 'governors.  
-Second, how changes to the AuthorityHandler itself are made.  It's this
-latter specification that determines the foundational governance process 
-for the group.  
-
-Now, you can set up a community such that Person A is the only governor 
-and only the governor can change the AuthorityHandler.  That's the 
-'Benevolent Dictator' model of a community and it is configurable within 
-our system.  Most groups will prefer a more democratic model.  This is 
-achieved by applying Conditionals to either or both of the AuthorityHandler's
-functions.  For instance, you could require a review conditional for 
-governors responding to default permissions, so that two or more governors
-must approve. You could also subject any changes to the AuthorityHandler, 
-including replacement of one governor with another, to a majority vote.
-Note that this gets recursive: if all changes to the AuthorityHandler 
-require a majority vote, then any attempt to change the AuthorityHandler 
-so it *doesn't* require a vote would require a vote.
-
-This is all very abstract, so let's talk through a concrete example:
-
-Imagine that you've got a community of 100 people.  They have set their
-AuthorityHandler to have a board of five governors who can each, without
-condition, resolve default_permission issues how they see fit.  Changes
-to the AuthorityHandler itself, however, require a supermajority vote.
-Let's look at three actions that could be taken within the community and 
-how they would get resolved.
-
-1) Anne wants to add a post to the community discussion forum.  According
-to the permissions resource for the discussion forum, all posts must be 
-reviewed by a moderator.  When Anne adds the post, it does *not* trigger 
-a default permission since the action is covered by the permissions 
-resource.  Instead, a moderator reviews and accepts or rejects her post.
-
-2) Betty thinks the rule about posts needing to be moderated is dumb.
-She submits a change to the permissions resource itself.  There is no
-permission resource set on the permissions resource so it triggers the
-default permission. Governor A agrees with Betty and accepts the change.
-However the other governors are upset - by informal policy, changes
-to the system require consensus among the governors.  In the comments
-on Betty's action, they discuss whether or not they actually want to 
-keep this change.  They decide not to, and Governor A submits an action
-changing the rule back, and approves it himself.
-
-3) Governors B and C are still upset about Governor A's decision to
-accept the change and wants their informal consensus system to be
-formalized.  Governor B submits a change to the AuthorityHandler adding
-a ConsensusConditional to the governor specification.  The majority votes
-for this and the AuthorityHandler is changed.  
-
-### ROLES
-
-Another key tool used within communities is something called a 'role set'.
-This allows communities to specify roles like 'moderator' or 'admin' and 
-assign specific people to those roles.  These roles can then be referenced 
-throughout the community via permissions resources. 
-
-A permission resource is made up of individual permissions.  Each permission
-has an action that is being permitted. It also has a field which indicates 
-*who* has permission to take those actions.  This field can be designate
-through either or both of the individual actor list or the role list. 
-The individual actor list is a list of unique IDs.  The role list is a list
-of tuples indicating a community and a role.  To see if an actor can take 
-an action, the PR first looks in the individual list.  If the actor is not
-there, it goes through the tuples in the role list, querying each
-community to see if the actor in question has the given role, stopping 
-and returning 'true/yes' if the answer is ever 'yes', and otherwise 
-returning 'false/no'.
-
-There are two types of roles that can be set in a community's role set:
-
-* AssignedRoles: roles + individuals given that role
-* AutomatedRoles: roles + rules to test if an  individual fits that 
-role, for example "anyone older than X hours"
-
-### COMMUNITY REQUIREMENTS
-
-Given the above, all communities are required to have the following:
-
-* An authority handler with the 'who can change this authority handler'
-field set.  Setting up governors is highly recommended, but optional.
-
-* A role set, which may be empty.  Setting up roles is highly 
-recommended, but optional.
-
-* A list of members, which may not be empty.
-
-Additionally, most communities have other resources such as discussion 
-boards.  Communities can own pretty much any type of resource.
-
-### COMMUNITY DEFAULTS
-
-By default upon creation, the list of members is set to one (the creator),
-the governors are set to include one (the creator), and how the authority
-handler is changed is set to an unconditioned action of the single 
-governor.  That governor can then configure the community to their heart's
-content.  That said, there are many other templates provided for people
-who want to start off with more complex community configurations.
-
-### OPEN DESIGN QUESTIONS
-
-- permissions resources as levels vs permission individual stacks -- how
-do we want to design this?
-
-- should we grant governors the ability to modify permissions resources
-by default, instead of just responding to actions?  I guess they can
-always trigger the actions they want to respond to.
-
-- should the governor role actually be set in the role_set?  there's
-some conceptual duplication here, at least, but the roles have very
-different power levels
-"""
-
-
-### TODO: CHANGES ELSEWHERE
-
-# Make sure everything's worked out with communities before actually
-# making these changes
-#
-#    0) switch 'creator' field to 'owner' field - DONE
-#    1) add field/method for object to determine if its owner is
-#       an individual or community and handle the default permission
-#       accordingly.
-#    2) on a permission resource item, instead of 'actor' there's
-#       a json field containing a list of individuals and/or a
-#       set of community + role tuples. 
-#    3) if a person creates something *within* a community, the
-#       community is the governor, not the person who created this.
-#       (How does a thing know it was created with a community?
-#       Well. What makes something in a community?  That it's governed
-#       by the community.)
 
 
 ################################
@@ -231,11 +59,40 @@ class SuperCommunity(BaseCommunityModel):
 
 class RoleSet(PermissionedModel):
     """
-    Every community has at least one role set which defines roles within
-    the community.
+    Roles are set community-wide.
+
+    An assigned role just has a list of usernames (user IDs) and the name of the role.  You
+    can add to the role by doing a statechange to the role list.  You reference the role in
+    the permission item by listing the unique role name and the community it's set on.
+
+    An automated role has a logical statement to apply to the actor to see if they fit.
+    You can change the paramters of the role or remove it entirely but you can't assign people
+    to it.  Again, you reference the role in the permission item by listing the unique role name 
+    and the community it's set on.
+
+    With AuthorityHandlers, the role is not set in the roleset but on the authorityhandler itself,
+    but the logic otherwise works the same.
+    NOTE: could potentially make governors and owners a field on the roleset?
     """
-    # assigned_roles = # json field, names with lists of people
-    # automatedRoles = # jsonfield?
+
+    community = models.OneToOneField(Community, on_delete=models.CASCADE)
+    assigned = models.CharField(max_length=1000)  # Replace with custom field
+    automated = models.CharField(max_length=200)  # Replace with custom field
+
+    def get_assigned_roles(self):
+        return json.loads(self.assigned) if self.assigned else { "members": [] }
+
+    def get_automated_roles(self):
+        if not self.automated:
+            return {}
+        return json.loads(self.automated)
+
+    def get_role_names(self, merged=False):
+        assigned_roles = self.get_assigned_roles()
+        automated_roles = self.get_automated_roles()
+        if merged:
+            return assigned_roles.keys() + automated_roles.keys()
+        return { "assigned_roles": assigned_roles.keys(), "automated_roles": automated_roles.keys() }
 
     def user_has_specific_role(self, role_name, user):
         if self.user_has_assigned_role(role_name, user):
@@ -245,70 +102,185 @@ class RoleSet(PermissionedModel):
         return False
 
     def user_has_assigned_role(self, role_name, user):
-        ...
+        assigned_roles = self.get_assigned_roles()
+        if role_name in assigned_roles:
+            return user in assigned_roles[role_name]
+        else:
+            print("Assigned role ", role_name, " does not exist")
 
     def user_has_automated_role(self, role_name, user):
         ...
+        # Need to instantiate object and check whether user applies
 
     def user_has_any_role(self, user):
-        for role in self.assigned_roles:
-            if self.user_has_assigned_role(role_name, user):
+        for role in self.get_assigned_roles():
+            if self.user_has_assigned_role(role.key(), user):
                 return True
-        for role in self.automated_roles:
-            if self.user_has_automated_role(role_name, user):
+        for role in self.get_automated_roles():
+            if self.user_has_automated_role(role.key(), user):
                 return True
         return False
 
+    def list_users_given_role(self, role):
+        roles = self.get_assigned_roles()
+        if role in roles:
+            return roles[role]
+        print("No role ", role, " specified")
+
     def list_roles_given_user(self, user):
         roles = []
-        for role in self.assigned_roles:
-            if self.user_has_assigned_role(role_name, user):
+        for role in self.get_assigned_roles():
+            if self.user_has_assigned_role(role.key(), user):
                 roles.append(role)
-        for role in self.automated_roles:
-            if self.user_has_automated_role(role_name, user):
+        for role in self.get_automated_roles():
+            if self.user_has_automated_role(role.key(), user):
                 roles.append(role)
         return roles
 
+    def add_assigned_role(self, role_name):
+        assigned_roles = self.get_assigned_roles()
+        if role_name not in assigned_roles:
+            assigned_roles[role_name] = []
+        else:
+            print("Role ", role_name, " already exists")
+        self.assigned = json.dumps(assigned_roles)
 
+    def remove_assigned_role(self, role_name):
+        if role_name.lower() == "members":
+            print("Can't remove 'members' role")
+            return
+        assigned_roles = self.get_assigned_roles()
+        if role_name not in assigned_roles:
+            print("No role ", role_name, " found")
+        else:
+            del(assigned_roles[role_name])
+        self.assigned = json.dumps(assigned_roles)
+
+    def add_people_to_role(self, role_name, people_to_add):
+        assigned_roles = self.get_assigned_roles()
+        if role_name in assigned_roles:
+            merged_roles = set(assigned_roles[role_name]) | set(people_to_add)
+            assigned_roles[role_name] = list(merged_roles)
+        else:
+            print("Role ", role_name, " not in roles")
+        self.assigned = json.dumps(assigned_roles)        
+
+    def remove_people_from_role(self, role_name, people_to_remove):
+        assigned_roles = self.get_assigned_roles()
+        if role_name in assigned_roles:
+            existing_people_set = set(assigned_roles[role_name])
+            for person in people_to_remove:
+                existing_people_set.remove(person)
+            assigned_roles[role_name] = list(existing_people_set)
+        else:
+            print("Role ", role_name, " not in roles")
+        self.assigned = json.dumps(assigned_roles)  
+
+
+# FIXME: should AuthorityHandler descend from PermissionedModel if no PR can be set?
 class AuthorityHandler(PermissionedModel):
     """
-    The authority handler is the foundational source of authority for a community.
-    It has two main functions: responding to the default permission (fallback permission?)
-    and changing itself.
+    All communities have an AuthorityHandler which is created when
+    the community is created.
+
+    The authority handler has two fields.  The 'owners' field is
+    required and sets the foundational authority for the community.
+    The 'governors' field is optional and sets the governors authority
+    for the community.  
     
-    All communities have a corresponding authority handler.
+    Both individuals and roles can be assigned to the 'owners' and
+    'governors' field.
     """
 
     # These should be JSON fields or custom fields eventually
     community = models.OneToOneField(Community, on_delete=models.CASCADE)
     governors = models.CharField(max_length=200)
-    rules_for_changing = models.CharField(max_length=200)
+    owners = models.CharField(max_length=200)
 
-    # TODO: Is it worrying that has_default_permission implements logic so similar to
-    # check_conditional in actions/permissions.py?  Should we refactor/abstract?
+    # TODO: add checks re: duplication
 
-    # TODO: Can we put the authority handler logic as fields on communities?  Yes to
-    # 'governors' field probably, since condition is set separately.  What about 
-    # 'rules for changing' though?
+    def add_governor(self, governor):
+        governors = json.loads(self.governors)
+        governors['actors'].append(governor)
+        self.governors = json.dumps(governors)
 
-    # TODO: Don't love that this logic is here in the first place but I don't really 
-    # want it in the client either.  Maybe move to actions/permissions.py?
+    def add_governor_role(self, role, community):
+        new_role = str(community) + "_" + role
+        governors = json.loads(self.governors)
+        governors['roles'].append(new_role)
+        self.governors = json.dumps(governors)
 
-    def has_default_permission(self, action):
+    def remove_governor(self, governor):
+        governors = json.loads(self.governors)
+        governors['actors'].remove(governor)
+        self.governors = json.dumps(governors)
 
-        # If actor is not a governor, they definitely don't have permission.
-        if action.actor not in self.governors:
-            return "rejected"
+    def remove_governor_role(self, role, community):
+        role_to_remove = str(community) + "_" + role
+        governors['roles'].remove(role_to_remove)
+        self.governors = json.dumps(governors)
 
-        # If there's no condition on the governor, they definitely do have permission.
-        from conditionals.client import ConditionalClient
-        cc = ConditionalClient(actor=action.actor) 
-        condition_template = cc.get_condition_template_given_community(
-            community_pk=self.community.pk)
-        if not condition_template:
-            return "approved"
+    def get_governors(self):
+        if not self.governors:
+            return { 'actors': [], 'roles': [] }
+        return json.loads(self.governors)
 
-        # Evaluate conditional, creating instance if not already created.    
-        condition_item = cc.get_or_create_condition_item(condition_template=condition_template,
-            action=action)
-        return condition_item.condition_status()
+    def is_governor(self, actor):
+        governors = self.get_governors()
+        if actor in governors['actors']: 
+            return True
+
+        # FIXME: copied from permission_resources.models and also duplicated for owners
+        from communities.client import CommunityClient
+        cc = CommunityClient(actor="system")
+        for pair in governors['roles']:
+            community, role = pair.split("_")  # FIXME: bit hacky
+            result = cc.has_role_in_community(community_pk=community, role=role, actor=actor)
+            if result:
+                return True
+
+        return False
+
+    def add_owner(self, owner):
+        owners = json.loads(self.owners)
+        owners['actors'].append(owner)
+        self.owners = json.dumps(owners)
+
+    def add_owner_role(self, role, community):
+        new_role = str(community) + "_" + role
+        owners = json.loads(self.owners)
+        owners['roles'].append(new_role)
+        self.owners = json.dumps(owners)
+
+    def remove_owner(self, owner):
+        owners = json.loads(self.owners)
+        owners['actors'].remove(owner)
+        self.owners = json.dumps(owners)
+
+    def remove_governor_role(self, role, community):
+        role_to_remove = str(community) + "_" + role
+        owners['roles'].remove(role_to_remove)
+        self.owners = json.dumps(owners)
+
+    def get_owners(self):
+        if not self.owners:
+            return { 'actors': [], 'roles': [] }
+        return json.loads(self.owners)
+
+    def is_owner(self, actor):
+        
+        owners = self.get_owners()
+
+        if actor in owners['actors']:
+            return True
+
+        from communities.client import CommunityClient
+        cc = CommunityClient(actor="system")
+
+        for pair in owners['roles']:
+            community, role = pair.split("_")  # FIXME: bit hacky
+            result = cc.has_role_in_community(community_pk=community, role=role, actor=actor)
+            if result:
+                return True
+                
+        return False

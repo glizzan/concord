@@ -26,6 +26,14 @@ class BaseActionClient(object):
         change = sc.ChangeOwnerStateChange(new_owner=new_owner, new_owner_type=new_owner_type)
         return self.create_and_take_action(change, target)
 
+    def enable_foundational_permission(self, target=None):
+        change = sc.EnableFoundationalPermissionStateChange()
+        return self.create_and_take_action(change, target)
+
+    def disable_foundational_permission(self, target=None):
+        change = sc.DisableFoundationalPermissionStateChange()
+        return self.create_and_take_action(change, target)
+
     def set_target(self, target):
         self.target = target
 

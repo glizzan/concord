@@ -3,7 +3,12 @@ import os
 import sys
 
 if __name__ == '__main__':
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'concord.settings')
+
+    # Hack to get around the imports being from concord. instead of .
+    new_path = os.path.abspath('..')
+    sys.path.append(new_path)
+
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mysite.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

@@ -2,7 +2,7 @@ import json
 
 from django.db import models
 
-from actions.models import PermissionedModel
+from concord.actions.models import PermissionedModel
 
 
 ################################
@@ -231,7 +231,7 @@ class AuthorityHandler(PermissionedModel):
             return True
 
         # FIXME: copied from permission_resources.models and also duplicated for owners
-        from communities.client import CommunityClient
+        from concord.communities.client import CommunityClient
         cc = CommunityClient(actor="system")
         for pair in governors['roles']:
             community, role = pair.split("_")  # FIXME: bit hacky
@@ -274,7 +274,7 @@ class AuthorityHandler(PermissionedModel):
         if actor in owners['actors']:
             return True
 
-        from communities.client import CommunityClient
+        from concord.communities.client import CommunityClient
         cc = CommunityClient(actor="system")
 
         for pair in owners['roles']:

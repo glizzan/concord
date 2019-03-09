@@ -1,6 +1,6 @@
 from django.db import models
 
-from actions.models import PermissionedModel
+from concord.actions.models import PermissionedModel
 
 
 class Resource(PermissionedModel):

@@ -1,7 +1,7 @@
 from django.contrib.contenttypes.models import ContentType
 
-from actions.models import create_action, Action
-from actions import state_changes as sc
+from concord.actions.models import create_action, Action
+from concord.actions import state_changes as sc
 
 
 class BaseActionClient(object):

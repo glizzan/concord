@@ -1,9 +1,9 @@
 import json
 
-from actions.clients import BaseActionClient
+from concord.actions.clients import BaseActionClient
 
-from conditionals.models import ApprovalCondition, VoteCondition, ConditionTemplate
-from conditionals import state_changes as sc
+from concord.conditionals.models import ApprovalCondition, VoteCondition, ConditionTemplate
+from concord.conditionals import state_changes as sc
 
 
 class ConditionTemplateClient(BaseActionClient):
@@ -105,7 +105,7 @@ class ConditionalClient(BaseActionClient):
         if condition_template.permission_data is not None:
             permission_dict = json.loads(condition_template.permission_data)
             # HACK to prevent permission addition from going through permissions pipeline
-            from permission_resources.models import PermissionsItem
+            from concord.permission_resources.models import PermissionsItem
             PermissionsItem.objects.create(
                 permitted_object=condition_item,
                 actors = json.dumps(permission_dict["permission_actor"]),

@@ -4,12 +4,12 @@ import time
 
 from django.test import TestCase
 
-from resources.client import ResourceClient
-from permission_resources.client import PermissionResourceClient
-from conditionals.client import ConditionalClient, ApprovalConditionClient, VoteConditionClient
-from communities.client import CommunityClient
+from concord.resources.client import ResourceClient
+from concord.permission_resources.client import PermissionResourceClient
+from concord.conditionals.client import ConditionalClient, ApprovalConditionClient, VoteConditionClient
+from concord.communities.client import CommunityClient
 
-from actions.models import Action  # For testing action status later, do we want a client?
+from concord.actions.models import Action  # For testing action status later, do we want a client?
 
 
 ### TODO: 

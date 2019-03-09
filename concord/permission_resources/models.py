@@ -4,7 +4,7 @@ from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
-from actions.models import PermissionedModel
+from concord.actions.models import PermissionedModel
 
 
 # # Create your models here.
@@ -76,7 +76,7 @@ class PermissionsItem(PermissionedModel):
             return True
 
         role_pairs = self.get_roles()
-        from communities.client import CommunityClient
+        from concord.communities.client import CommunityClient
         cc = CommunityClient(actor="system")
         for pair in role_pairs:
             community, role = pair.split("_")  # FIXME: bit hacky

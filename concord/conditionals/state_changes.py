@@ -1,8 +1,8 @@
 import json
 
-from actions.state_changes import BaseStateChange
+from concord.actions.state_changes import BaseStateChange
 
-from conditionals.models import ConditionTemplate
+from concord.conditionals.models import ConditionTemplate
 
 
 ###################################
@@ -100,7 +100,7 @@ class ApproveStateChange(BaseStateChange):
         if target.self_approval_allowed:
             return True
             
-        from actions.models import Action
+        from concord.actions.models import Action
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
             return False

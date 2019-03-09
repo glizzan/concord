@@ -1,7 +1,7 @@
 import json
 
-from actions.state_changes import BaseStateChange
-from permission_resources.models import PermissionsItem
+from concord.actions.state_changes import BaseStateChange
+from concord.permission_resources.models import PermissionsItem
 
 
 #####################################

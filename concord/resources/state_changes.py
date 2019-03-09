@@ -1,6 +1,6 @@
 from actions.state_changes import BaseStateChange
 
-from resources.models import Item
+from concord.resources.models import Item
 
 
 #####################################

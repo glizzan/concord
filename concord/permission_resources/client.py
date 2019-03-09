@@ -3,8 +3,8 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.clients import BaseActionClient
 
-from permission_resources.models import PermissionsItem
-from permission_resources import state_changes as sc
+from concord.permission_resources.models import PermissionsItem
+from concord.permission_resources import state_changes as sc
 
 
 ################################

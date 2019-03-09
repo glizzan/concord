@@ -33,7 +33,7 @@ import decimal
 from django.db import models
 from django.utils import timezone
 
-from actions.models import PermissionedModel
+from concord.actions.models import PermissionedModel
 
 
 ##################################

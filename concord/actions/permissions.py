@@ -1,8 +1,8 @@
-from actions.state_changes import foundational_changes
+from concord.actions.state_changes import foundational_changes
 
 
 def check_conditional(action, condition_template):
-    from conditionals.client import ConditionalClient
+    from concord.conditionals.client import ConditionalClient
     conditionalClient = ConditionalClient(actor="system")
 
     # Does the permission have a condition?  If no, just approve it.
@@ -25,7 +25,7 @@ def shortcut_for_individual_ownership(action):
 
 def find_specific_permissions(action):
     # Returns matched permission or None.
-    from permission_resources.client import PermissionResourceClient
+    from concord.permission_resources.client import PermissionResourceClient
     permissionClient = PermissionResourceClient(actor="system")
     return permissionClient.get_specific_permissions(action.target, action.change_type)
 
@@ -36,14 +36,14 @@ def foundational_permission_pipeline(action):
     if individual_result:
         return individual_result
 
-    from communities.client import CommunityClient
+    from concord.communities.client import CommunityClient
     communityClient = CommunityClient(actor="system") 
     community = communityClient.get_owner(action.target)
     has_authority = communityClient.has_foundational_authority(community, action.actor)
     if not has_authority:
         return "rejected"   
 
-    from conditionals.client import ConditionalClient
+    from concord.conditionals.client import ConditionalClient
     conditionalClient = ConditionalClient(actor="system")
     condition_template = conditionalClient.get_condition_template_for_owner(community.pk)
 
@@ -54,7 +54,7 @@ def foundational_permission_pipeline(action):
 def specific_permission_pipeline(action, specific_permissions):
 
     # If actor does not match specific permission, reject
-    from permission_resources.client import PermissionResourceClient
+    from concord.permission_resources.client import PermissionResourceClient
     permissionClient = PermissionResourceClient(actor="system")
 
     matching_permission = None
@@ -66,7 +66,7 @@ def specific_permission_pipeline(action, specific_permissions):
     if not matching_permission:
         return "rejected"
 
-    from conditionals.client import ConditionalClient
+    from concord.conditionals.client import ConditionalClient
     conditionalClient = ConditionalClient(actor="system")
     condition_template = conditionalClient.get_condition_template_for_permission(matching_permission.pk)
 
@@ -78,14 +78,14 @@ def governing_permission_pipeline(action):
     if individual_result:
         return individual_result
 
-    from communities.client import CommunityClient
+    from concord.communities.client import CommunityClient
     communityClient = CommunityClient(actor="system") 
     community = communityClient.get_owner(action.target)
     has_authority = communityClient.has_governing_authority(community, action.actor)
     if not has_authority:
         return "rejected"
 
-    from conditionals.client import ConditionalClient
+    from concord.conditionals.client import ConditionalClient
     conditionalClient = ConditionalClient(actor="system")
     condition_template = conditionalClient.get_condition_template_for_governor(community.pk)
 

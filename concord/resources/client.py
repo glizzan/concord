@@ -1,7 +1,7 @@
 from actions.clients import BaseActionClient
 
-from resources.models import Resource
-from resources import state_changes as sc
+from concord.resources.models import Resource
+from concord.resources import state_changes as sc
 
 
 ######################

@@ -2,8 +2,8 @@ import json
 
 from actions.clients import BaseActionClient
 
-from communities.models import Community, AuthorityHandler, RoleSet
-from communities import state_changes as sc
+from concord.communities.models import Community, AuthorityHandler, RoleSet
+from concord.communities import state_changes as sc
 
 
 ######################

@@ -2,8 +2,8 @@ from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
-from actions.permissions import has_permission
-from actions.state_changes import create_change_object
+from concord.actions.permissions import has_permission
+from concord.actions.state_changes import create_change_object
 
 
 

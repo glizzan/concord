@@ -1,4 +1,4 @@
-from actions.state_changes import BaseStateChange
+from concord.actions.state_changes import BaseStateChange
 
 
 ###############################

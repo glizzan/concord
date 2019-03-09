@@ -83,7 +83,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
 # TODO: create and add governing_permission_state_change here
 def foundational_changes():
-    from communities.state_changes import (AddGovernorStateChange, AddOwnerStateChange,
+    from concord.communities.state_changes import (AddGovernorStateChange, AddOwnerStateChange,
         AddGovernorRoleStateChange, AddOwnerRoleStateChange)
     return [EnableFoundationalPermissionStateChange.name, 
         DisableFoundationalPermissionStateChange.name, AddGovernorStateChange.name,
@@ -95,14 +95,14 @@ def foundational_changes():
 # correct every time.
 def create_change_object(change_type, change_data):
 
-    from resources.state_changes import (AddItemResourceStateChange, RemoveItemResourceStateChange,
+    from concord.resources.state_changes import (AddItemResourceStateChange, RemoveItemResourceStateChange,
         ChangeResourceNameStateChange)
-    from permission_resources.state_changes import (AddPermissionStateChange, RemovePermissionStateChange,
+    from concord.permission_resources.state_changes import (AddPermissionStateChange, RemovePermissionStateChange,
         AddActorToPermissionStateChange, RemoveActorFromPermissionStateChange, AddRoleToPermissionStateChange,
         RemoveRoleFromPermissionStateChange)
-    from conditionals.state_changes import (AddConditionStateChange, RemoveConditionStateChange,
+    from concord.conditionals.state_changes import (AddConditionStateChange, RemoveConditionStateChange,
         AddVoteStateChange, ApproveStateChange)
-    from communities.state_changes import (ChangeNameStateChange, AddGovernorStateChange,
+    from concord.communities.state_changes import (ChangeNameStateChange, AddGovernorStateChange,
         AddOwnerStateChange, AddGovernorRoleStateChange, AddOwnerRoleStateChange,
         AddRoleStateChange, RemoveRoleStateChange, AddPeopleToRoleStateChange, 
         RemovePeopleFromRoleStateChange)

@@ -108,7 +108,8 @@ class ConditionalClient(BaseActionClient):
             from concord.permission_resources.models import PermissionsItem
             PermissionsItem.objects.create(
                 permitted_object=condition_item,
-                actors = json.dumps(permission_dict["permission_actor"]),
+                actors = json.dumps(permission_dict["permission_actors"]),
+                roles = json.dumps(permission_dict["permission_roles"]),
                 change_type = permission_dict["permission_type"],
                 owner = condition_template.get_owner(),
                 owner_type = condition_template.owner_type)

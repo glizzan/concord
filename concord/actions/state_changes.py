@@ -20,7 +20,10 @@ class BaseStateChange(object):
         ...
 
     def get_change_type(self):
-        return self.name
+        return self.__module__ + "." + self.__class__.__name__
+
+    # def get_change_type(self):
+    #     return self.name
 
     def get_change_data(self):
         '''
@@ -83,17 +86,33 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
 # TODO: create and add governing_permission_state_change here
 def foundational_changes():
-    from concord.communities.state_changes import (AddGovernorStateChange, AddOwnerStateChange,
-        AddGovernorRoleStateChange, AddOwnerRoleStateChange)
-    return [EnableFoundationalPermissionStateChange.name, 
-        DisableFoundationalPermissionStateChange.name, AddGovernorStateChange.name,
-        AddOwnerStateChange.name, AddGovernorRoleStateChange.name, AddOwnerRoleStateChange.name]
+    return [
+        'concord.communities.state_changes.AddGovernorStateChange',
+        'concord.communities.state_changes.AddOwnerStateChange',
+        'concord.communities.state_changes.AddGovernorRoleStateChange',
+        'concord.communities.state_changes.AddOwnerRoleStateChange',
+        'concord.actions.state_changes.EnableFoundationalPermissionStateChange',
+        'concord.actions.state_changes.DisableFoundationalPermissionStateChange'
+    ]
+
+
+def create_change_object(change_type, change_data):
+    """
+    Finds change object using change_type and instantiates with change_data.
+    """
+    # appname, classname = change_type.split("_")
+    # changeclass = import_string(appname + "." + "state_changes." + classname)
+    from django.utils.module_loading import import_string
+    changeClass = import_string(change_type)
+    if type(change_data) != dict:
+        change_data = json.loads(change_data)
+    return changeClass(**change_data)
 
 
 # Hacky, but works for now.  Whatever we decide here, we probably need to expose it
 # for those working with permissions so they're not having to get the strings
 # correct every time.
-def create_change_object(change_type, change_data):
+def old_create_change_object(change_type, change_data):
 
     from concord.resources.state_changes import (AddItemResourceStateChange, RemoveItemResourceStateChange,
         ChangeResourceNameStateChange)

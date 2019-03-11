@@ -66,6 +66,7 @@ class PermissionResourceModelTests(TestCase):
         """
         Test addition of permisssion to resource.
         """
+        # FIXME: these permissions are invalid, replace with real permissions
         resource = self.rc.create_resource(name="Aha")
         self.prc.set_target(target=resource)
         action_pk, permission = self.prc.add_permission(permission_type="permissions_resource_additem",
@@ -77,6 +78,7 @@ class PermissionResourceModelTests(TestCase):
         """
         Test removal of permission from resource.
         """
+        # FIXME: these permissions are invalid, replace with real permissions
         resource = self.rc.create_resource(name="Aha")
         self.prc.set_target(target=resource)
         action_pk, permission = self.prc.add_permission(permission_type="permissions_resource_additem",
@@ -107,10 +109,11 @@ class PermissionSystemTest(TestCase):
         resource = self.rc.create_resource(name="Aha")
         action_pk, permission = self.prc.add_permission(
             target=resource,
-            permission_type="resource_additem",
+            permission_type="concord.resources.state_changes.AddItemResourceStateChange",
             permission_actor="buffy")
         items = self.prc.get_all_permissions_on_object(target=resource)
-        self.assertEquals(items.first().get_name(), 'Permission 1 (for resource_additem on Resource object (1))')
+        self.assertEquals(items.first().get_name(), 
+            'Permission 1 (for concord.resources.state_changes.AddItemResourceStateChange on Resource object (1))')
 
         # Now let's have Buffy do a thing on the resource
         brc = ResourceClient(actor="buffy", target=resource)
@@ -127,7 +130,7 @@ class PermissionSystemTest(TestCase):
         resource = self.rc.create_resource(name="Aha")
         action_pk, permission = self.prc.add_permission(
             target=resource,
-            permission_type="resource_additem",
+            permission_type="concord.resources.state_changes.AddItemResourceStateChange",
             permission_actor="willow")
 
         # Buffy can't add an item to this resource because she's not the owner nor specified in
@@ -139,7 +142,7 @@ class PermissionSystemTest(TestCase):
         # Shauna adds a permission on the permission which Buffy does have.
         self.prc.set_target(target=permission)
         action_pk, rec_permission = self.prc.add_permission(
-            permission_type="permissionitem_addpermission",
+            permission_type="concord.permission_resources.state_changes.AddPermissionStateChange",
             permission_actor="buffy")
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
 
@@ -150,7 +153,7 @@ class PermissionSystemTest(TestCase):
         
         # BUT Buffy CAN make the second-level change.
         bprc = PermissionResourceClient(actor="buffy", target=permission)
-        action_pk, permission = bprc.add_permission(permission_type="permissionresource_addpermission",
+        action_pk, permission = bprc.add_permission(permission_type="concord.permission_resources.state_changes.AddPermissionStateChange",
             permission_actor="willow")        
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
 
@@ -189,10 +192,10 @@ class ConditionalsTest(TestCase):
         self.prc.set_target(target=default_vote.target)  # FIXME: this is hacky
 
         vote_permission = self.prc.add_permission(
-            permission_type="conditionalvote_addvote",
+            permission_type="concord.conditionals.state_changes.AddVoteStateChange",
             permission_actor="buffy")
         vote_permission = self.prc.add_permission(
-            permission_type="conditionalvote_addvote",
+            permission_type="concord.conditionals.state_changes.AddVoteStateChange",
             permission_actor="willow")            
 
         # Now Buffy and Willow can vote but Xander can't
@@ -223,7 +226,7 @@ class ConditionalsTest(TestCase):
 
         # Then she adds a permission that says that Buffy can add items.
         self.prc.set_target(target=resource)
-        action_pk, permission = self.prc.add_permission(permission_type="resource_additem",
+        action_pk, permission = self.prc.add_permission(permission_type="concord.resources.state_changes.AddItemResourceStateChange",
             permission_actor="buffy")
         
         # But she places a condition on the permission that Buffy has to get
@@ -280,15 +283,17 @@ class ConditionalsTest(TestCase):
 
         # Then she adds a permission that says that Buffy can add items.
         self.prc.set_target(target=resource)
-        action_pk, permission = self.prc.add_permission(permission_type="resource_additem",
+        action_pk, permission = self.prc.add_permission(permission_type="concord.resources.state_changes.AddItemResourceStateChange",
             permission_actor="buffy")
         
         # But she places a condition on the permission that Buffy has to get
         # approval.  She specifies that *Willow* has to approve it.
         self.cc.set_target(target=permission)
         self.cc.addConditionToPermission(condition_type="approvalcondition",
-            permission_data=json.dumps({'permission_type': 'conditional_approvecondition', 
-                'permission_actor': 'willow'}))
+            permission_data=json.dumps({
+                'permission_type': 'concord.conditionals.state_changes.ApproveStateChange', 
+                'permission_actors': 'willow',
+                'permission_roles': []}))
 
         # When Buffy tries to add an item it is stuck waiting
         self.rc.set_actor(actor="buffy")
@@ -397,7 +402,7 @@ class BasicCommunityTest(TestCase):
         # Add  permission for nongovernor to change name
         prc = PermissionResourceClient(actor="shauna")
         prc.set_target(target=resource)
-        action_pk, permission = prc.add_permission(permission_type="resource_changename",
+        action_pk, permission = prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_actor="xander")
         
         # Test - Xander should now be allowed to change name
@@ -435,8 +440,9 @@ class GoverningAuthorityTest(TestCase):
         action_pk, result = self.condClient.addConditionToGovernors(
             condition_type="approvalcondition",
             permission_data=json.dumps({
-                'permission_type': 'conditional_approvecondition',
-                'permission_actor': 'alexandra'}))
+                'permission_type': 'concord.conditionals.state_changes.ApproveStateChange',
+                'permission_actors': 'alexandra',
+                'permission_roles': ''}))
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented") # Action accepted
 
         # Check that the condition template's owner is correct
@@ -490,7 +496,7 @@ class FoundationalAuthorityTest(TestCase):
 
         # Owner adds a specific permission for Dana, Dana's action is successful
         prc = PermissionResourceClient(actor="shauna", target=resource)
-        owner_action_pk, result = prc.add_permission(permission_type="resource_changename",
+        owner_action_pk, result = prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_actor="dana")
         action_pk, result = danaResourceClient.change_name(new_name="Dana's resource")
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
@@ -516,7 +522,7 @@ class FoundationalAuthorityTest(TestCase):
 
         # Owner adds a specific permission for Dana, Dana's action is successful
         prc = PermissionResourceClient(actor="shauna", target=self.resource)
-        owner_action_pk, result = prc.add_permission(permission_type="resource_changename",
+        owner_action_pk, result = prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_actor="dana")
         action_pk, result = danaResourceClient.change_name(new_name="Dana's resource")
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
@@ -533,7 +539,7 @@ class FoundationalAuthorityTest(TestCase):
         self.assertEquals(self.resource.get_name(), "Dana's resource")
 
     def test_foundational_authority_override_on_community_owned_object_with_conditional(self):
-
+        
         # Shauna, Amal, Dana and Joy are members of community X.  
         self.commClient.set_target(self.community)
         action_pk, result = self.commClient.add_member("amal")
@@ -551,8 +557,9 @@ class FoundationalAuthorityTest(TestCase):
         action_pk, result = self.condClient.addConditionToOwners(
             condition_type = "votecondition",
             permission_data = json.dumps({
-                'permission_type': 'conditional_addvote',
-                'permission_actor': 'members'}),
+                'permission_type': 'concord.conditionals.state_changes.AddVoteStateChange',
+                'permission_actors': '',
+                'permission_roles': ['1_members']}),
             target=self.community,
             condition_data=json.dumps({"voting_period": 0.0001 }))
 
@@ -577,7 +584,7 @@ class FoundationalAuthorityTest(TestCase):
         vcc.set_actor("dana")
         vcc.vote("yea")
 
-        time.sleep(.01)
+        time.sleep(.02)
 
         # HACK: we need to set up signals or something to update this automatically
         action = Action.objects.get(pk=key_action_pk)
@@ -634,6 +641,8 @@ class FoundationalAuthorityTest(TestCase):
         # Alexandra tries to add Amal as owner.  She can, since has foundational authority.
         self.commClient.set_actor("alexandra")
         action_pk, result = self.commClient.add_owner("amal")
+        # self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
+
         self.assertEquals(self.community.authorityhandler.get_owners(), 
             {'actors': ['shauna', 'alexandra', 'amal'], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
@@ -728,7 +737,7 @@ class RolesetTest(TestCase):
         # Shauna creates a permission item with the 'namers' role in it
         self.permClient.set_target(self.resource)
         role = str(self.community.pk) + "_" + "namers"  # FIXME: needs too much syntax knowledge 
-        action_pk, result = self.permClient.add_permission(permission_type="resource_changename",
+        action_pk, result = self.permClient.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_role=role)
         self.assertEquals(Action.objects.get(pk=action_pk).status, "implemented")
 

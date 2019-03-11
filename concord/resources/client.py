@@ -1,4 +1,4 @@
-from actions.clients import BaseActionClient
+from concord.actions.clients import BaseActionClient
 
 from concord.resources.models import Resource
 from concord.resources import state_changes as sc

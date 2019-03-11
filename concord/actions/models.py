@@ -111,6 +111,10 @@ class PermissionedModel(models.Model):
         contentType = ContentType.objects.get_for_model(self)
         return "_".join([contentType.app_label, contentType.model, str(self.pk)])
 
+    def get_actions(self):
+        from .clients import BaseActionClient
+        client = BaseActionClient(actor="temp", target=self)
+        return client.get_action_history_given_target(target=self)
 
     def save(self, *args, **kwargs):
         '''

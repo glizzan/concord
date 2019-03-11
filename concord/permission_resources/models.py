@@ -7,27 +7,27 @@ from django.contrib.contenttypes.models import ContentType
 from concord.actions.models import PermissionedModel
 
 
-# # Create your models here.
-# class PermissionsResource(PermissionedModel):
+# Create your models here.
+class PermissionsResource(PermissionedModel):
 
-#     # For now just using inbuilt generic relation, but may want to switch???
-#     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-#     object_id = models.PositiveIntegerField()
-#     permitted_object = GenericForeignKey('content_type', 'object_id')
-#     ignore_defaults = models.BooleanField(default=False)
+    # For now just using inbuilt generic relation, but may want to switch???
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    permitted_object = GenericForeignKey('content_type', 'object_id')
+    ignore_defaults = models.BooleanField(default=False)
 
-#     # Basics
+    # Basics
 
-#     def get_name(self):
-#         return "Permissions resource for " + self.permitted_object.get_name()
+    def get_name(self):
+        return "Permissions resource for " + self.permitted_object.get_name()
 
-#     # Read-only
+    # Read-only
 
-#     def get_items(self):
-#         result = []
-#         for item in self.permissionsitem_set.all():
-#             result.append(item.get_name())
-#         return result
+    def get_items(self):
+        result = []
+        for item in self.permissionsitem_set.all():
+            result.append(item.get_name())
+        return result
 
 
 class PermissionsItem(PermissionedModel):

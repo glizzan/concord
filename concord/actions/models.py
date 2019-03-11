@@ -111,5 +111,22 @@ class PermissionedModel(models.Model):
         contentType = ContentType.objects.get_for_model(self)
         return "_".join([contentType.app_label, contentType.model, str(self.pk)])
 
-    # TODO: add a method that overrides save and checks whether it's 
-    # called from a BaseStateChange object.
+
+    def save(self, *args, **kwargs):
+        '''
+        A permissioned model's save method can *only* be invoked by a 
+        descendant of BaseStateChange, on update (create is fine).
+
+        For now, we inspect who is calling us.  This is a hack.  Once we
+        have better testing, we will enforce this via tests.
+        '''
+        if not self.pk:  # Don't need to check for newly created objects
+            return super().save(*args, **kwargs)  # Call the "real" save() method.
+        import inspect
+        curframe = inspect.currentframe()
+        caller = inspect.getouterframes(curframe, 5)
+        calling_function_name = caller[1].function
+        del curframe, caller
+        if calling_function_name == "implement":  
+            return super().save(*args, **kwargs)  # Call the "real" save() method.
+        raise BaseException("Save called incorrectly")

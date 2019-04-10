@@ -23,6 +23,13 @@ class CommunityClient(BaseActionClient):
         community = Community.objects.get(name=community_name)
         return community.roleset.list_users_given_role("members")
 
+    def get_users_given_role(self, *, role_name, community_name=None):
+        community_name = community_name if community_name else self.target.name
+        if not community_name:
+            print("Community name needs to be specified")
+        community = Community.objects.get(name=community_name)
+        return community.roleset.list_users_given_role(role_name)
+
     def get_ownership_info(self, community_name):
         community = Community.objects.get(name=community_name)
         return community.authorityhandler.get_owners()
@@ -63,15 +70,19 @@ class CommunityClient(BaseActionClient):
     # Create only
 
     def create_community(self, name):
+        """
+        Right now, the logic of "always create a handler and roleset when you create a
+        community" is just here.  Which is fine if this is the only way we create a 
+        community, but it would be nice for third party apps to be able to use a modelview.
+
+        Options:
+        - move the "create handler" and "create roleset" logic to signals (problem: how to
+        get the self.actor data?)
+        - create a modelview in concord that third party apps can use
+
+        """ 
         # TODO: should we have to specify owner_type here?
-        created = Community.objects.create(name=name, owner_type="com")
-        # TODO: should authority handler be created via signal?
-        governors = json.dumps({ "actors": [self.actor], "roles": []})
-        owners = json.dumps({ "actors": [self.actor], "roles": []})
-        handler = AuthorityHandler.objects.create(community=created, governors=governors, owners=owners)
-        roleset = RoleSet.objects.create(community=created, 
-            assigned=json.dumps({ "members": [self.actor] }))
-        return created
+        return Community.objects.create(name=name, owner_type="com", creator=self.actor)
 
     # State changes
 

@@ -9,6 +9,7 @@ from concord.permission_resources.client import PermissionResourceClient
 from concord.conditionals.client import ConditionalClient, ApprovalConditionClient, VoteConditionClient
 from concord.communities.client import CommunityClient
 
+from concord.permission_resources.forms import AccessForm
 from concord.actions.models import Action  # For testing action status later, do we want a client?
 
 
@@ -816,5 +817,107 @@ class RolesetTest(TestCase):
     # TODO: skipping automated roles for now
     
 
-class BatchActionsTest(TestCase):
-    ...
+class CommunityAccessFormTest(TestCase):
+
+    def setUp(self):
+
+        # Create a user
+        self.user = "lisemeitner"
+
+        # Create a community
+        self.commClient = CommunityClient(actor=self.user)
+        self.instance = self.commClient.create_community(name="Nuclear Physicists")
+        self.commClient.set_target(self.instance)
+
+        # Create a request object
+        import collections
+        User = collections.namedtuple('User', 'username')
+        Request = collections.namedtuple('Request', 'user')
+        self.request = Request(user=User(username=self.user))
+
+        # Create permissions client too
+        self.permClient = PermissionResourceClient(actor=self.user, target=self.instance)
+
+        # Initial data
+        self.data = {"0_rolename": "members", "0_members": "lisemeitner", "0_permissions": []}
+
+    def test_initialize_access_form(self):
+
+        self.access_form = AccessForm(instance=self.instance, request=self.request)
+        self.assertEquals(list(self.access_form.fields.keys()), 
+            ['0_rolename', '0_members', '0_permissions', '1_rolename', '1_members', '1_permissions'])
+        self.assertEquals(self.access_form.fields["0_rolename"].initial, "members")
+        self.assertEquals(self.access_form.fields["0_members"].initial, "lisemeitner")
+        self.assertEquals(self.access_form.fields["0_permissions"].initial, [])
+
+        # Add some roles+permissions, so fields and initial will have more data
+        self.commClient.add_assigned_role(role_name="PrincipalInvestigators")
+        self.commClient.add_people_to_role("PrincipalInvestigators",
+            ["Irene Joliot-Curie", "Ida Noddack"])
+        action, permission = self.permClient.add_permission(
+            permission_type="concord.communities.state_changes.ChangeNameStateChange",
+            permission_role="1_PrincipalInvestigators")
+
+        # Test again
+        self.access_form = AccessForm(instance=self.instance, request=self.request)
+        self.assertEquals(list(self.access_form.fields.keys()), 
+            ['0_rolename', '0_members', '0_permissions', '1_rolename', '1_members', 
+            '1_permissions', '2_rolename', '2_members', '2_permissions'])
+        self.assertEquals(self.access_form.fields["1_rolename"].initial, 'PrincipalInvestigators')        
+        self.assertCountEqual(self.access_form.fields["1_members"].initial.split(", "),
+            ["Ida Noddack", "Irene Joliot-Curie"])        
+        self.assertEquals(self.access_form.fields["1_permissions"].initial, 
+            ["concord.communities.state_changes.ChangeNameStateChange"])    
+
+    def test_add_and_remove_role_via_access_form(self):
+
+        # Add a role! 
+
+        self.data.update({
+            '1_rolename': 'PrincipalInvestigators',
+            '1_members': 'Ida Noddack, Irene Joliot-Curie',
+            '1_permissions': ['concord.communities.state_changes.ChangeNameStateChange']
+        })
+        self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
+        result = self.access_form.is_valid()
+        self.assertEquals(self.access_form.cleaned_data, 
+            {'0_rolename': 'members', '0_members': 'lisemeitner', '0_permissions': [], 
+                '1_rolename': 'PrincipalInvestigators', '1_members': 'Ida Noddack, Irene Joliot-Curie',
+                '1_permissions': ['concord.communities.state_changes.ChangeNameStateChange']})
+
+        self.access_form.save()
+        perms = self.permClient.get_all_permissions_on_object(target=self.instance)
+        self.assertEquals(perms[0].get_roles(), ['1_PrincipalInvestigators'])
+
+        roles = self.commClient.get_assigned_roles(community_pk=self.instance.pk)
+        self.assertEquals(list(roles.keys()), ['members', 'PrincipalInvestigators'])
+
+        # Remove the role!
+        self.data = {"0_rolename": "members", "0_members": "lisemeitner", "0_permissions": []}
+
+        self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
+        result = self.access_form.is_valid()
+        self.access_form.save()
+
+        roles = self.commClient.get_assigned_roles(community_pk=self.instance.pk)
+        self.assertEquals(list(roles.keys()), ['members'])
+
+        perms = self.permClient.get_all_permissions_on_object(target=self.instance)
+        self.assertEquals(perms[0].get_roles(), [])
+   
+    def test_add_permission_to_existing_role_via_access_form(self):
+
+        self.data["0_permissions"] = ['concord.communities.state_changes.ChangeNameStateChange']
+
+        self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
+        result = self.access_form.is_valid()
+        self.access_form.save()
+
+        roles = self.commClient.get_assigned_roles(community_pk=self.instance.pk)
+        self.assertEquals(list(roles.keys()), ['members'])
+
+        perms = self.permClient.get_all_permissions_on_object(target=self.instance)
+        self.assertEquals(perms[0].get_roles(), ['1_members'])
+        self.assertEquals(perms[0].change_type, 'concord.communities.state_changes.ChangeNameStateChange')
+
+    # do we want to test the view itself? ie with https://docs.djangoproject.com/en/2.2/topics/testing/advanced/#the-request-factory

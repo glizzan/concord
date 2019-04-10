@@ -7,23 +7,24 @@ import json
 # implementing this system a model can check that it's being called via a subclass of 
 # this object, which is the only way for models to change I believe.
 
-# TODO: instead of manually specifying name, name is appname_modelname which is called
-# as needed.
-
 
 class BaseStateChange(object):
+
+    allowable_targets = []
+
+    @classmethod 
+    def get_change_type(cls):
+        return cls.__module__ + "." + cls.__name__
+
+    @classmethod 
+    def get_allowable_targets(cls):
+        return cls.allowable_targets
 
     def validate(self, actor, target):
         ...
 
     def implement(self, actor, target):
         ...
-
-    def get_change_type(self):
-        return self.__module__ + "." + self.__class__.__name__
-
-    # def get_change_type(self):
-    #     return self.name
 
     def get_change_data(self):
         '''
@@ -34,12 +35,33 @@ class BaseStateChange(object):
 
 
 class ChangeOwnerStateChange(BaseStateChange):
-    name = "base_ownerchange"
+    description = "Change owner"
 
     def __init__(self, new_owner, new_owner_type):
         # NOTE: new_owner SHOULD be the PK of the owner but for now it is their name
         self.new_owner = new_owner
         self.new_owner_type = new_owner_type
+
+    @classmethod
+    def get_allowable_targets(cls):
+        '''
+        Gets all models in registered apps and returns them if they have a foundational
+        permission enabled attribute (a bit of a hack to find anything descended from
+        PermissionedModel) and if they are not abstract models.
+        '''
+        from django.apps import apps
+        models = apps.get_models()
+        allowable_targets = []
+        for model in models:
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                allowable_targets.append(model)  
+        return allowable_targets  
+
+    def description_present_tense(self):
+        return "change owner of community to %s" % (self.new_owner)  
+
+    def description_past_tense(self):
+        return "changed owner of community to %s" % (self.new_owner) 
 
     def validate(self, actor, target):
         """
@@ -55,7 +77,29 @@ class ChangeOwnerStateChange(BaseStateChange):
 
 
 class EnableFoundationalPermissionStateChange(BaseStateChange):
+    description = "Enable the foundational permission"
     name = "base_enablefoundationalpermissionchange"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        '''
+        Gets all models in registered apps and returns them if they have a foundational
+        permission enabled attribute (a bit of a hack to find anything descended from
+        PermissionedModel) and if they are not abstract models.
+        '''
+        from django.apps import apps
+        models = apps.get_models()
+        allowable_targets = []
+        for model in models:
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                allowable_targets.append(model)  
+        return allowable_targets  
+
+    def description_present_tense(self):
+        return "enable foundational permission" 
+
+    def description_past_tense(self):
+        return "enabled foundational permission"
 
     def validate(self, actor, target):
         """
@@ -70,7 +114,28 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
 
 class DisableFoundationalPermissionStateChange(BaseStateChange):
-    name = "base_disablefoundationalpermissionchange"
+    description = "disable foundational permission"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        '''
+        Gets all models in registered apps and returns them if they have a foundational
+        permission enabled attribute (a bit of a hack to find anything descended from
+        PermissionedModel) and if they are not abstract models.
+        '''
+        from django.apps import apps
+        models = apps.get_models()
+        allowable_targets = []
+        for model in models:
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                allowable_targets.append(model)  
+        return allowable_targets  
+
+    def description_present_tense(self):
+        return "disable foundational permission" 
+
+    def description_past_tense(self):
+        return "disabled foundational permission"
 
     def validate(self, actor, target):
         """
@@ -107,62 +172,4 @@ def create_change_object(change_type, change_data):
     if type(change_data) != dict:
         change_data = json.loads(change_data)
     return changeClass(**change_data)
-
-
-# Hacky, but works for now.  Whatever we decide here, we probably need to expose it
-# for those working with permissions so they're not having to get the strings
-# correct every time.
-def old_create_change_object(change_type, change_data):
-
-    from concord.resources.state_changes import (AddItemResourceStateChange, RemoveItemResourceStateChange,
-        ChangeResourceNameStateChange)
-    from concord.permission_resources.state_changes import (AddPermissionStateChange, RemovePermissionStateChange,
-        AddActorToPermissionStateChange, RemoveActorFromPermissionStateChange, AddRoleToPermissionStateChange,
-        RemoveRoleFromPermissionStateChange)
-    from concord.conditionals.state_changes import (AddConditionStateChange, RemoveConditionStateChange,
-        AddVoteStateChange, ApproveStateChange)
-    from concord.communities.state_changes import (ChangeNameStateChange, AddGovernorStateChange,
-        AddOwnerStateChange, AddGovernorRoleStateChange, AddOwnerRoleStateChange,
-        AddRoleStateChange, RemoveRoleStateChange, AddPeopleToRoleStateChange, 
-        RemovePeopleFromRoleStateChange)
-
-    state_changes_dict = {
-        "resource_additem": AddItemResourceStateChange, 
-        "resource_removeitem": RemoveItemResourceStateChange,
-        "resource_changename": ChangeResourceNameStateChange,
-        "permissionitem_addpermission": AddPermissionStateChange, 
-        "permissionitem_removepermission": RemovePermissionStateChange,
-        "permissionitem_addactortopermission": AddActorToPermissionStateChange,
-        "permissionitem_removeactorfrompermission": RemoveActorFromPermissionStateChange,
-        "permissionitem_addroletopermission": AddRoleToPermissionStateChange,
-        "permissionitem_removerolefrompermission": RemoveRoleFromPermissionStateChange,
-        "conditionalvote_addvote": AddVoteStateChange,
-        "conditional_addcondition": AddConditionStateChange,
-        "conditional_removecondition": RemoveConditionStateChange,
-        "conditional_approvecondition": ApproveStateChange,
-        "community_changename": ChangeNameStateChange,
-        "community_addgovernor": AddGovernorStateChange,
-        "community_addowner": AddOwnerStateChange,
-        "community_addgovernorrole": AddGovernorRoleStateChange,
-        "community_addownerrole": AddOwnerRoleStateChange,
-        "community_addrole": AddRoleStateChange,
-        "community_removerole": RemoveRoleStateChange,
-        "community_addpeopletorole": AddPeopleToRoleStateChange,
-        "community_removepeoplefromrole": RemovePeopleFromRoleStateChange,
-        "base_ownerchange": ChangeOwnerStateChange,
-        "base_enablefoundationalpermissionchange": EnableFoundationalPermissionStateChange,
-        "base_disablefoundationalpermissionchange": DisableFoundationalPermissionStateChange
-    }
-
-    changeObject = state_changes_dict[change_type]
-    if type(change_data) != dict:
-        change_data = json.loads(change_data)
-    
-    return changeObject(**change_data)
-
-
-
-
-
-
 

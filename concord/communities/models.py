@@ -10,8 +10,11 @@ from concord.actions.models import PermissionedModel
 ################################
 
 class BaseCommunityModel(PermissionedModel):
+    is_community = True
 
     name = models.CharField(max_length=200)
+    creator = models.CharField(max_length=200)  # needed to create authority defaults
+    # TODO: replace creator charfield with user model
     
     class Meta:
         abstract = True
@@ -21,6 +24,24 @@ class BaseCommunityModel(PermissionedModel):
         Communities own themselves by default, unless they are subcommunities.
         """
         return self.name
+
+    def save(self, *args, **kwargs):
+        """
+        If Community model has been saved successfully, *and* the model was created,
+        also create RoleSet and Handler.
+
+        """
+        already_exists = True if self.pk else False
+        save_result = super().save(*args, **kwargs)
+        if not already_exists:
+            # FIXME: this seems unnecessarily verbose. maybe handler & roleset should be
+            # custom fields on Community, and these should be the defaults specified?
+            governors = json.dumps({ "actors": [self.creator], "roles": []})
+            owners = json.dumps({ "actors": [self.creator], "roles": []})
+            handler = AuthorityHandler.objects.create(community=self, governors=governors, 
+                owners=owners)
+            roleset = RoleSet.objects.create(community=self, 
+                assigned=json.dumps({ "members": [self.creator] }))
 
 
 class Community(BaseCommunityModel):
@@ -284,3 +305,4 @@ class AuthorityHandler(PermissionedModel):
                 return True
                 
         return False
+

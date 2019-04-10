@@ -10,13 +10,24 @@ from concord.conditionals.models import ConditionTemplate
 ###################################
 
 class AddConditionStateChange(BaseStateChange):
-    name = "conditional_addcondition"
+    description = "Add condition"
 
     def __init__(self, condition_type, condition_data, permission_data, conditioning_choices):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else "{}"
         self.permission_data = permission_data
         self.conditioning_choices = conditioning_choices
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]    
+
+    def description_present_tense(self):
+        return "change name of community to %s" % (self.new_name)  
+
+    def description_past_tense(self):
+        return "changed name of community to %s" % (self.new_name) 
 
     def validate(self, actor, target):
         return True

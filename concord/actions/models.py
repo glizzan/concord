@@ -1,3 +1,5 @@
+import inspect, importlib
+
 from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -38,6 +40,16 @@ class Action(models.Model):
     def __str__(self):
         return "%s action %s by %s on %s " % (self.status, self.change_type, self.actor, 
             self.target)
+
+    def get_description(self):
+        self.change = create_change_object(self.change_type, self.change_data)
+        if self.status == "implemented":
+            if hasattr(self.change,"description_past_tense"):
+                return self.actor + " " + self.change.description_past_tense() + " " + self.target.name
+        else:
+            if hasattr(self.change, "description_present_tense"):
+                return self.actor + " asked to " + self.change.description_present_tense() + " " + self.target.name
+        return self.__str__()
 
     # Steps of action execution
 
@@ -116,6 +128,29 @@ class PermissionedModel(models.Model):
         client = BaseActionClient(actor="temp", target=self)
         return client.get_action_history_given_target(target=self)
 
+    def get_settable_permissions(self):
+        """Gets a list of all permission types (aka state changes) that may be set on the
+        model."""
+
+        settable_permissions = []
+
+        # Get list of all objects in model's app's state_changes file
+        project_name = "concord"  # need to not hardcode this somehow 
+        relative_import = "." + self._meta.app_label + ".state_changes"
+        state_changes_module = importlib.import_module(relative_import, package=project_name)
+        module_objects = inspect.getmembers(state_changes_module) 
+
+        # Checks if state changes may be set on self, if so adds to allowable_permission
+        for module_object_tuple in module_objects:
+            module_object = module_object_tuple[1]
+            if hasattr(module_object, "get_allowable_targets"):
+                if self.__class__ in module_object.get_allowable_targets():
+                    settable_permissions.append((module_object.get_change_type(), 
+                        module_object.description))
+
+        return settable_permissions
+
+
     def save(self, *args, **kwargs):
         '''
         A permissioned model's save method can *only* be invoked by a 
@@ -130,7 +165,13 @@ class PermissionedModel(models.Model):
         curframe = inspect.currentframe()
         caller = inspect.getouterframes(curframe, 5)
         calling_function_name = caller[1].function
-        del curframe, caller
-        if calling_function_name == "implement":  
+        if calling_function_name == "implement":
+            del curframe, caller
             return super().save(*args, **kwargs)  # Call the "real" save() method.
+        # Hack to accomodate overriding save on subclasses
+        if calling_function_name == "save":
+            calling_function_name = caller[2].function
+            if calling_function_name == "implement":
+                del curframe, caller
+                return super().save(*args, **kwargs)  # Call the "real" save() method.
         raise BaseException("Save called incorrectly")

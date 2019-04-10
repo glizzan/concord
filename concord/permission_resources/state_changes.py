@@ -62,64 +62,76 @@ class RemovePermissionStateChange(BaseStateChange):
 class AddActorToPermissionStateChange(BaseStateChange):
     name = "permissionitem_addactortopermission"
 
-    def __init__(self, actor_to_be_added):
-        self.actor_to_be_added = actor_to_be_added
+    def __init__(self, actor, permission):
+        self.actor = actor
+        self.permission = permission
     
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        self.target.add_actor_to_permission(self.actor_to_be_added)
-        self.target.save()
-        return target
+        if not hasattr(self.permission, "add_actor_to_permission"):
+            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
+        self.permission.add_actor_to_permission(actor)
+        self.permission.save()
+        return self.permission
 
 
 class RemoveActorFromPermissionStateChange(BaseStateChange):
     name = "permissionitem_removeactorfrompermission"
 
-    def __init__(self, actor_to_be_removed):
-        self.actor_to_be_removed = actor_to_be_removed
-    
+    def __init__(self, actor, permission):
+        self.actor = actor
+        self.permission = permission
+
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        self.target.remove_actor_from_permission(self.actor_to_be_removed)
-        self.target.save()
-        return target
+        if not hasattr(self.permission, "remove_actor_from_permission"):
+            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
+        self.permission.remove_actor_from_permission(actor)
+        self.permission.save()
+        return self.permission
 
 
 class AddRoleToPermissionStateChange(BaseStateChange):
     name = "permissionitem_addroletopermission"
 
-    def __init__(self, role_name, community_pk):
+    def __init__(self, role_name, community_pk, permission):
         self.role_name = role_name
         self.community_pk = community_pk
+        self.permission = permission
     
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        self.target.add_role_to_permission(self.role_name, self.community_pk)
-        self.target.save()
-        return target
+        if not hasattr(self.permission, "add_role_to_permission"):
+            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
+        self.permission.add_role_to_permission(self.role_name, self.community_pk)
+        self.permission.save()
+        return self.permission
 
 
 class RemoveRoleFromPermissionStateChange(BaseStateChange):
     name = "permissionitem_removerolefrompermission"
 
-    def __init__(self, role_name, community_pk):
+    def __init__(self, role_name, community_pk, permission):
         self.role_name = role_name
         self.community_pk = community_pk
+        self.permission = permission
     
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        self.target.remove_role_from_permission(self.role_name, self.community_pk)
-        self.target.save()
-        return target
+        if not hasattr(self.permission, "remove_actor_from_permission"):
+            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
+        self.permission.remove_role_from_permission(self.role_name, self.community_pk)
+        self.permission.save()
+        return self.permission

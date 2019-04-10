@@ -6,10 +6,21 @@ from concord.actions.state_changes import BaseStateChange
 ###############################
 
 class ChangeNameStateChange(BaseStateChange):
-    name = "community_changename"
+    description = "Change name of community"
 
     def __init__(self, new_name):
         self.new_name = new_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]    
+
+    def description_present_tense(self):
+        return "change name of community to %s" % (self.new_name)  
+
+    def description_past_tense(self):
+        return "changed name of community to %s" % (self.new_name) 
 
     def validate(self, actor, target):
         """
@@ -26,10 +37,15 @@ class ChangeNameStateChange(BaseStateChange):
 
 
 class AddGovernorStateChange(BaseStateChange):
-    name = "community_addgovernor"
+    description = "Add governor of community"
 
     def __init__(self, governor_name):
         self.governor_name = governor_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
 
     def validate(self, actor, target):
         """
@@ -46,10 +62,15 @@ class AddGovernorStateChange(BaseStateChange):
 
 
 class AddGovernorRoleStateChange(BaseStateChange):
-    name = "community_addgovernorrole"
+    description = "Add role of governor to community"
 
     def __init__(self, role_name):
         self.role_name = role_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
 
     def validate(self, actor, target):
         """
@@ -67,10 +88,15 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
 
 class AddOwnerStateChange(BaseStateChange):
-    name = "community_addowner"
+    description = "Add owner to community"
 
     def __init__(self, owner_name):
         self.owner_name = owner_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
 
     def validate(self, actor, target):
         """
@@ -87,10 +113,15 @@ class AddOwnerStateChange(BaseStateChange):
 
 
 class AddOwnerRoleStateChange(BaseStateChange):
-    name = "community_addownerrole"
+    description = "Add role of owner to community"
 
     def __init__(self, role_name):
         self.role_name = role_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
 
     def validate(self, actor, target):
         """
@@ -108,11 +139,22 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
 
 class AddRoleStateChange(BaseStateChange):
-    name = "community_addrole"
+    description = "Add role to community"
 
     def __init__(self, role_name):
         self.role_name = role_name
-        
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "add role %s to" % (self.role_name)  
+
+    def description_past_tense(self):
+        return "added role %s to" % (self.role_name) 
+
     def validate(self, actor, target):
         # maybe make sure 'governor' and 'owner' aren't specified here?
         return True
@@ -126,10 +168,21 @@ class AddRoleStateChange(BaseStateChange):
 
 
 class RemoveRoleStateChange(BaseStateChange):
-    name = "community_removerole"
+    description = "Remove role from community"
 
     def __init__(self, role_name):
         self.role_name = role_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "remove role %s from" % (self.role_name)  
+
+    def description_past_tense(self):
+        return "removed role %s from" % (self.role_name) 
 
     def validate(self, actor, target):
         return True
@@ -141,12 +194,23 @@ class RemoveRoleStateChange(BaseStateChange):
 
 
 class AddPeopleToRoleStateChange(BaseStateChange):
-    name = "community_addpeopletorole"
+    description = "Add people to role in community"
 
     def __init__(self, role_name, people_to_add):
         self.role_name = role_name
         self.people_to_add = people_to_add
-        
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "add %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
+
+    def description_past_tense(self):
+        return "added %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
+
     def validate(self, actor, target):
         return True
 
@@ -157,12 +221,24 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
 
 class RemovePeopleFromRoleStateChange(BaseStateChange):
-    name = "community_removepeoplefromrole"
+    description = "Remove people from role in community"
 
     def __init__(self, role_name, people_to_remove):
         self.role_name = role_name
         self.people_to_remove = people_to_remove
-        
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "remove %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  
+
+    def description_past_tense(self):
+        return "removed %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  
+
+
     def validate(self, actor, target):
         return True
 

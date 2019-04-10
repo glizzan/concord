@@ -8,10 +8,23 @@ from concord.resources.models import Item
 #####################################
 
 class ChangeResourceNameStateChange(BaseStateChange):
-    name = "resource_changename"
+    description = "Change name of resource"
 
     def __init__(self, new_name):
         self.new_name = new_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        # FIXME: if we want to let people inherit from abstract resource, we need to check
+        # parents here.
+        from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
+        return [AbstractResource, AbstractItem, Resource, Item]    
+
+    def description_present_tense(self):
+        return "change name of resource to %s" % (self.new_name)  
+
+    def description_past_tense(self):
+        return "changed name of resource to %s" % (self.new_name) 
 
     def validate(self, actor, target):
         """
@@ -25,10 +38,23 @@ class ChangeResourceNameStateChange(BaseStateChange):
         return target
 
 class AddItemResourceStateChange(BaseStateChange):
-    name = "resource_additem"
+    description = "Add item to resource"
 
     def __init__(self, item_name):
         self.item_name = item_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        # FIXME: if we want to let people inherit from abstract resource, we need to check
+        # parents here.
+        from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
+        return [AbstractResource, AbstractItem, Resource, Item]    
+
+    def description_present_tense(self):
+        return "add item %s to resource" % (self.item_name)  
+
+    def description_past_tense(self):
+        return "added item %s to resource" % (self.item_name)
 
     def validate(self, actor, target):
         """
@@ -45,10 +71,23 @@ class AddItemResourceStateChange(BaseStateChange):
 
 
 class RemoveItemResourceStateChange(BaseStateChange):
-    name = "resource_removeitem"
+    description = "Remove item from resource"
 
     def __init__(self, item_pk):
         self.item_pk = item_pk
+
+    @classmethod
+    def get_allowable_targets(cls):
+        # FIXME: if we want to let people inherit from abstract resource, we need to check
+        # parents here.
+        from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
+        return [AbstractResource, AbstractItem, Resource, Item]    
+
+    def description_present_tense(self):
+        return "remove item with pk %s from resource" % (self.item_pk)  
+
+    def description_past_tense(self):
+        return "removed item with pk %s from resource" % (self.item_pk)
 
     def validate(self, actor, target):
         """

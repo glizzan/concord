@@ -23,6 +23,9 @@ class PermissionsResource(PermissionedModel):
 
     # Read-only
 
+    # FIXME: I don't think the permissions items are actually linking to the PR, and therefore
+    # I don't think self.permissionsitem_set.all will work.  But this isn't being called/tested
+    # anywhere.
     def get_items(self):
         result = []
         for item in self.permissionsitem_set.all():
@@ -32,9 +35,11 @@ class PermissionsResource(PermissionedModel):
 
 class PermissionsItem(PermissionedModel):
     """
+    Permission items contain data for who may change the state of the linked object in a 
+    given way.  
+
     content_type, object_id, permitted object -> specify what object the permission is set on
     change_type -> specifies what action the permission covers
-    actor -> specifies who has the permission
 
     actors -> individually listed people
     roles -> reference to roleset specified in community
@@ -116,11 +121,11 @@ class PermissionsItem(PermissionedModel):
         else:
             print("Role pair to add, ", new_pair, ", is already in permission item roles")
 
-    def remove_role_from_community(self, role, community):
+    def remove_role_from_permission(self, role, community):
         pair_to_delete = community + "_" + role
         role_pairs = self.get_roles()
         if pair_to_delete in role_pairs:
             role_pairs.remove(pair_to_delete)
             self.roles = json.dumps(role_pairs)
         else:
-            print("Role pair to delete, ", new_pair, ", is not in permission item roles")
+            print("Role pair to delete, ", pair_to_delete, ", is not in permission item roles")

@@ -238,7 +238,6 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
     def description_past_tense(self):
         return "removed %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  
 
-
     def validate(self, actor, target):
         return True
 

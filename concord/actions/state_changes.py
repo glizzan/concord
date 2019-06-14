@@ -37,7 +37,7 @@ class BaseStateChange(object):
 class ChangeOwnerStateChange(BaseStateChange):
     description = "Change owner"
 
-    def __init__(self, new_owner, new_owner_type):
+    def __init__(self, new_owner: str, new_owner_type: str):
         # NOTE: new_owner SHOULD be the PK of the owner but for now it is their name
         self.new_owner = new_owner
         self.new_owner_type = new_owner_type
@@ -78,7 +78,6 @@ class ChangeOwnerStateChange(BaseStateChange):
 
 class EnableFoundationalPermissionStateChange(BaseStateChange):
     description = "Enable the foundational permission"
-    name = "base_enablefoundationalpermissionchange"
 
     @classmethod
     def get_allowable_targets(cls):

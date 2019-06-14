@@ -8,13 +8,33 @@ from concord.permission_resources.models import PermissionsItem
 ### Resource & Item State Changes ###
 #####################################
 
-class AddPermissionStateChange(BaseStateChange):
-    name = "permissionitem_addpermission"
+class PermissionResourceBaseStateChange(BaseStateChange):
 
-    def __init__(self, permission_type, permission_actor, permission_role):
+    def look_up_permission(self):
+        return PermissionsItem.objects.get(pk=self.permission_pk)
+
+
+class AddPermissionStateChange(PermissionResourceBaseStateChange):
+    description = "Add permission"
+
+    def __init__(self, permission_type, permission_actors, permission_role_pairs):
+        """Permission actors and permission role pairs MUST be a list of zero or more
+        strings."""
         self.permission_type = permission_type
-        self.permission_actor = permission_actor
-        self.permission_role = permission_role
+        self.permission_actors = permission_actors if permission_actors else []
+        self.permission_role_pairs = permission_role_pairs if permission_role_pairs else []
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.resources.models import Resource, Item
+        return [Community, SubCommunity, SuperCommunity, Resource, Item]    
+
+    def description_present_tense(self):
+        return "add permission of type %s" % (self.permission_type)
+
+    def description_past_tense(self):
+        return "added permission of type %s" % (self.permission_type)
 
     def validate(self, actor, target):
         """
@@ -26,20 +46,34 @@ class AddPermissionStateChange(BaseStateChange):
         permission = PermissionsItem()
         permission.owner = actor # Do we care about owner type here?
         permission.permitted_object = target
-        permission.change_type = self.permission_type
-        if self.permission_actor:
-            permission.actors = json.dumps([self.permission_actor])
-        if self.permission_role:
-            permission.roles = json.dumps([self.permission_role])
+        permission.change_type = self.permission_type        
+        for actor in self.permission_actors:
+            if actor:
+                permission.add_actor_to_permission(actor=actor)
+        for role_pair in self.permission_role_pairs:
+            if role_pair:
+                permission.add_role_pair_to_permission(role_pair_to_add=role_pair)
         permission.save()
         return permission
 
 
-class RemovePermissionStateChange(BaseStateChange):
-    name = "permissionitem_removepermission"
+class RemovePermissionStateChange(PermissionResourceBaseStateChange):
+    description = "Remove permission"
 
     def __init__(self, item_pk):
         self.item_pk = item_pk
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.resources.models import Resource, Item
+        return [Community, SubCommunity, SuperCommunity, Resource, Item]    
+
+    def description_present_tense(self):
+        return "remove permission %d" % (self.item_pk)  
+
+    def description_past_tense(self):
+        return "removed permission %d" % (self.item_pk)
 
     def validate(self, actor, target):
         """
@@ -59,79 +93,166 @@ class RemovePermissionStateChange(BaseStateChange):
             return False
 
 
-class AddActorToPermissionStateChange(BaseStateChange):
-    name = "permissionitem_addactortopermission"
+class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
+    description = "Add actor to permission"
 
-    def __init__(self, actor, permission):
-        self.actor = actor
-        self.permission = permission
-    
+    def __init__(self, *, actor_to_add: str, permission_pk: int):
+        self.actor_to_add = actor_to_add
+        self.permission_pk = permission_pk
+        self.permission = self.look_up_permission()
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [PermissionsItem]
+
+    def description_present_tense(self):
+        return "add actor %s to permission %d (%s)" % (self.actor_to_add, 
+            self.permission_pk, self.permission.short_change_type())  
+
+    def description_past_tense(self):
+        return "added actor %s to permission %d (%s)" % (self.actor_to_add, 
+            self.permission_pk, self.permission.short_change_type()) 
+
+    def get_change_data(self):
+        # TODO: make permission a custom field so we don't need to override get_change_data
+        '''
+        Given the python Change object, generates a json list of field names
+        and values.
+        '''
+        new_vars = vars(self)
+        del(new_vars)["permission"]
+        return json.dumps(new_vars)
+
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        if not hasattr(self.permission, "add_actor_to_permission"):
-            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
-        self.permission.add_actor_to_permission(actor)
+        print("We're adding actor: ", self.actor_to_add, " to permission ", self.permission)
+        self.permission.add_actor_to_permission(actor=self.actor_to_add)
         self.permission.save()
         return self.permission
 
 
-class RemoveActorFromPermissionStateChange(BaseStateChange):
-    name = "permissionitem_removeactorfrompermission"
+class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
+    description = "Remove actor from permission"
 
-    def __init__(self, actor, permission):
-        self.actor = actor
-        self.permission = permission
+    def __init__(self, *, actor_to_remove: str, permission_pk: int):
+        self.actor_to_remove = actor_to_remove
+        self.permission_pk = permission_pk
+        self.permission = self.look_up_permission()
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [PermissionsItem]
+
+    def description_present_tense(self):
+        return "remove actor %s from permission %d (%s) " % (self.actor_to_remove, 
+            self.permission_pk, self.permission.short_change_type())  
+
+    def description_past_tense(self):
+        return "removed actor %s from permission %d (%s)" % (self.actor_to_remove, 
+            self.permission_pk, self.permission.short_change_type())   
+
+    def get_change_data(self):
+        # TODO: make permission a custom field so we don't need to override get_change_data
+        '''
+        Given the python Change object, generates a json list of field names
+        and values.
+        '''
+        new_vars = vars(self)
+        del(new_vars)["permission"]
+        return json.dumps(new_vars)
 
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        if not hasattr(self.permission, "remove_actor_from_permission"):
-            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
-        self.permission.remove_actor_from_permission(actor)
+        self.permission.remove_actor_from_permission(actor=self.actor_to_remove)
         self.permission.save()
         return self.permission
 
 
-class AddRoleToPermissionStateChange(BaseStateChange):
-    name = "permissionitem_addroletopermission"
+class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
+    description = "Add role to permission"
 
-    def __init__(self, role_name, community_pk, permission):
+    def __init__(self, *, role_name: str, community_pk: int, permission_pk: int):
         self.role_name = role_name
         self.community_pk = community_pk
-        self.permission = permission
-    
+        self.permission_pk = permission_pk
+        self.permission = self.look_up_permission()
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [PermissionsItem]   
+
+    def description_present_tense(self):
+        return "add role %s (community %d) to permission %d (%s)" % (self.role_name, 
+            self.community_pk, self.permission_pk, self.permission.short_change_type())  
+
+    def description_past_tense(self):
+        return "added role %s (community %d) to permission %d (%s)" % (self.role_name, 
+            self.community_pk, self.permission_pk, self.permission.short_change_type())
+
+    def get_change_data(self):
+        # TODO: make permission a custom field so we don't need to override get_change_data
+        '''
+        Given the python Change object, generates a json list of field names
+        and values.
+        '''
+        new_vars = vars(self)
+        del(new_vars)["permission"]
+        return json.dumps(new_vars)
+
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        if not hasattr(self.permission, "add_role_to_permission"):
-            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
-        self.permission.add_role_to_permission(self.role_name, self.community_pk)
+        self.permission.add_role_to_permission(role=self.role_name, 
+            community=str(self.community_pk))
         self.permission.save()
         return self.permission
 
 
-class RemoveRoleFromPermissionStateChange(BaseStateChange):
-    name = "permissionitem_removerolefrompermission"
+class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
+    description = "Remove role from permission"
 
-    def __init__(self, role_name, community_pk, permission):
+    def __init__(self, *, role_name: str, community_pk: int, permission_pk: int):
         self.role_name = role_name
         self.community_pk = community_pk
-        self.permission = permission
-    
+        self.permission_pk = permission_pk
+        self.permission = self.look_up_permission()
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [PermissionsItem]   
+
+    def description_present_tense(self):
+        return "remove role %s (community %d) from permission %d (%s)" % (self.role_name, 
+            self.community_pk, self.permission_pk, self.permission.short_change_type())  
+
+    def description_past_tense(self):
+        return "removed role %s (community %d) from permission %d (%s)" % (self.role_name, 
+            self.community_pk, self.permission_pk, self.permission.short_change_type())  
+
+    def get_change_data(self):
+        # TODO: make permission a custom field so we don't need to override get_change_data
+        '''
+        Given the python Change object, generates a json list of field names
+        and values.
+        '''
+        new_vars = vars(self)
+        del(new_vars)["permission"]
+        return json.dumps(new_vars)
+
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
-        if not hasattr(self.permission, "remove_actor_from_permission"):
-            self.permission = PermissionsItem.objects.get(pk=int(self.permission))
-        self.permission.remove_role_from_permission(self.role_name, self.community_pk)
+        self.permission.remove_role_from_permission(role=self.role_name,
+            community=str(self.community_pk))
         self.permission.save()
         return self.permission

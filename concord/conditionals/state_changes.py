@@ -1,3 +1,5 @@
+from typing import Dict
+
 import json
 
 from concord.actions.state_changes import BaseStateChange
@@ -12,7 +14,8 @@ from concord.conditionals.models import ConditionTemplate
 class AddConditionStateChange(BaseStateChange):
     description = "Add condition"
 
-    def __init__(self, condition_type, condition_data, permission_data, conditioning_choices):
+    def __init__(self, *, condition_type: str, permission_data: Dict, condition_data: Dict, 
+        conditioning_choices: str):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else "{}"
         self.permission_data = permission_data
@@ -21,13 +24,14 @@ class AddConditionStateChange(BaseStateChange):
     @classmethod
     def get_allowable_targets(cls):
         from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]    
+        from concord.permission_resources.models import PermissionsItem
+        return [Community, SubCommunity, SuperCommunity, PermissionsItem]    
 
     def description_present_tense(self):
-        return "change name of community to %s" % (self.new_name)  
+        return "add condition %s to %s" % (self.condition_type, self.conditioning_choices)  
 
     def description_past_tense(self):
-        return "changed name of community to %s" % (self.new_name) 
+        return "added condition %s to %s" % (self.condition_type, self.conditioning_choices)
 
     def validate(self, actor, target):
         return True
@@ -45,13 +49,25 @@ class AddConditionStateChange(BaseStateChange):
         )
 
 class RemoveConditionStateChange(BaseStateChange):
-    name = "conditional_removecondition"
+    description = "Remove condition"
 
     def __init__(self, condition_pk):
         self.condition_pk = condition_pk
         # TODO: maybe add ability to remove condition by giving the target's ID & type?
         # self.conditioned_object = conditioned_object
         # self.conditioning_choices = conditioning_choices
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.permission_resources.models import PermissionsItem
+        return [Community, SubCommunity, SuperCommunity, PermissionsItem]    
+
+    def description_present_tense(self):
+        return "remove condition %s" % (self.condition_pk)  
+
+    def description_past_tense(self):
+        return "removed condition %s" % (self.condition_pk)  
 
     def validate(self, actor, target):
         # If we add ability to remove by giving target, check that target == conditioned object
@@ -68,10 +84,21 @@ class RemoveConditionStateChange(BaseStateChange):
 ####################################
 
 class AddVoteStateChange(BaseStateChange):
-    name = "conditionalvote_addvote"
+    description = "Add vote"
 
     def __init__(self, vote):
         self.vote = vote
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.conditionals.models import VoteCondition
+        return [VoteCondition]    
+
+    def description_present_tense(self):
+        return "add vote %s" % (self.vote)  
+
+    def description_past_tense(self):
+        return "added vote %s" % (self.vote)
 
     def validate(self, actor, target):
         """
@@ -103,7 +130,18 @@ class AddVoteStateChange(BaseStateChange):
 #######################################
 
 class ApproveStateChange(BaseStateChange):
-    name = "conditional_approvecondition"
+    description = "Approve"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.conditionals.models import ApprovalCondition
+        return [ApprovalCondition]    
+
+    def description_present_tense(self):
+        return "approve"
+
+    def description_past_tense(self):
+        return "approved"
 
     def validate(self, actor, target):
 

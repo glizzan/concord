@@ -19,6 +19,9 @@ class BaseCommunityModel(PermissionedModel):
     class Meta:
         abstract = True
 
+    def get_name(self):
+        return self.name
+
     def get_owner(self):
         """
         Communities own themselves by default, unless they are subcommunities.
@@ -255,9 +258,9 @@ class AuthorityHandler(PermissionedModel):
         from concord.communities.client import CommunityClient
         cc = CommunityClient(actor="system")
         for pair in governors['roles']:
-            community, role = pair.split("_")  # FIXME: bit hacky
-            result = cc.has_role_in_community(community_pk=community, role=role, actor=actor)
-            if result:
+            community_pk, role = pair.split("_")  # FIXME: bit hacky
+            cc.set_target_community(community_pk=community_pk)
+            if cc.has_role_in_community(role=role, actor=actor):
                 return True
 
         return False
@@ -278,7 +281,7 @@ class AuthorityHandler(PermissionedModel):
         owners['actors'].remove(owner)
         self.owners = json.dumps(owners)
 
-    def remove_governor_role(self, role, community):
+    def remove_owner_role(self, role, community):
         role_to_remove = str(community) + "_" + role
         owners['roles'].remove(role_to_remove)
         self.owners = json.dumps(owners)
@@ -295,14 +298,14 @@ class AuthorityHandler(PermissionedModel):
         if actor in owners['actors']:
             return True
 
+        # FIXME: copied from permission_resources.models and also duplicated for owners
         from concord.communities.client import CommunityClient
         cc = CommunityClient(actor="system")
-
         for pair in owners['roles']:
-            community, role = pair.split("_")  # FIXME: bit hacky
-            result = cc.has_role_in_community(community_pk=community, role=role, actor=actor)
-            if result:
+            community_pk, role = pair.split("_")  # FIXME: bit hacky
+            cc.set_target_community(community_pk=community_pk)
+            if cc.has_role_in_community(role=role, actor=actor):
                 return True
-                
+                           
         return False
 

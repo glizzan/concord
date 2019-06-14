@@ -5,6 +5,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.models import PermissionedModel
+from concord.permission_resources.utils import check_permission_inputs
 
 
 # Create your models here.
@@ -52,7 +53,8 @@ class PermissionsItem(PermissionedModel):
     object_id = models.PositiveIntegerField()
     permitted_object = GenericForeignKey('content_type', 'object_id')
 
-    actors = models.CharField(max_length=200)  # Replace with user model link
+    # FIXME: both actors & roles are list of strings saved as json, need to be custom field
+    actors = models.CharField(max_length=200)  
     roles = models.CharField(max_length=500)
 
     change_type = models.CharField(max_length=200)  # Replace with choices field???
@@ -60,10 +62,16 @@ class PermissionsItem(PermissionedModel):
     def get_name(self):
         return "Permission %s (for %s on %s)" % (str(self.pk), self.change_type, self.permitted_object)
 
+    def get_permitted_object(self):
+        return self.permitted_object
+
     # Permissions-specific helpers
 
     def get_target(self):
         return self.resource.permitted_object
+
+    def short_change_type(self):
+        return self.change_type.split(".")[-1]
 
     def match_change_type(self, change_type):
         return self.change_type == change_type
@@ -74,19 +82,34 @@ class PermissionsItem(PermissionedModel):
     def get_roles(self):
         return json.loads(self.roles) if self.roles else []
 
+    def get_actor_names(self):
+        if self.get_actors():
+            return " ".join(self.get_actors())
+        return ""
+
+    # NOTE: I'm using this method with the assumption that all roles 
+    # are from the same community, which may not always be true.
+    def get_role_names(self):
+        role_pairs = self.get_roles()
+        role_names = []
+        for role_pair in role_pairs:
+            community, role_name = role_pair.split("_")
+            role_names.append(role_name)
+        return role_names
+
     def match_actor(self, actor):
 
         actors = self.get_actors()
         if actor in actors:
             return True
 
-        role_pairs = self.get_roles()
+        role_pairs = self.get_roles()  # FIXME: "role_pair" is not super descriptive
         from concord.communities.client import CommunityClient
         cc = CommunityClient(actor="system")
         for pair in role_pairs:
-            community, role = pair.split("_")  # FIXME: bit hacky
-            result = cc.has_role_in_community(community_pk=community, role=role, actor=actor)
-            if result:
+            community_pk, role = pair.split("_")  # FIXME: bit hacky
+            cc.set_target_community(community_pk=community_pk)
+            if cc.has_role_in_community(role=role, actor=actor):
                 return True
 
         # TODO: thing the above through.  If every role is queried separately, that's a lot of 
@@ -96,7 +119,8 @@ class PermissionsItem(PermissionedModel):
 
     # Write stuff called by statechanges
 
-    def add_actor_to_permission(self, actor):
+    @check_permission_inputs(dict_of_inputs={'actor': 'simple_string'})
+    def add_actor_to_permission(self, *, actor: str):
         actors = self.get_actors()
         if actor not in actors:
             actors.append(actor)
@@ -104,15 +128,17 @@ class PermissionsItem(PermissionedModel):
         else:
             print("Actor ", actor, " already in permission item actors")
     
-    def remove_actor_from_permission(self, actor):
+    @check_permission_inputs(dict_of_inputs={'actor': 'simple_string'})
+    def remove_actor_from_permission(self, *, actor: str):
         actors = self.get_actors()
         if actor in actors:
             actors.remove(actor)
-            self.actors = json.dumps(self.actors)
+            self.actors = json.dumps(actors)
         else:
             print("Actor ", actor, " not in permission item actors")
-    
-    def add_role_to_permission(self, role, community):
+
+    @check_permission_inputs(dict_of_inputs={'role': 'simple_string', 'community': 'string_pk'})
+    def add_role_to_permission(self, *, role: str, community: str):
         new_pair = community + "_" + role
         role_pairs = self.get_roles()
         if new_pair not in role_pairs:
@@ -121,7 +147,8 @@ class PermissionsItem(PermissionedModel):
         else:
             print("Role pair to add, ", new_pair, ", is already in permission item roles")
 
-    def remove_role_from_permission(self, role, community):
+    @check_permission_inputs(dict_of_inputs={'role': 'simple_string', 'community': 'string_pk'})
+    def remove_role_from_permission(self, *, role: str, community: str):
         pair_to_delete = community + "_" + role
         role_pairs = self.get_roles()
         if pair_to_delete in role_pairs:
@@ -129,3 +156,22 @@ class PermissionsItem(PermissionedModel):
             self.roles = json.dumps(role_pairs)
         else:
             print("Role pair to delete, ", pair_to_delete, ", is not in permission item roles")
+
+    @check_permission_inputs(dict_of_inputs={'role_pair_to_add': 'role_pair'})
+    def add_role_pair_to_permission(self, *, role_pair_to_add: str):
+        role_pairs = self.get_roles()
+        if role_pair_to_add not in role_pairs:
+            role_pairs.append(role_pair_to_add)
+            self.roles = json.dumps(role_pairs)
+        else:
+            print("Role pair to add, ", role_pair_to_add, ", is already in permission item roles")
+
+    @check_permission_inputs(dict_of_inputs={'role_pair_to_remove': 'role_pair'})
+    def remove_role_pair_from_permission(self, *, role_pair_to_remove: str):
+        role_pairs = self.get_roles()
+        if role_pair_to_remove in role_pairs:
+            role_pairs.remove(role_pair_to_remove)
+            self.roles = json.dumps(role_pairs)
+        else:
+            print("Role pair to delete, ", role_pair_to_remove, ", is not in permission item roles")
+

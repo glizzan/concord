@@ -1,102 +1,114 @@
 import json
+from typing import Tuple, List, Any, Dict
 
-from concord.actions.clients import BaseActionClient
+from django.db.models import Model
+
+from concord.actions.client import BaseClient
+from concord.actions.models import Action  # Just needed for type hinting
 
 from concord.conditionals.models import ApprovalCondition, VoteCondition, ConditionTemplate
 from concord.conditionals import state_changes as sc
 
+'''
+The conditionals app is one of the more confusing core apps, and the client is fairly confusing 
+as well.  One day we'll refactor it to make it easier to understand.
 
-class ConditionTemplateClient(BaseActionClient):
-    """
-    This is a helper client to make it easier to generate conditions to add to 
-    permissions.
-    """
+For now, it's important to distinguish between *condition templates* and *conditions*.  A condition 
+template keeps track of how to set conditions on actions in various contexts.  A condition template is
+theoretical: it says, "if someone does X, they'll need to pass condition Y".  A condition is practical:
+it says, "someone did X, and this is the status of Y".  
 
-    def __init__(self, *args, **kwargs):
-        pass
+For any "Condition" client, the target is the corresponding condition.  So, for example, the target
+of an ApprovalConditionClient must be an ApprovalCondition instance.  Note that the condition is 
+always linked to a specific action, but the action is not the target of the client.  You may start off
+only knowing the identity of the action, in which case you'll need to do some extra work to get the 
+corresponding condition.
 
-class ApprovalConditionClient(BaseActionClient):
+For any "Condition Template" client, the target is a conditional template.  Generally speaking,
+we use two kinds of condition templates.  One kind is set on individual permissions, and one kind is
+set on the Owner and Governor roles in communities.  The process for generating conditions from
+these two types of condition templates is practically the same.  There are a number of steps that
+circumvent the typical permissions process. The following steps do NOT go through the permissions 
+pipelines themselves because they are considered approved through the process by which the 
+condition template was originally set: 
+1) creating the condition
+2) setting a permission on the condition
+'''
 
-    def approve(self, target=None):
+
+class ApprovalConditionClient(BaseClient):
+    '''
+    The target of the ApprovalConditionClient must always be an ApprovalCondition instance.
+    '''
+
+    def approve(self) -> Tuple[int, Any]:
         change = sc.ApproveStateChange()
-        return self.create_and_take_action(change, target)
+        return self.create_and_take_action(change)
 
 
-class VoteConditionClient(BaseActionClient):
+class VoteConditionClient(BaseClient):
+    '''
+    The target of the VoteConditionClient must always be a VoteCondition instance.
+    '''
 
     # Read only
 
-    def publicize_votes(self):
+    def publicize_votes(self) -> bool:
         return self.target.publicize_votes
 
-    def can_abstain(self):
+    def can_abstain(self) -> bool:
         return self.target.allow_abstain
 
-    def get_current_results(self):
+    def get_current_results(self) -> Dict:
         return self.target.current_results()
 
     # State changes
 
-    def vote(self, vote, target=None):
+    def vote(self, *, vote: str) -> Tuple[int, Any]:
         change = sc.AddVoteStateChange(vote=vote)
-        return self.create_and_take_action(change, target)
+        return self.create_and_take_action(change)
 
 
-class ConditionalClient(BaseActionClient):
+class BaseConditionalClient(BaseClient):
+    '''
+    The BaseConditionClient should not be called directly, but contains methods that are common to 
+    both PermissionConditionalClient and CommunityConditionalClient.
 
-    # Read only
+    Most of the methods on the BaseConditional are client-less, but there are a couple that do
+    require targets.  For those, either the target of PermissionConditionalClient (Permission) or
+    CommunityConditionalClient (Community) are allowed.
+    '''
 
-    def get_condition_template_for_permission(self, permission_pk):
-        result = ConditionTemplate.objects.filter(conditioned_object=permission_pk,
-            conditioning_choices="permission")
-        if result:
-            return result[0]
-        return None
+    # Target-less methods (don't require a target to be set ahead of time)
 
-    def get_condition_template_for_owner(self, community_pk):
-        result = ConditionTemplate.objects.filter(conditioned_object=community_pk,
-            conditioning_choices="community_owner")
-        if result:
-            return result[0]
-        return None
-
-    def get_condition_template_for_governor(self, community_pk):
-        result = ConditionTemplate.objects.filter(conditioned_object=community_pk,
-            conditioning_choices="community_governor")
-        if result:
-            return result[0]
-        return None
-
-    def get_condition_item_given_action(self, action_pk):
+    def get_condition_item_given_action(self, *, action_pk: int) -> Model:
         # HACK
         condition_items = ApprovalCondition.objects.filter(action=action_pk)
         if not condition_items:
             condition_items = VoteCondition.objects.filter(action=action_pk)
         return condition_items[0] if condition_items else None
 
-    def getVoteCondition(self, pk):
+    def getVoteConditionAsClient(self, *, pk: int) -> VoteConditionClient:
         vote_object = VoteCondition.objects.get(pk=pk)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
-    # Create only
-    def condition_lookup_helper(self, lookup_string):
+    def getApprovalConditionAsClient(self, *, pk: int) -> ApprovalConditionClient:
+        approval_object = ApprovalCondition.objects.get(pk=pk)
+        return ApprovalConditionClient(target=approval_object, actor=self.actor)
+
+    def condition_lookup_helper(self, *, lookup_string: str) -> Model:
         condition_dict = {
             "approvalcondition": ApprovalCondition,
             "votecondition": VoteCondition
         }
         return condition_dict[lookup_string]
 
-    # FIXME: this feels like too much logic for the client, but where should it go?
-    def create_condition_item(self, condition_template, action):
-        """
-        This method is a little wonky, because we want to include the permission that goes on 
-        the condition action item *in* the template but we *don't* want to put it through the
-        permissions pipeline when instantiating.
-        """
+    # FIXME: this feels like too much logic for the client, but where else could it go?
+    def create_condition_item(self, *, condition_template: ConditionTemplate, action: Action) -> Model:
 
         # Instantiate condition object
         data_dict = json.loads(condition_template.condition_data)
-        conditionModel = self.condition_lookup_helper(condition_template.condition_type)
+        conditionModel = self.condition_lookup_helper(lookup_string=condition_template.condition_type)
         condition_item = conditionModel.objects.create(action=action.pk, 
                 owner=condition_template.get_owner(), owner_type=condition_template.owner_type,
                 **data_dict)
@@ -116,52 +128,96 @@ class ConditionalClient(BaseActionClient):
 
         return condition_item
 
-    def get_or_create_condition_item(self, condition_template, action):
-        condition_item = self.get_condition_item_given_action(action.pk)
+    def get_or_create_condition(self, *, condition_template: ConditionTemplate, action: Action) -> Model:
+        condition_item = self.get_condition_item_given_action(action_pk=action.pk)
         if not condition_item :
-            condition_item  = self.create_condition_item(condition_template, action)
+            condition_item  = self.create_condition_item(condition_template=condition_template, 
+                action=action)
         return condition_item 
 
-    def override_owner_if_target_is_owned_by_community(self, target):
-        # FIXME: don't like the way this abstraction is leaking
-        if target.owner_type == "ind":
-            return self.actor
-        else:
-            return target.owner
+    def override_owner_if_target_is_owned_by_community(self, *, action_target: Model) -> str:
+        # FIXME: don't like the way this abstraction is leaking.  honestly I don't even remember
+        # why this is here which is always a bad sign.
+        return self.actor if action_target.owner_type == "ind" else action_target.owner
 
-    def createApprovalCondition(self, action):
-        owner = self.override_owner_if_target_is_owned_by_community(action.target)
-        approval_object = ApprovalCondition.objects.create(owner=owner, action=action.pk)
-        return ApprovalConditionClient(target=approval_object, actor=self.actor)
-
-    def createVoteCondition(self, action, **kwargs):
-        owner = self.override_owner_if_target_is_owned_by_community(action.target)
+    def createVoteCondition(self, *, action: Action, **kwargs) -> VoteConditionClient:
+        owner = self.override_owner_if_target_is_owned_by_community(action_target=action.target)
         vote_object = VoteCondition.objects.create(owner=owner, action=action.pk, **kwargs)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
+    # Read methods which require target to be set
+
     # Stage changes
 
-    def addConditionToGovernors(self, condition_type, permission_data=None, target=None, condition_data=None):
-        change = sc.AddConditionStateChange(condition_type, condition_data, 
-            permission_data, "community_governor")
-        return self.create_and_take_action(change, target)        
-
-    def addConditionToOwners(self, condition_type, permission_data=None, target=None, condition_data=None):
-        change = sc.AddConditionStateChange(condition_type, condition_data, 
-            permission_data, "community_owner")
-        return self.create_and_take_action(change, target) 
-
-    # Note that the permission is the target here
-    def addConditionToPermission(self, condition_type, permission_data=None, target=None, condition_data=None):
-        # It would be nice to be able to pass in the ConditionTemplate 
-        change = sc.AddConditionStateChange(condition_type, condition_data, 
-            permission_data, "permission")
-        return self.create_and_take_action(change, target)
-
-    def removeCondition(self, condition, target=None):
-        # NOTE: the target is the permission the condition is being removed from
+    def removeCondition(self, *, condition: Model) -> Tuple[int, Any]:
         change = sc.RemoveConditionStateChange(condition_pk=condition.pk)
-        return self.create_and_take_action(change, target)
+        return self.create_and_take_action(change)
 
-    def copyConditionToPermission(self, condition, permission):
-        ...
+
+class PermissionConditionalClient(BaseConditionalClient):
+    '''
+    Target is always a Permission.
+    '''
+
+    # Target-less methods (don't require a target to be set ahead of time)
+
+    # Read methods which require target to be set
+
+    def get_condition_template(self) -> ConditionTemplate:
+        result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
+            conditioning_choices="permission")
+        if result:
+            return result[0]
+        return
+
+    # State changes
+
+    def addCondition(self, *, condition_type: str, permission_data: Dict = None, 
+            condition_data: Dict = None) -> Tuple[int, Any]:
+        # TODO: It would be nice to be able to pass in the ConditionTemplate 
+        change = sc.AddConditionStateChange(condition_type=condition_type,
+            permission_data=permission_data, condition_data=condition_data, 
+            conditioning_choices="permission")
+        return self.create_and_take_action(change)
+
+
+class CommunityConditionalClient(BaseConditionalClient):
+    '''
+    Target is always a Community.  Specifically, a conditional may be set on the Governors role, 
+    the Owners role, or both, to place limits on their decision-making authority.
+    '''
+
+    # Target-less methods (don't require a target to be set ahead of time)
+
+    # Read methods which require target to be set
+
+    def get_condition_template_for_owner(self) -> ConditionTemplate:
+        result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
+            conditioning_choices="community_owner")
+        return result[0] if result else None
+
+    def get_condition_template_for_governor(self) -> ConditionTemplate:
+        result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
+            conditioning_choices="community_governor")
+        return result[0] if result else None
+
+    # State Changes
+
+    def addConditionToGovernors(self, *, condition_type: str, permission_data: Dict = None, 
+            condition_data: Dict = None) -> Tuple[int, Any]:
+        change = sc.AddConditionStateChange(condition_type=condition_type,
+            permission_data=permission_data, condition_data=condition_data, 
+            conditioning_choices="community_governor")
+        return self.create_and_take_action(change)        
+
+    def addConditionToOwners(self, *, condition_type: str, permission_data: Dict = None, 
+            condition_data: Dict = None) -> Tuple[int, Any]:
+        change = sc.AddConditionStateChange(condition_type=condition_type,
+            permission_data=permission_data, condition_data=condition_data, 
+            conditioning_choices="community_owner")
+        return self.create_and_take_action(change) 
+
+
+
+
+

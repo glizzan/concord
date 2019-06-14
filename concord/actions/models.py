@@ -1,4 +1,5 @@
 import inspect, importlib
+from typing import List, Tuple
 
 from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -31,9 +32,14 @@ class Action(models.Model):
     change_type = models.CharField(max_length=50, blank=True)
     change_data = models.CharField(max_length=500, blank=True) 
 
+    # Log field, helps with debugging and possibly useful for end user
+    log = models.CharField(max_length=500, blank=True)
+
     # Regular old attributes
     status = models.CharField(max_length=5, choices=ACTION_STATUS_CHOICES, 
         default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     # Basics
 
@@ -45,11 +51,21 @@ class Action(models.Model):
         self.change = create_change_object(self.change_type, self.change_data)
         if self.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
-                return self.actor + " " + self.change.description_past_tense() + " " + self.target.name
+                return self.actor + " " + self.change.description_past_tense() + " on target " + self.target.get_name()
         else:
             if hasattr(self.change, "description_present_tense"):
-                return self.actor + " asked to " + self.change.description_present_tense() + " " + self.target.name
+                return self.actor + " asked to " + self.change.description_present_tense() + " on target " + self.target.get_name()
         return self.__str__()
+
+    def get_targetless_description(self):
+        self.change = create_change_object(self.change_type, self.change_data)
+        if self.status == "implemented":
+            if hasattr(self.change,"description_past_tense"):
+                return self.actor + " " + self.change.description_past_tense()
+        else:
+            if hasattr(self.change, "description_present_tense"):
+                return self.actor + " asked to " + self.change.description_present_tense()
+        return self.__str__()       
 
     # Steps of action execution
 
@@ -59,11 +75,15 @@ class Action(models.Model):
         if self.change.validate(actor=self.actor, target=self.target):
             self.status = "sent"
             self.save()
+            return None, None
+        return None, "action not valid"
     
     def check_permissions(self):
         """Checks that action is permissable."""
-        self.status = has_permission(action=self)
+        status, log = has_permission(action=self)
+        self.status = status
         self.save()
+        return status, log
 
     def implement_action(self):
         """Lets the change object carry out its custom implementation using the
@@ -71,7 +91,7 @@ class Action(models.Model):
         result = self.change.implement(actor=self.actor, target=self.target)
         self.status = "implemented"
         self.save()
-        return result
+        return result, None
 
     def take_action(self):
         """Checks status and attempts next step given that status."""
@@ -82,11 +102,17 @@ class Action(models.Model):
 
         # now go through steps
         if self.status == "draft":
-            current_result = self.validate_action()
+            current_result, log = self.validate_action()
         if self.status in ["sent", "waiting"]:
-            current_result = self.check_permissions()
+            current_result, log = self.check_permissions()
+            print("Result for checking permissions for ", self, " is ", current_result)
+            print("Log: ", log)
         if self.status == "approved":
-            current_result = self.implement_action()
+            current_result, log = self.implement_action()
+
+        if log:
+            self.log = log
+            self.save()
         
         return self.pk, current_result
 
@@ -124,32 +150,16 @@ class PermissionedModel(models.Model):
         return "_".join([contentType.app_label, contentType.model, str(self.pk)])
 
     def get_actions(self):
-        from .clients import BaseActionClient
-        client = BaseActionClient(actor="temp", target=self)
+        from concord.actions.client import ActionClient
+        client = ActionClient(actor="temp", target=self)
         return client.get_action_history_given_target(target=self)
 
-    def get_settable_permissions(self):
-        """Gets a list of all permission types (aka state changes) that may be set on the
-        model."""
-
-        settable_permissions = []
-
-        # Get list of all objects in model's app's state_changes file
-        project_name = "concord"  # need to not hardcode this somehow 
-        relative_import = "." + self._meta.app_label + ".state_changes"
-        state_changes_module = importlib.import_module(relative_import, package=project_name)
-        module_objects = inspect.getmembers(state_changes_module) 
-
-        # Checks if state changes may be set on self, if so adds to allowable_permission
-        for module_object_tuple in module_objects:
-            module_object = module_object_tuple[1]
-            if hasattr(module_object, "get_allowable_targets"):
-                if self.__class__ in module_object.get_allowable_targets():
-                    settable_permissions.append((module_object.get_change_type(), 
-                        module_object.description))
-
-        return settable_permissions
-
+    @classmethod
+    def get_state_change_objects(cls):
+        # Get list of all objects in model's app's state_changes file 
+        relative_import = "." + cls._meta.app_label + ".state_changes"
+        state_changes_module = importlib.import_module(relative_import, package="concord")
+        return inspect.getmembers(state_changes_module) 
 
     def save(self, *args, **kwargs):
         '''

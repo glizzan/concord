@@ -65,7 +65,7 @@ Here's the overall pipeline system, in pseudocode:
 
 # A Concrete Example
 
-Imagine that you've got a community of 100 people.  They full membership owns the community and has foundational authority via a supermajority (2/3rds) vote.  To make life easier, they have elected a group of 5 governors who function as an executive council, handing a lot of stuff that's not explicitly specified in the PRs.  Unlike the owners, there are no conditions set on the governors.
+Imagine that you've got a community of 100 people.  The full membership owns the community and has foundational authority via a supermajority (2/3rds) vote.  To make life easier, they have elected a group of 5 governors who function as an executive council, handling a lot of stuff that's not explicitly specified in the PRs.  Unlike the owners, there are no conditions set on the governors.
 
 Let's look at some actions that could be taken within the community and how they would get resolved.
 

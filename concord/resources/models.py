@@ -1,5 +1,6 @@
-from django.db import models
+from typing import List
 
+from django.db import models
 
 from concord.actions.models import PermissionedModel
 
@@ -18,7 +19,7 @@ class AbstractResource(PermissionedModel):
 
     # Read-only
 
-    def get_items(self):
+    def get_items(self) -> List[str]:
         result = []
         for item in self.item_set.all():
             result.append(item.name)

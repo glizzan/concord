@@ -163,7 +163,7 @@ class CommunityClient(BaseClient):
 
         for index, role in role_data.items():
 
-            member_data = role["members"].split(", ")
+            member_data = role["members"].split(" ")
             previous_members = self.get_users_given_role(role_name=role["rolename"])
             if not previous_members:  
                 previous_members = []  # returns nonetype if no role exists, which breaks set comparison

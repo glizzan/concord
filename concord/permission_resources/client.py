@@ -114,7 +114,6 @@ class PermissionResourceClient(BaseClient):
         return self.create_and_take_action(change)
 
     def add_actor_to_permission(self, *, actor: str, permission_pk: int) -> Tuple[int, Any]:
-        print("Entering state change with actor: ", actor)
         change = sc.AddActorToPermissionStateChange(actor_to_add=actor, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
@@ -163,20 +162,14 @@ class PermissionResourceClient(BaseClient):
     def update_actors_on_permission(self, *, actor_data, permission):
         """Given a list of roles, updates the given permission to match those roles."""
 
-        print("We're updating actors!")
-
         actions, results = [], []
 
         old_actors = set(permission.get_actors())
         new_actors = set(actor_data.split(" "))
-        print("Old actors: ", old_actors)
-        print("New actors: ", new_actors)
         actors_to_add = new_actors.difference(old_actors)
-        print("Actors to add: ", actors_to_add)
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            print("Adding actor: ", actor)
             action, result = self.add_actor_to_permission(actor=actor, 
                 permission_pk=permission.pk)
             actions.append(action)

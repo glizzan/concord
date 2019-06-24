@@ -105,8 +105,6 @@ class Action(models.Model):
             current_result, log = self.validate_action()
         if self.status in ["sent", "waiting"]:
             current_result, log = self.check_permissions()
-            print("Result for checking permissions for ", self, " is ", current_result)
-            print("Log: ", log)
         if self.status == "approved":
             current_result, log = self.implement_action()
 

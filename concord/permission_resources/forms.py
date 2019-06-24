@@ -80,12 +80,14 @@ class PermissionForm(forms.Form):
 
             db_permission = self.prClient.get_specific_permissions(change_type=form_permission["name"])
 
-            if db_permission:  
+            if db_permission:
 
                 # if permission item exists, update it
-                self.prClient.update_roles_on_permission(role_data=form_permission["roles"], 
+                newClient = PermissionResourceClient(actor=self.request.user.username, 
+                    target=db_permission[0])
+                newClient.update_roles_on_permission(role_data=form_permission["roles"], 
                     permission=db_permission[0], owner=owner_community)
-                self.prClient.update_actors_on_permission(actor_data=form_permission["individuals"],
+                newClient.update_actors_on_permission(actor_data=form_permission["individuals"],
                     permission=db_permission[0])
 
             else:
@@ -177,7 +179,11 @@ class MetaPermissionForm(forms.Form):
         # If any metapermissions are set, yet no target permission exists, 
         # create it and set as target_permission and prc target.
         if len(form_permission_data) > 0 and type(self.target_permission) != PermissionsItem:
-            self.target_permission = self.target_permission.create_self()
+            # FIXME: should the owner be the owner of the permitted object, the actor, or
+            # someone else?
+            # owner = self.target_permission.get_permitted_object().get_owner()
+            owner = self.request.user.username
+            self.target_permission = self.target_permission.create_self(owner=owner)
             self.prClient.set_target(self.target_permission)
 
         for count, form_permission in form_permission_data.items():
@@ -187,10 +193,13 @@ class MetaPermissionForm(forms.Form):
             if db_permission:  
 
                 # if permission item exists, update it
+                newClient = PermissionResourceClient(actor=self.request.user.username, 
+                    target=db_permission[0])
+
                 if self.owned_by_community:
-                    self.prClient.update_roles_on_permission(role_data=form_permission["roles"], 
+                    newClient.update_roles_on_permission(role_data=form_permission["roles"], 
                         permission=db_permission[0], owner=self.owner)
-                self.prClient.update_actors_on_permission(actor_data=form_permission["individuals"],
+                newClient.update_actors_on_permission(actor_data=form_permission["individuals"],
                     permission=db_permission[0])
 
             else:
@@ -207,8 +216,10 @@ class MetaPermissionForm(forms.Form):
                     actors = form_permission["individuals"].split(" ")
                 
                 if actors or role_pairs:
-                    self.prClient.add_permission(permission_type=form_permission["name"],
-                        permission_actors=actors, permission_role_pairs=role_pairs)                    
+                    added, yes = self.prClient.add_permission(permission_type=form_permission["name"],
+                        permission_actors=actors, permission_role_pairs=role_pairs) 
+                    from concord.actions.models import Action 
+                    action = Action.objects.get(pk=added) 
                 else:
                     continue # If no data in form either, just move on
 
@@ -249,7 +260,7 @@ class AccessForm(forms.Form):
                     initial=role_name, required=False)
                 
                 self.fields['%s_members' % count] = forms.CharField(label="Members", 
-                    initial=", ".join(members), required=False)
+                    initial=" ".join(members), required=False)
 
                 # Look for existing permissions for this role
                 permissions = prClient.get_permissions_associated_with_role(

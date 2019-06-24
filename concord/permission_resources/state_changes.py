@@ -128,7 +128,6 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target):
-        print("We're adding actor: ", self.actor_to_add, " to permission ", self.permission)
         self.permission.add_actor_to_permission(actor=self.actor_to_add)
         self.permission.save()
         return self.permission

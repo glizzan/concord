@@ -20,13 +20,15 @@ class RoleForm(forms.Form):
                 initial=role_name, required=True)
             
             self.fields['%s_members' % count] = forms.CharField(label="Members", 
-                initial=", ".join(members), required=False)            
+                initial=" ".join(members), required=False, 
+                help_text="members must be separated by spaces")            
 
             count += 1
 
         # Add an additional blank row in case user wants to add a role
         self.fields['%s_rolename' % count] = forms.CharField(label="Role Name", required=False)
-        self.fields['%s_members' % count] = forms.CharField(label="Members", required=False)
+        self.fields['%s_members' % count] = forms.CharField(label="Members", 
+            required=False, help_text="members must be separated by spaces")
 
     def process_roles(self):
         """Process form fields into roles"""

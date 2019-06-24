@@ -19,21 +19,22 @@ class MockMetaPermission:
         self.content_type = self.permitted_object_ct
 
     def get_permitted_object(self):
-        ct = ContentType.get_for_id(id=self.permitted_object_ct)
+        ct = ContentType.objects.get_for_id(id=self.permitted_object_ct)
         ct_class = ct.model_class()
-        self.permitted_object = ct_class.object.get(pk=self.permitted_object_pk)
+        self.permitted_object = ct_class.objects.get(pk=self.permitted_object_pk)
         return self.permitted_object
 
     def get_owner(self):
         permitted_object = self.get_permitted_object()
         return permitted_object.get_owner()
 
-    def create_self(self):
+    def create_self(self, owner):
         from concord.permission_resources.models import PermissionsItem
         permitted_object = self.get_permitted_object()
         return PermissionsItem.objects.create(
-            permitted_object=permitted_object,
-            change_type = self.permission_change_type)
+            permitted_object = permitted_object,
+            change_type = self.permission_change_type,
+            owner=owner)
 
 
 def filter_permissions(*, target, state_change_objects):

@@ -3,6 +3,7 @@ from decimal import Decimal
 import time
 
 from django.test import TestCase
+from django.contrib.contenttypes.models import ContentType
 
 from concord.resources.client import ResourceClient
 from concord.permission_resources.client import PermissionResourceClient
@@ -853,7 +854,7 @@ class CommunityAccessFormTest(TestCase):
         # Add some roles+permissions, so fields and initial will have more data
         self.commClient.add_assigned_role(role_name="PrincipalInvestigators")
         self.commClient.add_people_to_role(role_name="PrincipalInvestigators",
-            people_to_add=["Irene Joliot-Curie", "Ida Noddack"])
+            people_to_add=["IreneJoliot-Curie", "IdaNoddack"])
         action, permission = self.permClient.add_permission(
             permission_type="concord.communities.state_changes.ChangeNameStateChange",
             permission_role_pairs=["1_PrincipalInvestigators"])
@@ -865,13 +866,13 @@ class CommunityAccessFormTest(TestCase):
             '1_permissions', '2_rolename', '2_members', '2_permissions'])
 
         if self.access_form.fields["1_rolename"].initial == 'PrincipalInvestigators':
-            self.assertCountEqual(self.access_form.fields["1_members"].initial.split(", "),
-                ["Ida Noddack", "Irene Joliot-Curie"])        
+            self.assertCountEqual(self.access_form.fields["1_members"].initial.split(" "),
+                ["IdaNoddack", "IreneJoliot-Curie"])        
             self.assertEquals(self.access_form.fields["1_permissions"].initial, 
                 ["concord.communities.state_changes.ChangeNameStateChange"])  
         else:
-            self.assertCountEqual(self.access_form.fields["0_members"].initial.split(", "),
-                ["Ida Noddack", "Irene Joliot-Curie"])        
+            self.assertCountEqual(self.access_form.fields["0_members"].initial.split(" "),
+                ["IdaNoddack", "IreneJoliot-Curie"])        
             self.assertEquals(self.access_form.fields["0_permissions"].initial, 
                 ["concord.communities.state_changes.ChangeNameStateChange"])    
 
@@ -881,14 +882,14 @@ class CommunityAccessFormTest(TestCase):
 
         self.data.update({
             '1_rolename': 'PrincipalInvestigators',
-            '1_members': 'Ida Noddack, Irene Joliot-Curie',
+            '1_members': 'IdaNoddack IreneJoliot-Curie',
             '1_permissions': ['concord.communities.state_changes.ChangeNameStateChange']
         })
         self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
         result = self.access_form.is_valid()
         self.assertEquals(self.access_form.cleaned_data, 
             {'0_rolename': 'members', '0_members': 'lisemeitner', '0_permissions': [], 
-                '1_rolename': 'PrincipalInvestigators', '1_members': 'Ida Noddack, Irene Joliot-Curie',
+                '1_rolename': 'PrincipalInvestigators', '1_members': 'IdaNoddack IreneJoliot-Curie',
                 '1_permissions': ['concord.communities.state_changes.ChangeNameStateChange']})
 
         self.access_form.save()
@@ -952,23 +953,25 @@ class ResourceAccessFormTest(TestCase):
 
         # Add more people to 'members' role
         self.commClient.add_people_to_role(role_name="members",
-            people_to_add=["Irene Joliot-Curie", "Ida Noddack"])
+            people_to_add=["IreneJoliot-Curie", "IdaNoddack"])
 
         # Create request objects for various users
         import collections
         User = collections.namedtuple('User', 'username')
         Request = collections.namedtuple('Request', 'user')
         self.lise_request = Request(user=User(username=self.user))
-        self.ida_request = Request(user=User(username="Ida Noddack"))
+        self.ida_request = Request(user=User(username="IdaNoddack"))
 
         # Initial data
-        self.data = {"0_rolename": "members", "0_members": "lisemeitner, Ida Noddack, Irene Joliot-Curie", "0_permissions": []}
+        self.data = {"0_rolename": "members", "0_members": "lisemeitner IdaNoddack IreneJoliot-Curie", "0_permissions": []}
 
     def test_access_form_on_owned_resource(self):
 
+        self.commClient.add_assigned_role(role_name="PrincipalInvestigators")
+
         self.data.update({
             '1_rolename': 'PrincipalInvestigators',
-            '1_members': 'Ida Noddack, Irene Joliot-Curie',
+            '1_members': 'IdaNoddack IreneJoliot-Curie',
             '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange']
         })
 
@@ -976,13 +979,15 @@ class ResourceAccessFormTest(TestCase):
 
         self.access_form = AccessForm(instance=self.resource, request=self.ida_request, data=self.data)
         result = self.access_form.is_valid()
-        self.assertEquals(self.access_form.cleaned_data, 
+        self.assertDictEqual(self.access_form.cleaned_data, 
             {'0_rolename': 'members', 
-            '0_members': 'lisemeitner, Ida Noddack, Irene Joliot-Curie', 
+            '0_members': 'lisemeitner IdaNoddack IreneJoliot-Curie', 
             '0_permissions': [], 
             '1_rolename': 'PrincipalInvestigators', 
-            '1_members': 'Ida Noddack, Irene Joliot-Curie',
-            '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange']})
+            '1_members': 'IdaNoddack IreneJoliot-Curie',
+            '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange'],
+            '2_members': '', '2_permissions': [], '2_rolename': ''})
+        
         self.access_form.save()
         perms = self.permClient.get_permissions_on_object(object=self.resource)
         self.assertFalse(perms)  # Empty queryset should be falsy
@@ -992,9 +997,10 @@ class ResourceAccessFormTest(TestCase):
         self.access_form = AccessForm(instance=self.resource, request=self.lise_request, data=self.data)
         result = self.access_form.is_valid()
         self.assertEquals(self.access_form.cleaned_data, 
-            {'0_rolename': 'members', '0_members': 'lisemeitner, Ida Noddack, Irene Joliot-Curie', '0_permissions': [], 
-                '1_rolename': 'PrincipalInvestigators', '1_members': 'Ida Noddack, Irene Joliot-Curie',
-                '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange']})
+            {'0_rolename': 'members', '0_members': 'lisemeitner IdaNoddack IreneJoliot-Curie', '0_permissions': [], 
+            '1_rolename': 'PrincipalInvestigators', '1_members': 'IdaNoddack IreneJoliot-Curie',
+            '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange'],
+            '2_members': '', '2_permissions': [], '2_rolename': ''})
 
         self.access_form.save()
         perms = self.permClient.get_permissions_on_object(object=self.resource)
@@ -1030,7 +1036,7 @@ class RoleFormTest(TestCase):
         # Add a new role using the role form
         self.data.update({
             '1_rolename': 'runners',
-            '1_members': 'cap, falcon'})
+            '1_members': 'cap falcon'})
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
         
         # Form is valid and cleaned data is correct
@@ -1039,7 +1045,7 @@ class RoleFormTest(TestCase):
             {'0_rolename': 'members', 
             '0_members': 'cap', 
             '1_rolename': 'runners', 
-            '1_members': 'cap, falcon'})
+            '1_members': 'cap falcon'})
 
         # After saving, data is updated.
         self.role_form.save()
@@ -1054,14 +1060,14 @@ class RoleFormTest(TestCase):
         # Add a user using the role form
         self.data.update({
             '0_rolename': 'members', 
-            '0_members': 'cap, falcon'})
+            '0_members': 'cap falcon'})
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
         
         # Form is valid and cleaned data is correct
         result = self.role_form.is_valid()
         self.assertEquals(self.role_form.cleaned_data, 
             {'0_rolename': 'members', 
-            '0_members': 'cap, falcon',
+            '0_members': 'cap falcon',
             '1_members': '',    # empty row, will be discarded
             '1_rolename': ''})  # empty row, will be discarded
 
@@ -1078,7 +1084,7 @@ class RoleFormTest(TestCase):
         # Quick add via form
         self.data.update({
             '1_rolename': 'runners',
-            '1_members': 'cap, falcon'})
+            '1_members': 'cap falcon'})
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
         self.role_form.is_valid()
         self.role_form.save()
@@ -1573,7 +1579,10 @@ class MetaPermissionsFormTest(TestCase):
         # people to roles.
 
         # Steve wants to give Sam the permission to give permission to add people to
-        # roles.  Before Steve does anything, Sam tries to give Bucky permission to 
+        # roles.  That is, Steve desires that Sam should have the metapermission to alter
+        # the permission AddPeopleToRoles.
+        
+        # Before Steve does anything, Sam tries to give Bucky permission to 
         # add people to roles.  It fails, and we can see that Sam lacks the relevant
         # metapermission and Bucky the relevant permission.
 
@@ -1595,8 +1604,8 @@ class MetaPermissionsFormTest(TestCase):
             actor="falcon")
         self.assertFalse(permissions_for_actor)
 
-        # Then Steve alters, through the metapermissions form, who can add people to
-        # a role to include Sam.  He alters the metapermission on the AddPeopleToRole 
+        # Then Steve alters, through the metapermissions form, who can add alter the
+        # AddPeopleToRole permission.  He alters the metapermission on the AddPeopleToRole 
         # permission, adding the individual Sam.
 
         self.metapermissions_data["0_individuals"] = "falcon"
@@ -1607,8 +1616,8 @@ class MetaPermissionsFormTest(TestCase):
 
         permissions_for_actor = self.metaClient.get_permissions_associated_with_actor(
             actor="falcon")
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
-        self.assertCountEqual(change_types, ['AddActorToPermissionStateChange'])
+        self.assertEqual(permissions_for_actor[0].short_change_type(), 'AddActorToPermissionStateChange')
+        self.assertEqual(permissions_for_actor[0].get_permitted_object(), self.target_permission)
 
         # Now Sam can give Bucky permission to add people to roles.
 
@@ -1618,18 +1627,11 @@ class MetaPermissionsFormTest(TestCase):
         self.permission_form.is_valid()
         self.permission_form.save()
 
-        # FIXME: This form save is not working... why?
+        # Bucky can assign people to roles now.
 
-        # Thing #1: Sam should have specific permission now, thanks to Steve.  Why is 
-        # it not hitting that, and going to the governing authority?
-
-        # Thing #2: Why is governing authority even enabled???
-
-        # # Bucky can assign people to roles now.
-
-        # self.buckyClient.add_people_to_role(role_name="avengers", people_to_add=["scarletwitch"])
-        # roles = self.commClient.get_assigned_roles()
-        # self.assertCountEqual(roles["avengers"], ["ironman", "scarletwitch"])
+        self.buckyClient.add_people_to_role(role_name="avengers", people_to_add=["scarletwitch"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertCountEqual(roles["avengers"], ["ironman", "scarletwitch"])
 
         # Finally, Bucky and Natasha both have permission to add people to roles, while
         # Sam and Steve do not.
@@ -1637,11 +1639,11 @@ class MetaPermissionsFormTest(TestCase):
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor="whitewolf")
         change_types = [perm.short_change_type() for perm in permissions_for_actor]
-        self.assertCountEqual(change_types, ['AddActorToPermissionStateChange'])
+        self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor="blackwidow")
         change_types = [perm.short_change_type() for perm in permissions_for_actor]
-        self.assertCountEqual(change_types, ['AddActorToPermissionStateChange'])
+        self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor="cap")
         change_types = [perm.short_change_type() for perm in permissions_for_actor]
@@ -1652,7 +1654,92 @@ class MetaPermissionsFormTest(TestCase):
         self.assertCountEqual(change_types, [])
 
     def test_removing_metapermission_removes_access_to_permission(self):
-        ...
+        # Steve gives Sam ability to add people to permission.
+        self.metapermissions_data["0_individuals"] = "falcon"
+        self.metapermission_form = MetaPermissionForm(instance=self.target_permission, 
+            request=self.request, data=self.metapermissions_data)
+        self.metapermission_form.is_valid()
+        self.metapermission_form.save()
+
+        # Sam can do so.  When he gives Bucky permission to add people to roles, he can.
+        self.permissions_data["4_individuals"] = "blackwidow whitewolf"
+        self.permission_form = PermissionForm(instance=self.instance, 
+            request=self.samRequest, data=self.permissions_data)
+        self.permission_form.is_valid()
+        self.permission_form.save()
+        self.buckyClient.add_people_to_role(role_name="avengers", people_to_add=["scarletwitch"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertCountEqual(roles["avengers"], ["ironman", "scarletwitch"])
+
+        # Now Steve removes that ability.
+        self.metapermissions_data["0_individuals"] = ""
+        self.metapermission_form = MetaPermissionForm(instance=self.target_permission, 
+            request=self.request, data=self.metapermissions_data)
+        self.metapermission_form.is_valid()
+        self.metapermission_form.save()
+
+        # Sam no longer has the metapermission and can no longer add people to permission.
+        permissions_for_actor = self.metaClient.get_permissions_associated_with_actor(
+            actor="falcon")
+        self.assertFalse(permissions_for_actor)
+
+        self.permissions_data["4_individuals"] = "blackwidow whitewolf agentcarter"
+        self.permission_form = PermissionForm(instance=self.instance, 
+            request=self.samRequest, data=self.permissions_data)
+        self.permission_form.is_valid()
+        self.permission_form.save()
+
+        permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
+            actor="agentcarter")
+        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        self.assertCountEqual(change_types, [])
 
     def test_adding_metapermission_to_nonexistent_permission(self):
-        ...
+
+        # No one currently has the specific permission "remove people from role".
+        remove_permission = self.prClient.get_specific_permissions(change_type=
+            'concord.communities.state_changes.RemovePeopleFromRoleStateChange')
+        self.assertFalse(remove_permission)
+
+        # Steve tries to give Sam the ability to add or remove people from the permission
+        # 'remove people from role'.
+
+        # First, we get a mock permission to pass to the metapermission form.
+        ct = ContentType.objects.get_for_model(self.instance)
+        target_permission = self.prClient.get_permission_or_return_mock(
+            permitted_object_pk=self.instance.pk,
+            permitted_object_ct=str(ct.pk),
+            permission_change_type='concord.communities.state_changes.RemovePeopleFromRoleStateChange')
+        self.assertEqual(target_permission.__class__.__name__, "MockMetaPermission")
+
+        # Then we actually update metapermissions via the form.
+        self.metapermissions_data["0_individuals"] = "falcon"
+        self.metapermission_form = MetaPermissionForm(instance=target_permission, 
+            request=self.request, data=self.metapermissions_data)
+        self.metapermission_form.is_valid()
+        self.metapermission_form.save()
+
+        # Now that Steve has done that, the specific permission exists.  
+        remove_permission = self.prClient.get_specific_permissions(change_type=
+            'concord.communities.state_changes.RemovePeopleFromRoleStateChange')
+        self.assertEqual(len(remove_permission), 1)         
+
+        # The metapermission Steve created for Sam also exists.
+        self.metaClient = PermissionResourceClient(actor=self.user, target=remove_permission[0])
+        perms = self.metaClient.get_permissions_on_object(object=remove_permission[0])
+        self.assertEqual(len(perms), 1)
+        self.assertEqual(perms[0].short_change_type(), "AddActorToPermissionStateChange")
+
+        # Sam can add Natasha to the permission "remove people from role".
+        self.permissions_data["7_individuals"] = "blackwidow"
+        self.permission_form = PermissionForm(instance=self.instance, 
+            request=self.samRequest, data=self.permissions_data)
+        self.permission_form.is_valid()
+        self.permission_form.save()
+
+        permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
+            actor="blackwidow")
+        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        self.assertCountEqual(change_types, ["RemovePeopleFromRoleStateChange", 
+            "AddPeopleToRoleStateChange"])
+

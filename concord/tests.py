@@ -1743,3 +1743,86 @@ class MetaPermissionsFormTest(TestCase):
         self.assertCountEqual(change_types, ["RemovePeopleFromRoleStateChange", 
             "AddPeopleToRoleStateChange"])
 
+
+class ResourcePermissionsFormTest(TestCase):
+
+    def setUp(self):
+
+        # Create a user
+        self.user = "blackpanther"
+
+        # Create a community
+        self.commClient = CommunityClient(actor=self.user)
+        self.instance = self.commClient.create_community(name="Wakanda")
+        self.commClient.set_target(self.instance)
+
+        # Create request objects
+        import collections
+        User = collections.namedtuple('User', 'username')
+        Request = collections.namedtuple('Request', 'user')
+        self.request = Request(user=User(username=self.user))
+        self.shuriRequest = Request(user=User(username="shuri"))  # Not sure it's necessary
+        self.okoyeRequest = Request(user=User(username="okoye"))  # Not sure it's necessary
+
+        # Add roles to community and assign members
+        self.commClient.add_people_to_role(role_name="members", 
+            people_to_add=["shuri", "nakia", "okoye", "ramonda"])
+        self.commClient.add_assigned_role(role_name="royalfamily")
+        self.commClient.add_people_to_role(role_name="royalfamily", 
+            people_to_add=["shuri", "ramonda"])
+
+        # Create a forum owned by the community
+        self.resourceClient = ResourceClient(actor="blackpanther")
+        self.resource = self.resourceClient.create_resource(name="Royal Family Forum")
+        self.resourceClient.set_target(target=self.resource)
+        self.resourceClient.change_owner_of_target(new_owner="Wakanda",
+            new_owner_type="com")
+
+        # Make separate clients for Sam and Nat.
+        self.shuriClient = ResourceClient(actor="shuri", target=self.resource)
+        self.okoyeClient = ResourceClient(actor="okoye", target=self.resource)
+
+        # Initial form data
+        self.data = {
+
+        }
+
+    def test_add_and_remove_actor_permission_to_resource_via_form(self):
+
+        # Shuri tries to change the name of the forum and fails
+        action_pk, result = self.shuriClient.change_name(new_name="Shuri Rulez")
+        self.assertEquals(Action.objects.get(pk=action_pk).status, "rejected")
+        self.assertEquals(self.resource.name, "Royal Family Forum")
+
+        # T'Challa gives her permission to change the name via the individual 
+        # actor field on the permission form.
+        self.data[] = ?
+        form = PermissionForm(instance=self.resource, request=self.request, data=self.data)
+        
+
+
+        # Now Shuri succeeds.
+
+        # T'Challa takes it away again.
+
+        # Shuri can no longer change the name.
+        ...
+
+    def test_add_and_remove_role_permission_to_resource_via_form(self):
+        # Shuri tries to change the name of the forum and fails
+
+        # T'Challa gives her permission to change the name via the royal family
+        # role field on the permission form.
+
+        # Now Shuri succeeds, but Nakia does not.
+
+        # T'Challa takes it away again.
+
+        # Shuri can no longer change the name.
+        ...
+
+    def test_add_and_remove_actor_metapermission_to_resource_via_form(self):
+        ...
+
+    def test_add_and_remove_role_metapermission_to_resource_via_form(self):
+        ...

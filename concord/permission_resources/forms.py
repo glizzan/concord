@@ -75,7 +75,7 @@ class PermissionForm(forms.Form):
         owner_community = self.commClient.get_owner(owned_object=self.instance)
         # Process form fields into dict
         form_permission_data = self.process_permissions()
-        
+     
         for count, form_permission in form_permission_data.items():
 
             db_permission = self.prClient.get_specific_permissions(change_type=form_permission["name"])
@@ -219,7 +219,7 @@ class MetaPermissionForm(forms.Form):
                     added, yes = self.prClient.add_permission(permission_type=form_permission["name"],
                         permission_actors=actors, permission_role_pairs=role_pairs) 
                     from concord.actions.models import Action 
-                    action = Action.objects.get(pk=added) 
+                    action = Action.objects.get(pk=added.pk) 
                 else:
                     continue # If no data in form either, just move on
 
@@ -319,14 +319,14 @@ class AccessForm(forms.Form):
             permissionClient = PermissionResourceClient(actor=self.request.user.username, target=self.instance)
 
         # Process role metadata.  Create role if it doesn't exist.
-        actions, results = ownerClient.update_roles(role_data=role_data)
+        actions = ownerClient.update_roles(role_data=role_data)
 
         # For each role, update membership.  Add members if new, remove members who
         # are no longer there.
-        actions, results = ownerClient.update_role_membership(role_data=role_data)
+        actions = ownerClient.update_role_membership(role_data=role_data)
 
         # For each role, update permissions.  Add permissions if new, remove if gone.
-        actions, results = permissionClient.update_role_permissions(
+        actions = permissionClient.update_role_permissions(
             role_data=role_data, owner=ownerClient.target)
 
         # TODO: handle non-role permissions data

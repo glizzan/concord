@@ -1,4 +1,5 @@
 import inspect, json
+from collections import OrderedDict
 
 from django.contrib.contenttypes.models import ContentType
 
@@ -68,7 +69,8 @@ def get_settable_permissions(* , target):
             permissions = filter_permissions(target=parent, state_change_objects=parent_state_change_objects)
             settable_permissions += permissions
 
-    return settable_permissions
+    # Remove duplicates while preserving order
+    return list(OrderedDict.fromkeys(settable_permissions))
 
 def format_as_tuples(permissions):
     formatted_permissions = []

@@ -1,0 +1,22 @@
+<h3>Action History!</h4>
+
+<table>
+        <tr>
+          <th>Created At</th>
+          <th>Last Updated At</th>
+          <th>Status</th>
+          <th>Actor</th> 
+          <th>Description</th>
+        </tr>
+
+        {% for action in object.get_actions %}
+        <tr>
+            <td> {{ action.created_at }} </td>
+            <td> {{ action.updated_at }} </td>
+            <td> {{ action.status }} </td>
+            <td> {{ action.actor }} </td>
+            <td> {{ action.get_description }} </td>
+        </tr>
+        {% endfor %}
+
+</table>

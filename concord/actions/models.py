@@ -5,9 +5,8 @@ from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
-from concord.actions.permissions import has_permission
 from concord.actions.state_changes import create_change_object
-
+from concord.actions.customfields import ResolutionField, Resolution
 
 
 ACTION_STATUS_CHOICES = (
@@ -18,6 +17,9 @@ ACTION_STATUS_CHOICES = (
     ('withdrawn', 'Withdrawn'),
     ('implemented', 'Implemented'),
 )
+
+def get_default_resolution():
+    return Resolution(status="draft")
 
 class Action(models.Model):
 
@@ -33,6 +35,7 @@ class Action(models.Model):
     change_data = models.CharField(max_length=500, blank=True) 
 
     # Log field, helps with debugging and possibly useful for end user
+    resolution = ResolutionField(default=get_default_resolution)
     log = models.CharField(max_length=500, blank=True)
 
     # Regular old attributes
@@ -74,24 +77,26 @@ class Action(models.Model):
         itself, which implements its own custom logic."""
         if self.change.validate(actor=self.actor, target=self.target):
             self.status = "sent"
-            self.save()
-            return None, None
-        return None, "action not valid"
+        # TODO: handle invalid actions
     
-    def check_permissions(self):
-        """Checks that action is permissable."""
-        status, log = has_permission(action=self)
-        self.status = status
-        self.save()
-        return status, log
+    def approve_action(self, resolved_through, log=None, condition=None):
+        self.status = "approved"
+        self.resolution.is_approved = True
+        self.log = log if log else ""
+        self.condition = condition
+
+    def reject_action(self, resolved_through=None, log=None, condition=None):
+        self.status = "rejected"
+        self.resolution.is_approved = False
+        self.log = log if log else ""
+        self.condition = condition
 
     def implement_action(self):
         """Lets the change object carry out its custom implementation using the
         actor and target."""
         result = self.change.implement(actor=self.actor, target=self.target)
         self.status = "implemented"
-        self.save()
-        return result, None
+        return result
 
     def take_action(self):
         """Checks status and attempts next step given that status."""
@@ -102,17 +107,16 @@ class Action(models.Model):
 
         # now go through steps
         if self.status == "draft":
-            current_result, log = self.validate_action()
+            self.validate_action()
         if self.status in ["sent", "waiting"]:
-            current_result, log = self.check_permissions()
+            from concord.actions.permissions import has_permission
+            self = has_permission(action=self)
         if self.status == "approved":
-            current_result, log = self.implement_action()
+            current_result = self.implement_action()
 
-        if log:
-            self.log = log
-            self.save()
+        self.save()  # Save action, may not always be needed
         
-        return self.pk, current_result
+        return self, current_result
 
 
 # Helper method until we can call Action directly using change field

@@ -1,64 +1,74 @@
 from concord.actions.state_changes import foundational_changes
+from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
+from concord.communities.client import CommunityClient
+from concord.permission_resources.client import PermissionResourceClient
 
 
-def check_conditional(action, condition_template):
+def check_conditional(action, condition_template, called_by):
 
-    # Does the permission have a condition?  If no, just approve it.
-    if not condition_template:
-        return "approved", None
+    # If condition template is null, no condition set on permission - approve + return.
+    if condition_template is None:
+        action.approve_action(resolved_through=called_by)
+        return action
 
     # Does this action already have a condition action instance?  If no, make one.
-    from concord.conditionals.client import PermissionConditionalClient
     conditionalClient = PermissionConditionalClient(actor="system")
     condition_item = conditionalClient.get_or_create_condition(action=action,
         condition_template=condition_template)
 
-    # NOTE: this log statement is not super useful, but maybe we should be getting
-    # th elog from condition_status()
-    return condition_item.condition_status(), "condition status checked"
+    condition_status = condition_item.condition_status()
+
+    if condition_status == "approved":
+        action.approve_action(resolved_through=called_by, condition=condition_template.condition_type)
+    elif condition_status == "rejected":
+        action.reject_action(resolved_through=called_by, condition=condition_template.condition_type,
+            log="action passed permission but rejected on condition")
+    if condition_status == "waiting":
+        action.status = "waiting"
+        action.log="action passed permission pipeline " + called_by + " but waiting on condition " + condition_template.condition_type
+    return action
 
 
-def shortcut_for_individual_ownership(action):
+def shortcut_for_individual_ownership(action, called_by):
     if action.target.owner_type == "ind":
         if action.actor == action.target.owner:
-            return "approved", None
-        return "rejected", "individual owner of target does not match actor"
-    return None, None  
-
-
-def find_specific_permissions(action):
-    # Returns matched permission or None.
-    from concord.permission_resources.client import PermissionResourceClient
-    permissionClient = PermissionResourceClient(actor="system")
-    permissionClient.set_target(action.target)
-    return permissionClient.get_specific_permissions(change_type=action.change_type)
+            action.approve_action(resolved_through=called_by, log="approved via individual ownership shortcut")
+        else:
+            action.reject_action(log="individual owner of target does not match actor")
+        return action
 
 
 def foundational_permission_pipeline(action):
 
-    individual_result, log = shortcut_for_individual_ownership(action)
+    individual_result = shortcut_for_individual_ownership(action, called_by="foundational")
     if individual_result:
-        return individual_result, log
-
-    from concord.communities.client import CommunityClient
+        return individual_result
+   
     communityClient = CommunityClient(actor="system") 
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
     has_authority = communityClient.has_foundational_authority(actor=action.actor)
     if not has_authority:
-        return "rejected", "actor does not have foundational authority"   
+        action.reject_action(resolved_through="foundational", log="actor does not have foundational authority")
+        return action
 
-    from concord.conditionals.client import CommunityConditionalClient
+    # Check for conditions
     conditionalClient = CommunityConditionalClient(actor="system", target=community)
     condition_template = conditionalClient.get_condition_template_for_owner()
+    return check_conditional(action, condition_template, called_by="foundational")
 
-    return check_conditional(action, condition_template)
+
+def find_specific_permissions(action):
+    """Returns matching permission or None."""
+    permissionClient = PermissionResourceClient(actor="system")
+    permissionClient.set_target(action.target)
+    return permissionClient.get_specific_permissions(change_type=action.change_type)
 
 
 def specific_permission_pipeline(action, specific_permissions):
 
     # If actor does not match specific permission, reject
-    from concord.permission_resources.client import PermissionResourceClient
+    
     permissionClient = PermissionResourceClient(actor="system")
 
     matching_permission = None
@@ -68,34 +78,33 @@ def specific_permission_pipeline(action, specific_permissions):
             break
 
     if not matching_permission:
-        return "rejected", "no matching specific permissions found"
+        action.reject_action(resolved_through="specific", log="no matching specific permissions found")
+        return action
 
-    from concord.conditionals.client import PermissionConditionalClient
-    conditionalClient = PermissionConditionalClient(actor="system")
-    conditionalClient.set_target(target=matching_permission)
+    # Check for conditions
+    conditionalClient = PermissionConditionalClient(actor="system", target=matching_permission)
     condition_template = conditionalClient.get_condition_template()
-
-    return check_conditional(action, condition_template)
+    return check_conditional(action, condition_template, called_by="specific")
 
 
 def governing_permission_pipeline(action):
-    individual_result, log = shortcut_for_individual_ownership(action)
-    if individual_result:
-        return individual_result, log
 
-    from concord.communities.client import CommunityClient
+    individual_result = shortcut_for_individual_ownership(action, called_by="governing")
+    if individual_result:
+        return individual_result
+
     communityClient = CommunityClient(actor="system") 
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
     has_authority = communityClient.has_governing_authority(actor=action.actor)
     if not has_authority:
-        return "rejected", "actor does not have governing authority"   
+        action.reject_action(resolved_through="governing", log="actor does not have governing authority")
+        return action  
 
-    from concord.conditionals.client import CommunityConditionalClient
+    # Check for conditions
     conditionalClient = CommunityConditionalClient(actor="system", target=community)
     condition_template = conditionalClient.get_condition_template_for_governor()
-
-    return check_conditional(action, condition_template)
+    return check_conditional(action, condition_template, called_by="governing")
 
 
 def has_permission(action):
@@ -113,6 +122,7 @@ def has_permission(action):
     if action.target.governing_permission_enabled:
         return governing_permission_pipeline(action)
 
-    # If none of the above is enabled, reject action
-    return "rejected", "action did not meet any permission criteria"
+    action.reject_action(log="action did not meet any permission criteria")
+    return action
+
 

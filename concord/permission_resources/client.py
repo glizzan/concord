@@ -106,8 +106,7 @@ class PermissionResourceClient(BaseClient):
             raise Exception("Either actor or role_pair must be supplied when creating a permission")
         change = sc.AddPermissionStateChange(permission_type=permission_type, 
             permission_actors=permission_actors, permission_role_pairs=permission_role_pairs)
-        action, result = self.create_and_take_action(change)
-        return action, result 
+        return self.create_and_take_action(change)
 
     def remove_permission(self, *, item_pk: int) -> Tuple[int, Any]:
         change = sc.RemovePermissionStateChange(item_pk=item_pk)
@@ -136,7 +135,7 @@ class PermissionResourceClient(BaseClient):
     def update_roles_on_permission(self, *, role_data, permission, owner):
         """Given a list of roles, updates the given permission to match those roles."""
 
-        actions, results = [], []
+        actions = []
 
         old_roles = set(permission.get_role_names())
         new_roles = set(role_data)
@@ -144,25 +143,23 @@ class PermissionResourceClient(BaseClient):
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            action, result = self.add_role_to_permission(role_name=role, 
+            action = self.add_role_to_permission(role_name=role, 
                 community_pk=owner.pk, permission_pk=permission.pk)
             actions.append(action)
-            results.append(result)
         
         for role in roles_to_remove:
-            action, result = self.remove_role_from_permission(role_name=role, 
+            action = self.remove_role_from_permission(role_name=role, 
                 community_pk=owner.pk, permission_pk=permission.pk)
             actions.append(action)
-            results.append(result)
 
         permission = PermissionsItem.objects.get(pk=permission.pk)
 
-        return actions, results
+        return actions
 
     def update_actors_on_permission(self, *, actor_data, permission):
         """Given a list of roles, updates the given permission to match those roles."""
 
-        actions, results = [], []
+        actions = []
 
         old_actors = set(permission.get_actors())
         new_actors = set(actor_data.split(" "))
@@ -170,18 +167,16 @@ class PermissionResourceClient(BaseClient):
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            action, result = self.add_actor_to_permission(actor=actor, 
+            action = self.add_actor_to_permission(actor=actor, 
                 permission_pk=permission.pk)
             actions.append(action)
-            results.append(result)
         
         for actor in actors_to_remove:
-            action, result = self.remove_actor_from_permission(actor=actor, 
+            action = self.remove_actor_from_permission(actor=actor, 
                 permission_pk=permission.pk)
             actions.append(action)
-            results.append(result)
 
-        return actions, results
+        return actions
 
 
     # FIXME: this is still too complex
@@ -190,7 +185,7 @@ class PermissionResourceClient(BaseClient):
         to those roles, goes through permissions on target object and adds or removes
         references to roles to make them match the given dict."""
         
-        actions, results = [], []
+        actions = []
 
         # Reformulate role_data with permissions as key for readability/usability
         new_permissions = {}
@@ -208,9 +203,8 @@ class PermissionResourceClient(BaseClient):
             if permission.change_type not in new_permissions:
 
                 # If not in new_permissions, delete.
-                action, result = self.remove_permission(item_pk=permission.pk)
+                action = self.remove_permission(item_pk=permission.pk)
                 actions.append(action)
-                results.append(result)
 
             else:
 
@@ -222,16 +216,14 @@ class PermissionResourceClient(BaseClient):
                 roles_to_remove = old_roles.difference(new_roles)
 
                 for role in roles_to_add:
-                    action, result = self.add_role_to_permission(role_name=role, 
+                    action = self.add_role_to_permission(role_name=role, 
                         community_pk=owner.pk, permission_pk=permission.pk)
                     actions.append(action)
-                    results.append(result)
                 
                 for role in roles_to_remove:
-                    action, result = self.remove_role_from_permission(role_name=role, 
+                    action = self.remove_role_from_permission(role_name=role, 
                         community_pk=owner.pk, permission_pk=permission.pk)
                     actions.append(action)
-                    results.append(result)
 
                 # delete permission from new_permissions dict, leaving only newly created permissions
                 del(new_permissions[permission.change_type])
@@ -240,9 +232,8 @@ class PermissionResourceClient(BaseClient):
         for permission, role_list in new_permissions.items():
             for role_name in role_list:
                 role_pair = str(owner.pk) + "_" + role_name
-                action, result = self.add_permission(permission_type=permission, 
+                action = self.add_permission(permission_type=permission, 
                     permission_role_pairs=[role_pair])
                 actions.append(action)
-                results.append(result)
 
-        return actions, results
+        return actions

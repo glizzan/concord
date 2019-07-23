@@ -79,17 +79,23 @@ class Action(models.Model):
             self.status = "sent"
         # TODO: handle invalid actions
     
-    def approve_action(self, resolved_through, log=None, condition=None):
+    def approve_action(self, resolved_through, log=None, condition=None, role=None):
         self.status = "approved"
+        self.log = log if log else ""
+        self.resolution.is_resolved = True
         self.resolution.is_approved = True
-        self.log = log if log else ""
-        self.condition = condition
+        self.resolution.resolved_through = resolved_through
+        self.resolution.condition = condition
+        self.resolution.role = role
 
-    def reject_action(self, resolved_through=None, log=None, condition=None):
+    def reject_action(self, resolved_through=None, log=None, condition=None, role=None):
         self.status = "rejected"
-        self.resolution.is_approved = False
         self.log = log if log else ""
-        self.condition = condition
+        self.resolution.is_resolved = True
+        self.resolution.is_approved = False
+        self.resolution.resolved_through = resolved_through
+        self.resolution.condition = condition
+        self.resolution.role = role
 
     def implement_action(self):
         """Lets the change object carry out its custom implementation using the

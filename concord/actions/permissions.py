@@ -4,11 +4,11 @@ from concord.communities.client import CommunityClient
 from concord.permission_resources.client import PermissionResourceClient
 
 
-def check_conditional(action, condition_template, called_by):
+def check_conditional(action, condition_template, called_by, role=None):
 
     # If condition template is null, no condition set on permission - approve + return.
     if condition_template is None:
-        action.approve_action(resolved_through=called_by)
+        action.approve_action(resolved_through=called_by, role=role)
         return action
 
     # Does this action already have a condition action instance?  If no, make one.
@@ -18,10 +18,12 @@ def check_conditional(action, condition_template, called_by):
 
     condition_status = condition_item.condition_status()
 
-    if condition_status == "approved":
-        action.approve_action(resolved_through=called_by, condition=condition_template.condition_type)
+    if condition_status == "approved":        
+        action.approve_action(resolved_through=called_by, role=role,
+            condition=condition_template.condition_type)
     elif condition_status == "rejected":
-        action.reject_action(resolved_through=called_by, condition=condition_template.condition_type,
+        action.reject_action(resolved_through=called_by, role=role,
+            condition=condition_template.condition_type,
             log="action passed permission but rejected on condition")
     if condition_status == "waiting":
         action.status = "waiting"
@@ -47,7 +49,7 @@ def foundational_permission_pipeline(action):
     communityClient = CommunityClient(actor="system") 
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
-    has_authority = communityClient.has_foundational_authority(actor=action.actor)
+    has_authority, matched_role = communityClient.has_foundational_authority(actor=action.actor)
     if not has_authority:
         action.reject_action(resolved_through="foundational", log="actor does not have foundational authority")
         return action
@@ -55,7 +57,7 @@ def foundational_permission_pipeline(action):
     # Check for conditions
     conditionalClient = CommunityConditionalClient(actor="system", target=community)
     condition_template = conditionalClient.get_condition_template_for_owner()
-    return check_conditional(action, condition_template, called_by="foundational")
+    return check_conditional(action, condition_template, called_by="foundational", role=matched_role)
 
 
 def find_specific_permissions(action):
@@ -73,7 +75,8 @@ def specific_permission_pipeline(action, specific_permissions):
 
     matching_permission = None
     for permission in specific_permissions:
-        if permissionClient.actor_matches_permission(actor=action.actor, permission=permission):
+        is_matched, matched_role = permissionClient.actor_matches_permission(actor=action.actor, permission=permission)
+        if is_matched:
             matching_permission = permission
             break
 
@@ -84,7 +87,8 @@ def specific_permission_pipeline(action, specific_permissions):
     # Check for conditions
     conditionalClient = PermissionConditionalClient(actor="system", target=matching_permission)
     condition_template = conditionalClient.get_condition_template()
-    return check_conditional(action, condition_template, called_by="specific")
+    return check_conditional(action, condition_template, called_by="specific", 
+        role=matched_role)
 
 
 def governing_permission_pipeline(action):
@@ -96,7 +100,7 @@ def governing_permission_pipeline(action):
     communityClient = CommunityClient(actor="system") 
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
-    has_authority = communityClient.has_governing_authority(actor=action.actor)
+    has_authority, matched_role = communityClient.has_governing_authority(actor=action.actor)
     if not has_authority:
         action.reject_action(resolved_through="governing", log="actor does not have governing authority")
         return action  
@@ -104,7 +108,7 @@ def governing_permission_pipeline(action):
     # Check for conditions
     conditionalClient = CommunityConditionalClient(actor="system", target=community)
     condition_template = conditionalClient.get_condition_template_for_governor()
-    return check_conditional(action, condition_template, called_by="governing")
+    return check_conditional(action, condition_template, called_by="governing", role=matched_role)
 
 
 def has_permission(action):

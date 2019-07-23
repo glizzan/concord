@@ -160,3 +160,37 @@ class ApproveStateChange(BaseStateChange):
         target.approve()
         target.save()
         return True
+
+class RejectStateChange(BaseStateChange):
+    description = "Reject"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.conditionals.models import ApprovalCondition
+        return [ApprovalCondition]    
+
+    def description_present_tense(self):
+        return "reject"
+
+    def description_past_tense(self):
+        return "rejected"
+
+    def validate(self, actor, target):
+        """Checks if actor is the same user who sent the action that triggered the condition
+        and, unless self approval is allowed, rejects them as invalid."""
+
+        # If approval condition allows self approval, we can simply return True here.
+        if target.self_approval_allowed:
+            return True
+            
+        from concord.actions.models import Action
+        action = Action.objects.get(pk=target.action)
+        if action.actor == actor:
+            return False
+
+        return True
+
+    def implement(self, actor, target):
+        target.reject()
+        target.save()
+        return True

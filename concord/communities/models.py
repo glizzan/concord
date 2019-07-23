@@ -252,7 +252,7 @@ class AuthorityHandler(PermissionedModel):
     def is_governor(self, actor):
         governors = self.get_governors()
         if actor in governors['actors']: 
-            return True
+            return True, None
 
         # FIXME: copied from permission_resources.models and also duplicated for owners
         from concord.communities.client import CommunityClient
@@ -261,9 +261,9 @@ class AuthorityHandler(PermissionedModel):
             community_pk, role = pair.split("_")  # FIXME: bit hacky
             cc.set_target_community(community_pk=community_pk)
             if cc.has_role_in_community(role=role, actor=actor):
-                return True
+                return True, pair
 
-        return False
+        return False, None
 
     def add_owner(self, owner):
         owners = json.loads(self.owners)
@@ -296,7 +296,7 @@ class AuthorityHandler(PermissionedModel):
         owners = self.get_owners()
 
         if actor in owners['actors']:
-            return True
+            return True, None
 
         # FIXME: copied from permission_resources.models and also duplicated for owners
         from concord.communities.client import CommunityClient
@@ -305,7 +305,7 @@ class AuthorityHandler(PermissionedModel):
             community_pk, role = pair.split("_")  # FIXME: bit hacky
             cc.set_target_community(community_pk=community_pk)
             if cc.has_role_in_community(role=role, actor=actor):
-                return True
+                return True, pair
                            
-        return False
+        return False, None
 

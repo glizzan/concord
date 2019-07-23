@@ -101,7 +101,7 @@ class PermissionsItem(PermissionedModel):
 
         actors = self.get_actors()
         if actor in actors:
-            return True
+            return True, None
 
         role_pairs = self.get_roles()  # FIXME: "role_pair" is not super descriptive
         from concord.communities.client import CommunityClient
@@ -110,12 +110,12 @@ class PermissionsItem(PermissionedModel):
             community_pk, role = pair.split("_")  # FIXME: bit hacky
             cc.set_target_community(community_pk=community_pk)
             if cc.has_role_in_community(role=role, actor=actor):
-                return True
+                return True, pair
 
         # TODO: thing the above through.  If every role is queried separately, that's a lot of 
         # lookups.  You could provide the roles to each community in bulk?
 
-        return False
+        return False, None
 
     # Write stuff called by statechanges
 

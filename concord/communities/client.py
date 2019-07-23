@@ -76,11 +76,11 @@ class CommunityClient(BaseClient):
     def get_governorship_info(self) -> dict:
         return self.target.authorityhandler.get_governors()
 
-    def has_foundational_authority(self, *, actor: str) -> bool:
+    def has_foundational_authority(self, *, actor: str) -> bool:  # Also returns role
         authHandler = AuthorityHandler.objects.get(community=self.target)
         return authHandler.is_owner(actor)
 
-    def has_governing_authority(self, *, actor: str) -> bool:
+    def has_governing_authority(self, *, actor: str) -> bool:  # Also returns role
         authHandler = AuthorityHandler.objects.get(community=self.target)
         return authHandler.is_governor(actor)
 

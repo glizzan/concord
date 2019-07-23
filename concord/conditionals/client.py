@@ -45,6 +45,10 @@ class ApprovalConditionClient(BaseClient):
         change = sc.ApproveStateChange()
         return self.create_and_take_action(change)
 
+    def reject(self) -> Tuple[int, Any]:
+        change = sc.RejectStateChange()
+        return self.create_and_take_action(change)
+        
 
 class VoteConditionClient(BaseClient):
     '''

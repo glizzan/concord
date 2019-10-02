@@ -4,6 +4,7 @@ from typing import List, Tuple
 from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import User
 
 from concord.actions.state_changes import create_change_object
 from concord.actions.customfields import ResolutionField, Resolution
@@ -24,7 +25,7 @@ def get_default_resolution():
 class Action(models.Model):
 
     # Related fields
-    actor = models.CharField(max_length=50)  # Replace with link to user/account
+    actor = models.ForeignKey(User, on_delete=models.CASCADE)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     target = GenericForeignKey()
@@ -72,7 +73,7 @@ class Action(models.Model):
 
     def get_condition(self):
         from concord.conditionals.client import PermissionConditionalClient
-        pcc = PermissionConditionalClient(actor="system")
+        pcc = PermissionConditionalClient(system=True)
         return pcc.get_condition_item_given_action(action_pk=self.pk) 
 
     def get_condition_link(self):
@@ -152,7 +153,11 @@ OWNER_CHOICES = (
 
 class PermissionedModel(models.Model):
 
-    owner = models.CharField(max_length=200)
+    owner_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,
+        related_name="%(app_label)s_%(class)s_owned_objects")
+    owner_object_id = models.PositiveIntegerField()
+    owner = GenericForeignKey('owner_content_type', 'owner_object_id')
+    # FIXME: should be able to delete this and just check content_type when determining ownership
     owner_type = models.CharField(max_length=3, choices=OWNER_CHOICES, 
         default='ind')
     
@@ -173,7 +178,7 @@ class PermissionedModel(models.Model):
 
     def get_actions(self):
         from concord.actions.client import ActionClient
-        client = ActionClient(actor="temp", target=self)
+        client = ActionClient(system=True, target=self)
         return client.get_action_history_given_target(target=self)
 
     @classmethod

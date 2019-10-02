@@ -1,9 +1,11 @@
 import json
 from decimal import Decimal
 import time
+from collections import namedtuple
 
 from django.test import TestCase
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import User
 
 from concord.resources.client import ResourceClient
 from concord.permission_resources.client import PermissionResourceClient
@@ -30,10 +32,46 @@ from concord.conditionals.models import ApprovalCondition
 # mega-client, so eg PermissionClient can be accessed as client.permissions.add_permission().
 
 
-class ResourceModelTests(TestCase):
+class DataTestCase(TestCase):
+
+    @classmethod
+    def setUpTestData(self):
+
+        class Users(object):
+            pass
+        self.users = Users()
+        
+        self.users.shauna = User.objects.create(username="shauna")
+        self.users.elena = User.objects.create(username="elena")
+        self.users.alexandra = User.objects.create(username="alexandra")
+        self.users.dana = User.objects.create(username="dana")
+        self.users.amal = User.objects.create(username="amal")
+        self.users.joy = User.objects.create(username="joy")
+
+        # Buffy characters
+        self.users.buffy = User.objects.create(username="buffy")
+        self.users.willow = User.objects.create(username="willow")
+        self.users.xander = User.objects.create(username="xander")
+        self.users.faith = User.objects.create(username="faith")
+        self.users.tara = User.objects.create(username="tara")
+
+        # Avengersish characters
+        self.users.cap = User.objects.create(username="cap")
+        self.users.falcon = User.objects.create(username="falcon")
+        self.users.blackwidow = User.objects.create(username="blackwidow")
+        self.users.whitewolf = User.objects.create(username="whitewolf")
+        self.users.ironman = User.objects.create(username="ironman")
+
+        # Black Panther characters
+        self.users.blackpanther = User.objects.create(username="blackpanther")
+        self.users.shuri = User.objects.create(username="shuri")
+        self.users.okoye = User.objects.create(username="okoye")
+        self.users.nakia = User.objects.create(username="nakia")
+
+class ResourceModelTests(DataTestCase):
 
     def setUp(self):
-        self.rc = ResourceClient(actor="shauna")
+        self.rc = ResourceClient(actor=self.users.shauna)
 
     def test_create_resource(self):
         """
@@ -64,11 +102,11 @@ class ResourceModelTests(TestCase):
         self.assertEquals(resource.get_items(), [])
 
 
-class PermissionResourceModelTests(TestCase):
+class PermissionResourceModelTests(DataTestCase):
 
     def setUp(self):
-        self.rc = ResourceClient(actor="shauna")
-        self.prc = PermissionResourceClient(actor="shauna")
+        self.rc = ResourceClient(actor=self.users.shauna)
+        self.prc = PermissionResourceClient(actor=self.users.shauna)
 
     def test_add_permission_to_resource(self):
         """
@@ -100,7 +138,7 @@ class PermissionResourceModelTests(TestCase):
         self.assertEquals(list(items), [])
 
 
-class PermissionSystemTest(TestCase):
+class PermissionSystemTest(DataTestCase):
     """
     The previous two sets of tests use the default permissions setting for the items
     they're modifying.  For individually owned objects, this means that the owner can do 
@@ -109,8 +147,8 @@ class PermissionSystemTest(TestCase):
     """
 
     def setUp(self):
-        self.rc = ResourceClient(actor="shauna")
-        self.prc = PermissionResourceClient(actor="shauna")
+        self.rc = ResourceClient(actor=self.users.shauna)
+        self.prc = PermissionResourceClient(actor=self.users.shauna)
 
     def test_permissions_system(self):
         """
@@ -126,7 +164,7 @@ class PermissionSystemTest(TestCase):
             'Permission 1 (for concord.resources.state_changes.AddItemResourceStateChange on Resource object (1))')
 
         # Now let's have Buffy do a thing on the resource
-        brc = ResourceClient(actor="buffy", target=resource)
+        brc = ResourceClient(actor=self.users.buffy, target=resource)
         action, item = brc.add_item(item_name="Test New")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "Test New")
@@ -144,8 +182,8 @@ class PermissionSystemTest(TestCase):
             permission_actors=["willow"])
 
         # Buffy can't add an item to this resource because she's not the owner nor specified in
-        # the permission.        
-        brc = ResourceClient(actor="buffy", target=resource)
+        # the permission.
+        brc = ResourceClient(actor=self.users.buffy, target=resource)
         action, item = brc.add_item(item_name="Buffy's item")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
@@ -157,25 +195,25 @@ class PermissionSystemTest(TestCase):
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # Buffy still cannot make the change because she does not have the permission.
-        brc = ResourceClient(actor="buffy", target=resource)
+        brc = ResourceClient(actor=self.users.buffy, target=resource)
         action, item = brc.add_item(item_name="Buffy's item")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         
         # BUT Buffy CAN make the second-level change.
-        bprc = PermissionResourceClient(actor="buffy", target=permission)
+        bprc = PermissionResourceClient(actor=self.users.buffy, target=permission)
         action, permission = bprc.add_permission(permission_type="concord.permission_resources.state_changes.AddPermissionStateChange",
             permission_actors=["willow"])        
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
 
-class ConditionalsTest(TestCase):
+class ConditionalsTest(DataTestCase):
 
     def setUp(self):
-        self.cc = PermissionConditionalClient(actor="shauna")
-        self.rc = ResourceClient(actor="shauna")
-        self.prc = PermissionResourceClient(actor="shauna")
+        self.cc = PermissionConditionalClient(actor=self.users.shauna)
+        self.rc = ResourceClient(actor=self.users.shauna)
+        self.prc = PermissionResourceClient(actor=self.users.shauna)
         self.target = self.rc.create_resource(name="Aha")
-        self.action = Action.objects.create(actor="elena", target=self.target,
+        self.action = Action.objects.create(actor=self.users.elena, target=self.target,
             change_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             change_data=json.dumps({"new_name": "Hah"}))
 
@@ -211,17 +249,17 @@ class ConditionalsTest(TestCase):
             permission_actors=["willow"])            
 
         # Now Buffy and Willow can vote but Xander can't
-        self.cc = PermissionConditionalClient(actor="buffy")
+        self.cc = PermissionConditionalClient(actor=self.users.buffy)
         default_vote = self.cc.getVoteConditionAsClient(pk=default_vote.target.pk)
         default_vote.vote(vote="yea")
         self.assertDictEqual(default_vote.get_current_results(), 
             { "yeas": 1, "nays": 0, "abstains": 0 })
-        self.cc = PermissionConditionalClient(actor="willow")
+        self.cc = PermissionConditionalClient(actor=self.users.willow)
         default_vote = self.cc.getVoteConditionAsClient(pk=default_vote.target.pk)
         default_vote.vote(vote="abstain")
         self.assertDictEqual(default_vote.get_current_results(), 
             { "yeas": 1, "nays": 0, "abstains": 1})
-        self.cc = PermissionConditionalClient(actor="xander")
+        self.cc = PermissionConditionalClient(actor=self.users.xander)
         default_vote = self.cc.getVoteConditionAsClient(pk=default_vote.target.pk)
         default_vote.vote(vote="abstain")
         self.assertDictEqual(default_vote.get_current_results(), 
@@ -247,14 +285,14 @@ class ConditionalsTest(TestCase):
         self.cc.addCondition(condition_type="approvalcondition")
 
         # Now when Xander tries to add an item he is flat out rejected
-        self.rc.set_actor(actor="xander")
+        self.rc.set_actor(actor=self.users.xander)
         self.rc.set_target(target=resource)
         action, item = self.rc.add_item(item_name="Xander's item")
         self.assertEquals(resource.get_items(), [])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # When Buffy tries to add an item it is stuck waiting
-        self.rc.set_actor(actor="buffy")
+        self.rc.set_actor(actor=self.users.buffy)
         buffy_action, item = self.rc.add_item(item_name="Buffy's item")
         self.assertEquals(resource.get_items(), [])
         self.assertEquals(Action.objects.get(pk=buffy_action.pk).status, "waiting")
@@ -263,13 +301,13 @@ class ConditionalsTest(TestCase):
         conditional_action = self.cc.get_condition_item_given_action(action_pk=buffy_action.pk)
 
         # Xander tries to approve it and fails.  Xander you goof.
-        acc = ApprovalConditionClient(target=conditional_action, actor="xander")
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.xander)
         action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(resource.get_items(), [])
 
         # Now Shauna approves it
-        acc.set_actor(actor="shauna")
+        acc.set_actor(actor=self.users.shauna)
         action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
     
@@ -304,7 +342,7 @@ class ConditionalsTest(TestCase):
                 'permission_configuration': '{}'}))
 
         # When Buffy tries to add an item it is stuck waiting
-        self.rc.set_actor(actor="buffy")
+        self.rc.set_actor(actor=self.users.buffy)
         self.rc.set_target(target=resource)
         buffy_action, item = self.rc.add_item(item_name="Buffy's item")
         self.assertEquals(resource.get_items(), [])
@@ -314,7 +352,7 @@ class ConditionalsTest(TestCase):
         conditional_action = self.cc.get_condition_item_given_action(action_pk=buffy_action.pk)
 
        # Now Willow approves it
-        acc = ApprovalConditionClient(target=conditional_action, actor="willow")
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.willow)
         action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
     
@@ -327,15 +365,15 @@ class ConditionalsTest(TestCase):
         ...
 
 
-class ConditionalsFormTest(TestCase):
+class ConditionalsFormTest(DataTestCase):
     
     def setUp(self):
 
         # Create users
-        self.user = "buffy"
-        self.willow = "willow"
-        self.faith = "faith"
-        self.tara = "tara"
+        self.user = self.users.buffy
+        self.willow = self.users.willow
+        self.faith = self.users.faith
+        self.tara = self.users.tara
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
@@ -343,18 +381,16 @@ class ConditionalsFormTest(TestCase):
         self.commClient.set_target(self.instance)
 
         # Make separate clients 
-        self.willowClient = CommunityClient(actor="willow", target=self.instance)
-        self.faithClient = CommunityClient(actor="faith", target=self.instance)
-        self.taraClient = CommunityClient(actor="tara", target=self.instance)
+        self.willowClient = CommunityClient(actor=self.users.willow, target=self.instance)
+        self.faithClient = CommunityClient(actor=self.users.faith, target=self.instance)
+        self.taraClient = CommunityClient(actor=self.users.tara, target=self.instance)
 
         # Create request objects
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
-        self.willowRequest = Request(user=User(username="willow"))  # Not sure it's necessary
-        self.faithRequest = Request(user=User(username="faith"))  # Not sure it's necessary
-        self.taraRequest = Request(user=User(username="tara"))
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
+        self.willowRequest = Request(user=self.users.willow)  # Not sure it's necessary
+        self.faithRequest = Request(user=self.users.faith)  # Not sure it's necessary
+        self.taraRequest = Request(user=self.users.tara)
 
         # Create a permission to set a condition on 
         self.prc = PermissionResourceClient(actor=self.user, target=self.instance)
@@ -548,18 +584,18 @@ class ConditionalsFormTest(TestCase):
         approvalForm.save()
 
         # When Tara tries to add an item it is stuck waiting
-        self.rc.set_actor(actor="tara")
+        self.rc.set_actor(actor=self.users.tara)
         self.rc.set_target(target=resource)
         tara_action, item = self.rc.add_item(item_name="Tara's item")
         self.assertEquals(resource.get_items(), [])
         self.assertEquals(Action.objects.get(pk=tara_action.pk).status, "waiting")
 
         # Get the condition item created by action
-        self.cc = PermissionConditionalClient(actor="buffy")
+        self.cc = PermissionConditionalClient(actor=self.users.buffy)
         condition = self.cc.get_condition_item_given_action(action_pk=tara_action.pk)
 
         # Now Willow approves it
-        acc = ApprovalConditionClient(target=condition, actor="willow")
+        acc = ApprovalConditionClient(target=condition, actor=self.users.willow)
         action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
@@ -598,10 +634,10 @@ class ConditionalsFormTest(TestCase):
     # worried that there might be issues determining ownership.
 
 
-class BasicCommunityTest(TestCase):
+class BasicCommunityTest(DataTestCase):
 
     def setUp(self):
-        self.commClient = CommunityClient(actor="shauna")
+        self.commClient = CommunityClient(actor=self.users.shauna)
 
     def test_create_community(self):
         community = self.commClient.create_community(name="A New Community")
@@ -610,16 +646,16 @@ class BasicCommunityTest(TestCase):
     
     def test_community_is_itself_collectively_owned(self):
         community = self.commClient.create_community(name="A New Community")
-        self.assertEquals(community.get_owner(), community.name)
+        self.assertEquals(community.get_owner(), community)
 
     def test_community_collectively_owns_resource(self):
         community = self.commClient.create_community(name="A New Community")
-        rc = ResourceClient(actor="shauna")
+        rc = ResourceClient(actor=self.users.shauna)
         resource = rc.create_resource(name="A New Resource")
-        self.assertEquals(resource.get_owner(), "shauna")
+        self.assertEquals(resource.get_owner().username, "shauna")
         rc.set_target(target=resource)
-        rc.change_owner_of_target(new_owner="A New Community", new_owner_type="com")
-        self.assertEquals(resource.get_owner(), "A New Community")
+        rc.change_owner_of_target(new_owner=community, new_owner_type="com")
+        self.assertEquals(resource.get_owner().name, "A New Community")
 
     def test_change_name_of_community(self):
         community = self.commClient.create_community(name="A New Community")
@@ -631,7 +667,7 @@ class BasicCommunityTest(TestCase):
     def test_reject_change_name_of_community_from_nongovernor(self):
         community = self.commClient.create_community(name="A New Community")
         self.commClient.set_target(target=community)
-        self.commClient.set_actor(actor="xander")
+        self.commClient.set_actor(actor=self.users.xander)
         action, result = self.commClient.change_name(new_name="A Newly Named Community")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(community.name, "A New Community")
@@ -639,11 +675,11 @@ class BasicCommunityTest(TestCase):
     def test_change_name_of_community_owned_resource(self):
         # SetUp
         community = self.commClient.create_community(name="A New Community")
-        rc = ResourceClient(actor="shauna")
+        rc = ResourceClient(actor=self.users.shauna)
         resource = rc.create_resource(name="A New Resource")
         rc.set_target(target=resource)
-        action, result = rc.change_owner_of_target(new_owner="A New Community", new_owner_type="com")
-        self.assertEquals(resource.get_owner(), "A New Community")
+        action, result = rc.change_owner_of_target(new_owner=community, new_owner_type="com")
+        self.assertEquals(resource.get_owner().name, "A New Community")
         # Test
         new_action, result = rc.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=new_action.pk).status, "implemented")
@@ -652,13 +688,13 @@ class BasicCommunityTest(TestCase):
     def test_reject_change_name_of_community_owned_resource_from_nongovernor(self):
         # SetUp
         community = self.commClient.create_community(name="A New Community")
-        rc = ResourceClient(actor="shauna")
+        rc = ResourceClient(actor=self.users.shauna)
         resource = rc.create_resource(name="A New Resource")
         rc.set_target(target=resource)
-        action, result = rc.change_owner_of_target(new_owner="A New Community", new_owner_type="com")
-        self.assertEquals(resource.get_owner(), "A New Community")
+        action, result = rc.change_owner_of_target(new_owner=community, new_owner_type="com")
+        self.assertEquals(resource.get_owner().name, "A New Community")
         # Test
-        rc.set_actor(actor="xander")
+        rc.set_actor(actor=self.users.xander)
         new_action, result = rc.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=new_action.pk).status, "rejected")
         self.assertEquals(resource.name, "A New Resource")
@@ -667,26 +703,26 @@ class BasicCommunityTest(TestCase):
         
         # SetUp
         community = self.commClient.create_community(name="A New Community")
-        rc = ResourceClient(actor="shauna")
+        rc = ResourceClient(actor=self.users.shauna)
         resource = rc.create_resource(name="A New Resource")
         rc.set_target(target=resource)
-        action, result = rc.change_owner_of_target(new_owner="A New Community", new_owner_type="com")
-        self.assertEquals(resource.get_owner(), "A New Community")
+        action, result = rc.change_owner_of_target(new_owner=community, new_owner_type="com")
+        self.assertEquals(resource.get_owner().name, "A New Community")
 
         # Add  permission for nongovernor to change name
-        prc = PermissionResourceClient(actor="shauna")
+        prc = PermissionResourceClient(actor=self.users.shauna)
         prc.set_target(target=resource)
         action, permission = prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_actors=["xander"])
         
         # Test - Xander should now be allowed to change name
-        rc.set_actor(actor="xander")
+        rc.set_actor(actor=self.users.xander)
         new_action, result = rc.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=new_action.pk).status, "implemented")
         self.assertEquals(resource.name, "A Changed Resource")    
 
         # Test - Governors should still be able to do other things still that are not set in PR
-        rc.set_actor(actor="shauna")
+        rc.set_actor(actor=self.users.shauna)
         new_action, result = rc.add_item(item_name="Shauna's item")
         self.assertEquals(resource.get_items(), ["Shauna's item"])
 
@@ -698,14 +734,14 @@ class BasicCommunityTest(TestCase):
             {'actors': ['shauna', 'alexandra'], 'roles': []})
 
 
-class GoverningAuthorityTest(TestCase):
+class GoverningAuthorityTest(DataTestCase):
 
     def setUp(self):
-        self.commClient = CommunityClient(actor="shauna")
+        self.commClient = CommunityClient(actor=self.users.shauna)
         self.community = self.commClient.create_community(name="A New Community")
         self.commClient.set_target(target=self.community)
         self.commClient.add_governor(governor_name="alexandra")
-        self.condClient = CommunityConditionalClient(actor="shauna", target=self.community)
+        self.condClient = CommunityConditionalClient(actor=self.users.shauna, target=self.community)
 
     def test_with_conditional_on_governer_decision_making(self):
 
@@ -721,7 +757,7 @@ class GoverningAuthorityTest(TestCase):
 
         # Check that the condition template's owner is correct
         ct = self.condClient.get_condition_template_for_governor()
-        self.assertEquals(ct.get_owner(), "A New Community")
+        self.assertEquals(ct.get_owner().name, "A New Community")
 
         # Governor A does a thing, creates a conditional action to be approved
         action, result = self.commClient.change_name(new_name="A Newly Named Community")
@@ -730,7 +766,7 @@ class GoverningAuthorityTest(TestCase):
         conditional_action = self.condClient.get_condition_item_given_action(action_pk=action.pk)
 
         # Governer B reviews
-        acc = ApprovalConditionClient(target=conditional_action, actor="alexandra")
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.alexandra)
         review_action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=review_action.pk).status, "implemented")
 
@@ -740,32 +776,32 @@ class GoverningAuthorityTest(TestCase):
         self.assertEquals(community.name, "A Newly Named Community")
 
 
-class FoundationalAuthorityTest(TestCase):
+class FoundationalAuthorityTest(DataTestCase):
 
     def setUp(self):
 
         # Create community
-        self.commClient = CommunityClient(actor="shauna")
+        self.commClient = CommunityClient(actor=self.users.shauna)
         self.community = self.commClient.create_community(name="A New Community")
 
         # Create a resource and give ownership to community
-        self.resourceClient = ResourceClient(actor="shauna")
+        self.resourceClient = ResourceClient(actor=self.users.shauna)
         self.resource = self.resourceClient.create_resource(name="A New Resource")
         self.resourceClient.set_target(target=self.resource)
-        self.resourceClient.change_owner_of_target(new_owner="A New Community", new_owner_type="com")
+        self.resourceClient.change_owner_of_target(new_owner=self.community, new_owner_type="com")
 
     def test_foundational_authority_override_on_individually_owned_object(self):
         # Create individually owned resource
         resource = self.resourceClient.create_resource(name="A resource")
 
         # By default, Dana's actions are not successful
-        danaResourceClient = ResourceClient(actor="dana", target=resource)
+        danaResourceClient = ResourceClient(actor=self.users.dana, target=resource)
         action, result = danaResourceClient.change_name(new_name="Dana's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(resource.get_name(), "A resource")
 
         # Owner adds a specific permission for Dana, Dana's action is successful
-        prc = PermissionResourceClient(actor="shauna", target=resource)
+        prc = PermissionResourceClient(actor=self.users.shauna, target=resource)
         owner_action, result = prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_actors=["dana"])
         action, result = danaResourceClient.change_name(new_name="Dana's resource")
@@ -776,7 +812,7 @@ class FoundationalAuthorityTest(TestCase):
         fp_action, result = prc.enable_foundational_permission()
 
         # Dana's actions are no longer successful
-        danaResourceClient = ResourceClient(actor="dana", target=resource)
+        danaResourceClient = ResourceClient(actor=self.users.dana, target=resource)
         action, result = danaResourceClient.change_name(new_name="A new name for Dana's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(resource.get_name(), "Dana's resource")
@@ -784,13 +820,13 @@ class FoundationalAuthorityTest(TestCase):
     def test_foundational_authority_override_on_community_owned_object(self):
         
         # By default, Dana's actions are not successful
-        danaResourceClient = ResourceClient(actor="dana", target=self.resource)
+        danaResourceClient = ResourceClient(actor=self.users.dana, target=self.resource)
         action, result = danaResourceClient.change_name(new_name="Dana's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.get_name(), "A New Resource")
 
         # Owner adds a specific permission for Dana, Dana's action is successful
-        prc = PermissionResourceClient(actor="shauna", target=self.resource)
+        prc = PermissionResourceClient(actor=self.users.shauna, target=self.resource)
         owner_action, result = prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
             permission_actors=["dana"])
         action, result = danaResourceClient.change_name(new_name="Dana's resource")
@@ -802,7 +838,7 @@ class FoundationalAuthorityTest(TestCase):
         fp_action, result = prc.enable_foundational_permission()
 
         # Dana's actions are no longer successful
-        danaResourceClient = ResourceClient(actor="dana", target=self.resource)
+        danaResourceClient = ResourceClient(actor=self.users.dana, target=self.resource)
         action, result = danaResourceClient.change_name(new_name="A new name for Dana's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.get_name(), "Dana's resource")
@@ -820,7 +856,7 @@ class FoundationalAuthorityTest(TestCase):
         # In this community, all members are owners but for the foundational authority to do
         # anything they must agree via majority vote.
         action, result = self.commClient.add_owner_role(owner_role="members") # Add member role
-        self.condClient = CommunityConditionalClient(actor="shauna", target=self.community)
+        self.condClient = CommunityConditionalClient(actor=self.users.shauna, target=self.community)
 
         # FIXME: wow this is too much configuration needed!
         action, result = self.condClient.addConditionToOwners(
@@ -833,7 +869,7 @@ class FoundationalAuthorityTest(TestCase):
             condition_data=json.dumps({"voting_period": 0.0001 }))
 
         # Dana tries to change the name of the resource but is not successful.
-        danaResourceClient = ResourceClient(actor="dana", target=self.resource)
+        danaResourceClient = ResourceClient(actor=self.users.dana, target=self.resource)
         action, result = danaResourceClient.change_name(new_name="Dana's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.get_name(), "A New Resource")
@@ -844,13 +880,13 @@ class FoundationalAuthorityTest(TestCase):
         self.assertEquals(Action.objects.get(pk=key_action.pk).status, "waiting")
         conditional_action = self.condClient.get_condition_item_given_action(action_pk=key_action.pk)
 
-        vcc = VoteConditionClient(target=conditional_action, actor="shauna")
+        vcc = VoteConditionClient(target=conditional_action, actor=self.users.shauna)
         vcc.vote(vote="yea")
-        vcc.set_actor("amal")
+        vcc.set_actor(actor=self.users.amal)
         vcc.vote(vote="yea")
-        vcc.set_actor("joy")
+        vcc.set_actor(actor=self.users.joy)
         vcc.vote(vote="yea")
-        vcc.set_actor("dana")
+        vcc.set_actor(actor=self.users.dana)
         vcc.vote(vote="yea")
 
         time.sleep(.02)
@@ -867,21 +903,21 @@ class FoundationalAuthorityTest(TestCase):
             {'actors': ['shauna', 'alexandra'], 'roles': []})
 
         # Dana tries to add Joy as a governor.  She cannot, she is not an owner.
-        self.commClient.set_actor("dana")
+        self.commClient.set_actor(actor=self.users.dana)
         action, result = self.commClient.add_governor(governor_name="joy")
         self.assertEquals(self.community.authorityhandler.get_governors(), 
             {'actors': ['shauna', 'alexandra'], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Alexandra tries to add Joy as a governor.  She cannot, she is not a governor.
-        self.commClient.set_actor("alexandra")
+        self.commClient.set_actor(actor=self.users.alexandra)
         action, result = self.commClient.add_governor(governor_name="joy")
         self.assertEquals(self.community.authorityhandler.get_governors(), 
             {'actors': ['shauna', 'alexandra'], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Shauna tries to add Joy as a governor.  She can, since has foundational authority.
-        self.commClient.set_actor("shauna")
+        self.commClient.set_actor(actor=self.users.shauna)
         action, result = self.commClient.add_governor(governor_name="joy")
         self.assertEquals(self.community.authorityhandler.get_governors(), 
             {'actors': ['shauna', 'alexandra', 'joy'], 'roles': []})
@@ -897,14 +933,14 @@ class FoundationalAuthorityTest(TestCase):
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # Dana tries to add Amal as owner.  She cannot, she is not an owner.
-        self.commClient.set_actor("dana")
+        self.commClient.set_actor(actor=self.users.dana)
         action, result = self.commClient.add_owner(owner_name="amal")
         self.assertEquals(self.community.authorityhandler.get_owners(), 
             {'actors': ['shauna', 'alexandra'], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Alexandra tries to add Amal as owner.  She can, since has foundational authority.
-        self.commClient.set_actor("alexandra")
+        self.commClient.set_actor(actor=self.users.alexandra)
         action, result = self.commClient.add_owner(owner_name="amal")
         # self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
@@ -922,36 +958,36 @@ class FoundationalAuthorityTest(TestCase):
 
         # Dana tries to enable foundational override on resource. 
         # She cannot, she is not an owner.
-        self.resourceClient.set_actor("dana")
+        self.resourceClient.set_actor(actor=self.users.dana)
         action, result = self.resourceClient.enable_foundational_permission()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertFalse(self.resource.foundational_permission_enabled)
 
         # Alexandra tries to enable foundational override on resource.
         # She cannot, she is not a governor.
-        self.resourceClient.set_actor("alexandra")
+        self.resourceClient.set_actor(actor=self.users.alexandra)
         action, result = self.resourceClient.enable_foundational_permission()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertFalse(self.resource.foundational_permission_enabled)
 
         # Shauna tries to enable foundational override on resource.
         # She can, since has foundational authority.
-        self.resourceClient.set_actor("shauna")
+        self.resourceClient.set_actor(actor=self.users.shauna)
         action, result = self.resourceClient.enable_foundational_permission()
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertTrue(self.resource.foundational_permission_enabled)
 
 
-class RolesetTest(TestCase):
+class RolesetTest(DataTestCase):
 
     def setUp(self):
-        self.commClient = CommunityClient(actor="shauna")
+        self.commClient = CommunityClient(actor=self.users.shauna)
         self.community = self.commClient.create_community(name="A New Community")
         self.commClient.set_target(self.community)
-        self.resourceClient = ResourceClient(actor="shauna")
+        self.resourceClient = ResourceClient(actor=self.users.shauna)
         self.resource = self.resourceClient.create_resource(name="A new resource")
         self.resourceClient.set_target(self.resource)
-        self.permClient = PermissionResourceClient(actor="shauna")
+        self.permClient = PermissionResourceClient(actor=self.users.shauna)
 
     # Test assigned roles
 
@@ -989,13 +1025,13 @@ class RolesetTest(TestCase):
     def test_basic_assigned_role_works_with_permission_item(self):
 
         # Dana wants to change the name of the resource, she can't
-        self.resourceClient.set_actor("dana")
+        self.resourceClient.set_actor(actor=self.users.dana)
         action, result = self.resourceClient.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "A new resource")
 
         # Shauna adds a 'namers' role to the community which owns the resource
-        self.resourceClient.set_actor("shauna")
+        self.resourceClient.set_actor(actor=self.users.shauna)
         action, result = self.commClient.add_assigned_role(role_name="namers")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         roles = self.commClient.get_assigned_roles()
@@ -1016,7 +1052,7 @@ class RolesetTest(TestCase):
         self.assertCountEqual(roles["namers"], ["dana"])
 
         # Dana can now change the name of the resource
-        self.resourceClient.set_actor("dana")
+        self.resourceClient.set_actor(actor=self.users.dana)
         action, result = self.resourceClient.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(self.resource.name, "A Changed Resource")
@@ -1029,7 +1065,7 @@ class RolesetTest(TestCase):
         self.assertCountEqual(roles["namers"], [])
 
         # Dana can no longer change the name of the resource
-        self.resourceClient.set_actor("dana")
+        self.resourceClient.set_actor(actor=self.users.dana)
         action, result = self.resourceClient.change_name(new_name="A Newly Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "A Changed Resource")
@@ -1038,10 +1074,10 @@ class RolesetTest(TestCase):
 
         # Shauna adds the resource to her community
         self.resourceClient.set_target(target=self.resource)
-        self.resourceClient.change_owner_of_target(new_owner="A New Community", new_owner_type="com")
+        self.resourceClient.change_owner_of_target(new_owner=self.community, new_owner_type="com")
 
         # Dana wants to change the name of the resource, she can't
-        self.resourceClient.set_actor("dana")
+        self.resourceClient.set_actor(actor=self.users.dana)
         action, result = self.resourceClient.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "A new resource")
@@ -1065,6 +1101,7 @@ class RolesetTest(TestCase):
 
         # Dana tries to do a thing and can
         action, result = self.resourceClient.change_name(new_name="A Changed Resource")
+        print(action.log)
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(self.resource.name, "A Changed Resource")
 
@@ -1082,11 +1119,11 @@ class RolesetTest(TestCase):
     # TODO: skipping automated roles for now
     
 
-class RoleFormTest(TestCase):
+class RoleFormTest(DataTestCase):
 
     def setUp(self):
         # Create a user
-        self.user = "cap"
+        self.user = self.users.cap
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
@@ -1094,10 +1131,8 @@ class RoleFormTest(TestCase):
         self.commClient.set_target(self.instance)
 
         # Create request object
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
 
         # Initial data
         self.data = {"0~rolename": "members", "0~members": "cap"}
@@ -1185,12 +1220,12 @@ class RoleFormTest(TestCase):
         self.assertCountEqual(self.commClient.get_users_given_role(role_name="runners"), 
             ["cap"])
 
-class PermissionFormTest(TestCase):
+class PermissionFormTest(DataTestCase):
 
     def setUp(self):
 
         # Create a user
-        self.user = "cap"
+        self.user = self.users.cap
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
@@ -1206,10 +1241,8 @@ class PermissionFormTest(TestCase):
             people_to_add=["whitewolf", "cap", "falcon"])
 
         # Create request object
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
 
         # Initial data
         self.data = {}
@@ -1563,7 +1596,7 @@ class PermissionFormTest(TestCase):
         self.commClient.add_people_to_role(role_name="avengers", 
             people_to_add=["whitewolf", "falcon"])
 
-        natClient = CommunityClient(actor="blackwidow", target=self.instance)
+        natClient = CommunityClient(actor=self.users.blackwidow, target=self.instance)
         natClient.add_people_to_role(role_name="avengers", 
             people_to_add=["agentcarter", "hawkeye"])
 
@@ -1595,12 +1628,12 @@ class PermissionFormTest(TestCase):
         self.assertCountEqual(roles["avengers"], ["whitewolf", "falcon", "hawkeye"])
 
 
-class MetaPermissionsFormTest(TestCase):
+class MetaPermissionsFormTest(DataTestCase):
 
     def setUp(self):
         
         # Create a user
-        self.user = "cap"
+        self.user = self.users.cap
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
@@ -1608,16 +1641,14 @@ class MetaPermissionsFormTest(TestCase):
         self.commClient.set_target(self.instance)
 
         # Make separate clients for Sam and Nat.
-        self.samClient = CommunityClient(actor="falcon", target=self.instance)
-        self.buckyClient = CommunityClient(actor="whitewolf", target=self.instance)
+        self.samClient = CommunityClient(actor=self.users.falcon, target=self.instance)
+        self.buckyClient = CommunityClient(actor=self.users.whitewolf, target=self.instance)
 
         # Create request objects
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
-        self.samRequest = Request(user=User(username="falcon"))  # Not sure it's necessary
-        self.buckyRequest = Request(user=User(username="whitewolf"))  # Not sure it's necessary
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
+        self.samRequest = Request(user=self.users.falcon)  # Not sure it's necessary
+        self.buckyRequest = Request(user=self.users.whitewolf)  # Not sure it's necessary
 
         # Add a role to community and assign a member
         self.commClient.add_assigned_role(role_name="avengers")
@@ -1785,8 +1816,8 @@ class MetaPermissionsFormTest(TestCase):
         # First, we get a mock permission to pass to the metapermission form.
         ct = ContentType.objects.get_for_model(self.instance)
         target_permission = self.prClient.get_permission_or_return_mock(
-            permitted_object_pk=self.instance.pk,
-            permitted_object_ct=str(ct.pk),
+            permitted_object_id=self.instance.pk,
+            permitted_object_content_type=str(ct.pk),
             permission_change_type='concord.communities.state_changes.RemovePeopleFromRoleStateChange')
         self.assertEqual(target_permission.__class__.__name__, "MockMetaPermission")
 
@@ -1823,12 +1854,12 @@ class MetaPermissionsFormTest(TestCase):
             "AddPeopleToRoleStateChange"])
 
 
-class ResourcePermissionsFormTest(TestCase):
+class ResourcePermissionsFormTest(DataTestCase):
 
     def setUp(self):
 
         # Create a user
-        self.user = "blackpanther"
+        self.user = self.users.blackpanther
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
@@ -1836,12 +1867,10 @@ class ResourcePermissionsFormTest(TestCase):
         self.commClient.set_target(self.instance)
 
         # Create request objects
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
-        self.shuriRequest = Request(user=User(username="shuri"))  # Not sure it's necessary
-        self.okoyeRequest = Request(user=User(username="okoye"))  # Not sure it's necessary
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
+        self.shuriRequest = Request(user=self.users.shuri)  # Not sure it's necessary
+        self.okoyeRequest = Request(user=self.users.okoye)  # Not sure it's necessary
 
         # Add roles to community and assign members
         self.commClient.add_people_to_role(role_name="members", 
@@ -1851,15 +1880,15 @@ class ResourcePermissionsFormTest(TestCase):
             people_to_add=["shuri", "ramonda"])
 
         # Create a forum owned by the community
-        self.resourceClient = ResourceClient(actor="blackpanther")
+        self.resourceClient = ResourceClient(actor=self.users.blackpanther)
         self.resource = self.resourceClient.create_resource(name="Royal Family Forum")
         self.resourceClient.set_target(target=self.resource)
-        self.resourceClient.change_owner_of_target(new_owner="Wakanda",
+        self.resourceClient.change_owner_of_target(new_owner=self.instance,
             new_owner_type="com")
 
         # Make separate clients for Shuri and Okoye.
-        self.shuriClient = ResourceClient(actor="shuri", target=self.resource)
-        self.okoyeClient = ResourceClient(actor="okoye", target=self.resource)
+        self.shuriClient = ResourceClient(actor=self.users.shuri, target=self.resource)
+        self.okoyeClient = ResourceClient(actor=self.users.okoye, target=self.resource)
 
         # Initial form data
         self.data = {
@@ -1942,35 +1971,36 @@ class ResourcePermissionsFormTest(TestCase):
         self.assertEquals(self.resource.name, "Shuri Rulez")
 
 
-class ResolutionFieldTest(TestCase):
+class ResolutionFieldTest(DataTestCase):
 
     def setUp(self):
 
         # Create users
-        self.user = "cap"  # Main user
-        self.nonmember_user = "ironman"
-        self.member_user = "whitewolf"
-        self.governing_user = "falcon"
-        self.roletest_user = "blackwidow"
+        self.user = self.users.cap
+        self.nonmember_user = self.users.ironman
+        self.member_user = self.users.whitewolf
+        self.governing_user = self.users.falcon
+        self.roletest_user = self.users.blackwidow
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
         self.instance = self.commClient.create_community(name="Team Cap")
         self.commClient.set_target(self.instance)
 
+        # Make community self-owned
+        self.commClient.change_owner_of_target(new_owner=self.instance, new_owner_type="com")
+
         # Make separate clients for Tony, Bucky, Sam.
-        self.samClient = CommunityClient(actor="falcon", target=self.instance)
-        self.buckyClient = CommunityClient(actor="whitewolf", target=self.instance)
-        self.tonyClient = CommunityClient(actor="ironman", target=self.instance)
+        self.samClient = CommunityClient(actor=self.users.falcon, target=self.instance)
+        self.buckyClient = CommunityClient(actor=self.users.whitewolf, target=self.instance)
+        self.tonyClient = CommunityClient(actor=self.users.ironman, target=self.instance)
 
         # Create request objects
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
-        self.samRequest = Request(user=User(username="falcon"))  # Not sure it's necessary
-        self.buckyRequest = Request(user=User(username="whitewolf"))  # Not sure it's necessary
-        self.tonyRequest = Request(user=User(username="ironman"))
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
+        self.samRequest = Request(user=self.users.falcon)  # Not sure it's necessary
+        self.buckyRequest = Request(user=self.users.whitewolf)  # Not sure it's necessary
+        self.tonyRequest = Request(user=self.users.ironman)
 
         # Add members to community
         self.commClient.add_member(name="blackwidow")
@@ -2033,6 +2063,7 @@ class ResolutionFieldTest(TestCase):
 
         # Sam can change the name of the group because he has a governing permission.        
         action, result = self.samClient.change_name(new_name="The Falcon and His Sidekicks")
+        print(action.log)
         self.assertEquals(action.status, "implemented")
         self.assertTrue(action.resolution.is_resolved)
         self.assertTrue(action.resolution.is_approved)
@@ -2144,12 +2175,12 @@ class ResolutionFieldTest(TestCase):
         self.assertEquals(bucky_action.resolution.condition, "approvalcondition")
 
 
-class ConfigurablePermissionTest(TestCase):
+class ConfigurablePermissionTest(DataTestCase):
 
     def setUp(self):
 
         # Create a user
-        self.user = "blackpanther"
+        self.user = self.users.blackpanther
 
         # Create a community & client
         self.commClient = CommunityClient(actor=self.user)
@@ -2163,18 +2194,16 @@ class ConfigurablePermissionTest(TestCase):
         self.commClient.add_assigned_role(role_name="doramilaje")
 
         # Make separate clients for other users.
-        self.okoyeClient = CommunityClient(actor="okoye", target=self.instance)
-        self.shuriClient = CommunityClient(actor="shuri", target=self.instance)
-        self.nakiaClient = CommunityClient(actor="nakia", target=self.instance)
+        self.okoyeClient = CommunityClient(actor=self.users.okoye, target=self.instance)
+        self.shuriClient = CommunityClient(actor=self.users.shuri, target=self.instance)
+        self.nakiaClient = CommunityClient(actor=self.users.nakia, target=self.instance)
 
         # Create permission client for T'Challa
         self.permClient = PermissionResourceClient(actor=self.user, target=self.instance)
 
         # Create request objects
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
+        Request = namedtuple('Request', 'user')
+        self.request = Request(user=self.user)
 
     def test_configurable_permission(self):
 
@@ -2276,7 +2305,7 @@ class ConfigurablePermissionTest(TestCase):
             permission_configuration={"role_name": "admins"})
 
         # Okoye tries to remove both.  She is successful in removing admins but not royalfamily.
-        self.okoyePermClient = PermissionResourceClient(actor="okoye", target=permission)
+        self.okoyePermClient = PermissionResourceClient(actor=self.users.okoye, target=permission)
         self.okoyePermClient.remove_role_from_permission(role_name="admins", 
             community_pk=self.instance.pk, permission_pk=permission.pk)
         self.okoyePermClient.remove_role_from_permission(role_name="royalfamily", 
@@ -2326,7 +2355,7 @@ class ConfigurablePermissionTest(TestCase):
         self.metapermission_form.save()
 
         # Test that it worked (again, copied from above)
-        self.okoyePermClient = PermissionResourceClient(actor="okoye", target=target_permission)
+        self.okoyePermClient = PermissionResourceClient(actor=self.users.okoye, target=target_permission)
         action, result = self.okoyePermClient.remove_role_from_permission(role_name="admins", 
             community_pk=self.instance.pk, permission_pk=target_permission.pk)
         action, result = self.okoyePermClient.remove_role_from_permission(role_name="royalfamily", 

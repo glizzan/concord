@@ -19,7 +19,7 @@ class ConditionSelectionForm(forms.Form):
         self.request = kwargs.pop('request')
         super().__init__(*args, **kwargs)
 
-        conditionalClient = PermissionConditionalClient(actor=self.request.user.username)
+        conditionalClient = PermissionConditionalClient(actor=self.request.user)
         CONDITION_CHOICES = []
         for condition in conditionalClient.get_possible_conditions():
             CONDITION_CHOICES.append((condition.get_slug(),condition.descriptive_name))
@@ -85,11 +85,11 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
 
         # FIXME: Doing this because self.instance/self.target_permission shenanigans meant that the
         # form was using the target permission's change_types instead of the condition's change_types
-        prClient = PermissionResourceClient(actor=self.request.user.username, target=self.condition_model)
+        prClient = PermissionResourceClient(actor=self.request.user, target=self.condition_model)
         return prClient.get_settable_permissions(return_format="permission_objects")
 
     def save(self):
-        conditionalClient = PermissionConditionalClient(actor=self.request.user.username, target=self.target_permission)
+        conditionalClient = PermissionConditionalClient(actor=self.request.user, target=self.target_permission)
         if hasattr(self, 'condition_data_dict'):  # Indicates we're updating, not adding, a condition
             # You can only update condition data and permission data
             # FIXME: ownership stuff needs refactoring
@@ -108,6 +108,7 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
         # Gotta be a better way to do this.
 
         self.permission_data = {}
+
         for key, value in self.cleaned_data.items():
 
             if '~' not in key:  # FIXME: only permissions have the ~
@@ -139,19 +140,22 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
         # FIXME: assumes a single permission, just returns the first it finds
 
         for index, permission in self.permission_data.items():
-            if permission["individuals"] or permission["roles"]:
+
+            p_actors = permission["individuals"] if \
+                "individuals" in permission and permission["individuals"] else []
+
+            p_roles = permission["roles"] if  "roles" in permission and permission["roles"] else []
+
+            if p_actors or p_roles:
 
                 config_dict = {}
                 if hasattr(permission, "configurable_fields"):
                     for cf_key, cf_value in permission["configurable_fields"].items():
                         config_dict[cf_key] = cf_value
 
-                return json.dumps({
-                    'permission_type': permission['name'],
-                    'permission_actors': permission["individuals"],
-                    'permission_roles': permission["roles"] if "roles" in permission else [],
-                    'permission_configuration': config_dict
-                })
+                return json.dumps({ 'permission_type': permission['name'], 
+                    'permission_actors': p_actors, 'permission_roles': p_roles,
+                    'permission_configuration': config_dict})
 
     def get_configuration_dict(self):
         configuration_dict = {}

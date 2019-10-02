@@ -77,11 +77,11 @@ class ConditionModel(PermissionedModel):
         return self.descriptive_name
 
     def get_action(self):
-        ac = ActionClient(actor="system")
+        ac = ActionClient(system=True)
         return ac.get_action_given_pk(pk=self.action)
 
     def description_permissions(self):
-        prc = PermissionResourceClient(actor="system")  # FIXME: should be actor, no?
+        prc = PermissionResourceClient(system=True)  # FIXME: should be actor, no?
         permissions = prc.get_permissions_on_object(object=self)
         display_permissions = []
         for permission in permissions:
@@ -163,7 +163,7 @@ class VoteCondition(ConditionModel):
 
     def has_voted(self, actor):
         voted = json.loads(self.voted)
-        if actor in voted:
+        if actor.username in voted:
             return True
         return False
 
@@ -177,7 +177,7 @@ class VoteCondition(ConditionModel):
 
     def add_vote_record(self, actor):
         voted = json.loads(self.voted)
-        voted.append(actor)
+        voted.append(actor.username)
         self.voted = json.dumps(voted)
 
     def voting_time_remaining(self):
@@ -240,7 +240,7 @@ class VoteCondition(ConditionModel):
         
 def retry_action(sender, instance, created, **kwargs):
     if not created:
-        actionClient = ActionClient(actor="system")
+        actionClient = ActionClient(system=True)
         action = actionClient.get_action_given_pk(pk=instance.action)
         action.take_action()  # FIXME: make this a client call as well.
 

@@ -1,3 +1,5 @@
+from django.contrib.auth.models import User
+
 from concord.actions.state_changes import foundational_changes
 from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
 from concord.communities.client import CommunityClient
@@ -13,7 +15,7 @@ def check_conditional(action, condition_template, called_by, role=None):
         return action
 
     # Does this action already have a condition action instance?  If no, make one.
-    conditionalClient = PermissionConditionalClient(actor="system")
+    conditionalClient = PermissionConditionalClient(system=True)
     condition_item = conditionalClient.get_or_create_condition(action=action,
         condition_template=condition_template)
 
@@ -50,7 +52,7 @@ def foundational_permission_pipeline(action):
     if individual_result:
         return individual_result
    
-    communityClient = CommunityClient(actor="system") 
+    communityClient = CommunityClient(system=True) 
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
     has_authority, matched_role = communityClient.has_foundational_authority(actor=action.actor)
@@ -59,14 +61,14 @@ def foundational_permission_pipeline(action):
         return action
 
     # Check for conditions
-    conditionalClient = CommunityConditionalClient(actor="system", target=community)
+    conditionalClient = CommunityConditionalClient(system=True, target=community)
     condition_template = conditionalClient.get_condition_template_for_owner()
     return check_conditional(action, condition_template, called_by="foundational", role=matched_role)
 
 
 def find_specific_permissions(action):
     """Returns matching permission or None."""
-    permissionClient = PermissionResourceClient(actor="system")
+    permissionClient = PermissionResourceClient(system=True)
     permissionClient.set_target(action.target)
     specific_permissions = []
     for permission in permissionClient.get_specific_permissions(change_type=action.change_type):
@@ -81,7 +83,7 @@ def specific_permission_pipeline(action, specific_permissions):
 
     # If actor does not match specific permission, reject
     
-    permissionClient = PermissionResourceClient(actor="system")
+    permissionClient = PermissionResourceClient(system=True)
 
     matching_permission = None
     for permission in specific_permissions:
@@ -95,7 +97,7 @@ def specific_permission_pipeline(action, specific_permissions):
         return action
 
     # Check for conditions
-    conditionalClient = PermissionConditionalClient(actor="system", target=matching_permission)
+    conditionalClient = PermissionConditionalClient(system=True, target=matching_permission)
     condition_template = conditionalClient.get_condition_template()
     return check_conditional(action, condition_template, called_by="specific", 
         role=matched_role)
@@ -107,7 +109,7 @@ def governing_permission_pipeline(action):
     if individual_result:
         return individual_result
 
-    communityClient = CommunityClient(actor="system") 
+    communityClient = CommunityClient(system=True) 
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
     has_authority, matched_role = communityClient.has_governing_authority(actor=action.actor)
@@ -116,7 +118,7 @@ def governing_permission_pipeline(action):
         return action  
 
     # Check for conditions
-    conditionalClient = CommunityConditionalClient(actor="system", target=community)
+    conditionalClient = CommunityConditionalClient(system=True, target=community)
     condition_template = conditionalClient.get_condition_template_for_governor()
     return check_conditional(action, condition_template, called_by="governing", role=matched_role)
 

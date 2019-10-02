@@ -13,7 +13,7 @@ class LeadershipForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         from concord.communities.client import CommunityClient
-        self.commClient = CommunityClient(actor=self.request.user.username, target=self.instance)
+        self.commClient = CommunityClient(actor=self.request.user, target=self.instance)
         ROLE_CHOICES = [(role,role) for role in self.commClient.get_assigned_roles()]
 
         # Set up owner list ('ol') fields
@@ -128,6 +128,6 @@ class RoleForm(forms.Form):
     def save(self):
 
         role_data = self.process_roles()
-        commClient = CommunityClient(actor=self.request.user.username, target=self.instance)
+        commClient = CommunityClient(actor=self.request.user, target=self.instance)
         commClient.update_roles(role_data=role_data)
         commClient.update_role_membership(role_data=role_data)

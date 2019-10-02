@@ -31,23 +31,24 @@ class PermissionResourceClient(BaseClient):
 
     def get_permissions_on_object(self, *, object: Model) -> PermissionsItem:
         content_type = ContentType.objects.get_for_model(object)
-        return PermissionsItem.objects.filter(content_type=content_type, object_id=object.pk)
+        return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
+            permitted_object_id=object.pk)
 
     def actor_satisfies_permission(self, *, action, permission: PermissionsItem) -> bool:
         return permission.match_actor(action.actor)
 
-    def get_permission_or_return_mock(self, permitted_object_pk, 
-        permitted_object_ct, permission_change_type):
+    def get_permission_or_return_mock(self, permitted_object_id, 
+        permitted_object_content_type, permission_change_type):
         permissions = PermissionsItem.objects.filter(
-            content_type = permitted_object_ct,
-            object_id = permitted_object_pk,
+            permitted_object_content_type = permitted_object_content_type,
+            permitted_object_id = permitted_object_id,
             change_type = permission_change_type)
         if permissions:
             return permissions.first()
         else:
             return utils.MockMetaPermission(
-                permitted_object_pk = permitted_object_pk, 
-                permitted_object_ct = permitted_object_ct,
+                permitted_object_id = permitted_object_id, 
+                permitted_object_content_type = permitted_object_content_type,
                 permission_change_type = permission_change_type)
 
     # Read methods which require target to be set
@@ -63,8 +64,9 @@ class PermissionResourceClient(BaseClient):
         if type(self.target) == utils.MockMetaPermission:
             return []
         content_type = ContentType.objects.get_for_model(self.target)
-        return PermissionsItem.objects.filter(content_type=content_type, object_id=self.target.pk, 
-            change_type=change_type)
+        # FIXME: I'm assuming the target is the permitted object but maybe that's wrong?
+        return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
+            permitted_object_id=self.target.pk, change_type=change_type)
 
     def get_permissions_associated_with_role(self, *, role_name: str, community: Model) -> List[PermissionsItem]:
         permissions = self.get_permissions_on_object(object=self.target)

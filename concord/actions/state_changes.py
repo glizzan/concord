@@ -1,5 +1,7 @@
 import json, warnings
 
+from django.contrib.contenttypes.models import ContentType
+
 # TODO: make these explicit abstract class and subclasses *have* to implement validate and
 # implement
 
@@ -43,9 +45,10 @@ class BaseStateChange(object):
 class ChangeOwnerStateChange(BaseStateChange):
     description = "Change owner"
 
-    def __init__(self, new_owner: str, new_owner_type: str):
-        # NOTE: new_owner SHOULD be the PK of the owner but for now it is their name
-        self.new_owner = new_owner
+    def __init__(self, new_owner_content_type, new_owner_id, new_owner_type):
+        # NOTE: should remove new_owner_type soon
+        self.new_owner_content_type = new_owner_content_type
+        self.new_owner_id = new_owner_id
         self.new_owner_type = new_owner_type
 
     @classmethod
@@ -76,7 +79,13 @@ class ChangeOwnerStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.owner = self.new_owner
+
+        # Given the content type and ID, instantiate owner
+        ct = ContentType.objects.get_for_id(self.new_owner_content_type)
+        model_class = ct.model_class()
+        new_owner = model_class.objects.get(id=self.new_owner_id)
+
+        target.owner = new_owner
         target.owner_type = self.new_owner_type
         target.save()
         return target

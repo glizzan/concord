@@ -2,6 +2,7 @@ from typing import Tuple, Any
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
+from django.contrib.auth.models import User
 
 from concord.actions.models import create_action, Action
 from concord.actions import state_changes as sc
@@ -12,7 +13,14 @@ class BaseClient(object):
     Contains behavior needed for all clients.
     """
 
-    def __init__(self, actor, target=None):
+    def __init__(self, actor=None, target=None, system=False):
+        """Initialize client.  Can only initialize without an actor if running as system."""
+        # FIXME: still don't like this hack
+        if system:
+            from django.contrib.auth.models import User
+            self.actor = User.objects.get_or_create(username="system")
+        elif actor is None:
+            raise BaseException("Actor is required")
         self.actor = actor
         self.target = target
 
@@ -37,9 +45,10 @@ class BaseClient(object):
     
     # Writing
 
-    def change_owner_of_target(self, new_owner: str, new_owner_type: str) -> Tuple[int, Any]:
-        change = sc.ChangeOwnerStateChange(new_owner=new_owner, 
-            new_owner_type=new_owner_type)
+    def change_owner_of_target(self, new_owner, new_owner_type: str) -> Tuple[int, Any]:
+        new_owner_content_type = ContentType.objects.get_for_model(new_owner)
+        change = sc.ChangeOwnerStateChange(new_owner_content_type=new_owner_content_type.id, 
+            new_owner_id=new_owner.id, new_owner_type=new_owner_type)
         return self.create_and_take_action(change)
 
     def enable_foundational_permission(self) -> Tuple[int, Any]:
@@ -75,7 +84,7 @@ class ActionClient(BaseClient):
         return Action.objects.filter(content_type=content_type.id,
             object_id=self.target.id)
 
-    def get_action_history_given_actor(self, actor: str) -> QuerySet:
+    def get_action_history_given_actor(self, actor) -> QuerySet:
         return Action.objects.filter(actor=actor)
 
     def get_foundational_actions_given_target(self, target=None) -> QuerySet:

@@ -10,19 +10,19 @@ class MockMetaPermission:
     item exists so that the MetaPermissionsForm can treat it as though
     it's an instance."""
     
-    def __init__(self, permitted_object_pk, permitted_object_ct, 
+    def __init__(self, permitted_object_id, permitted_object_content_type, 
         permission_change_type):
-        self.permitted_object_pk = permitted_object_pk
-        self.permitted_object_ct = permitted_object_ct
+        self.permitted_object_id = permitted_object_id
+        self.permitted_object_content_type = permitted_object_content_type
         self.permission_change_type = permission_change_type
         # Helper methods for template use
-        self.object_id = self.permitted_object_pk
-        self.content_type = self.permitted_object_ct
+        self.object_id = self.permitted_object_id
+        self.content_type = self.permitted_object_content_type
 
     def get_permitted_object(self):
-        ct = ContentType.objects.get_for_id(id=self.permitted_object_ct)
+        ct = ContentType.objects.get_for_id(id=self.permitted_object_content_type)
         ct_class = ct.model_class()
-        self.permitted_object = ct_class.objects.get(pk=self.permitted_object_pk)
+        self.permitted_object = ct_class.objects.get(pk=self.permitted_object_id)
         return self.permitted_object
 
     def get_state_change_objects(self):
@@ -39,16 +39,18 @@ class MockMetaPermission:
         from concord.permission_resources.models import PermissionsItem
         permitted_object = self.get_permitted_object()
         # FIXME: this is a hack to be fixed during ownership refactoring
-        if type(owner) == str:
+        if hasattr(owner, "username"):
             owner_type = "ind"
-        else:
+        elif hasattr(owner, "is_community"):
             owner_type = "com"
-            owner = owner.name
+        else:
+            raise TypeError("Owner should only be user or community")
         return PermissionsItem.objects.create(
             permitted_object = permitted_object,
             change_type = self.permission_change_type,
             owner_type = owner_type,
-            owner=owner)
+            owner_content_type = ContentType.objects.get_for_model(owner),
+            owner_object_id = owner.id)
 
 
 def filter_permissions(*, target, state_change_objects):

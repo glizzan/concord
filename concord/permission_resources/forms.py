@@ -19,7 +19,7 @@ class PermissionFormMixin(object):
         self.owner, self.commClient, and self.owned_by_community should be available to the form.'''
 
         from concord.communities.client import CommunityClient
-        self.commClient = CommunityClient(actor="system")
+        self.commClient = CommunityClient(system=True)
 
         if not owned_object:
             owned_object = self.instance
@@ -63,7 +63,7 @@ class PermissionFormMixin(object):
         '''Called in the init method of a form, adds permission field for the target instance.'''
         # TODO: possibly allow user to pass in a custom target, not just assuming selfl.instance?
 
-        self.prClient = PermissionResourceClient(actor=self.request.user.username, 
+        self.prClient = PermissionResourceClient(actor=self.request.user, 
             target=self.instance)
 
         for count, permission in enumerate(self.get_settable_permissions()):      
@@ -131,7 +131,7 @@ class PermissionFormMixin(object):
 
             if db_permission:  # If permission item exists, update it.
 
-                newClient = PermissionResourceClient(actor=self.request.user.username, 
+                newClient = PermissionResourceClient(actor=self.request.user, 
                     target=db_permission[0])
                 if self.ROLE_CHOICES:
                     newClient.update_roles_on_permission(role_data=form_permission["roles"], 
@@ -145,15 +145,21 @@ class PermissionFormMixin(object):
 
                 # Only create permission if there's relevant form data.
 
-                if form_permission["individuals"] or form_permission["roles"]:
-
-                    role_pairs = []
-                    for role in form_permission["roles"]:
-                        role_pairs.append("_".join([str(self.owner.pk), role]))
-                    
+                if "individuals" in form_permission and form_permission["individuals"]:
                     if "," in form_permission["individuals"]:
                         raise ValueError("Actors in permission forms must be separated by spaces only")
                     actors = form_permission["individuals"].split(" ")
+                else:
+                    actors = []                
+                
+                if "roles" in form_permission and form_permission["roles"]:
+                    role_pairs = []
+                    for role in form_permission["roles"]:
+                        role_pairs.append("_".join([str(self.owner.pk), role]))
+                else:
+                    role_pairs = []
+                    
+                if actors or role_pairs:
                     
                     permission_configuration = {}
                     for cf_key, cf_value in form_permission["configurable fields"].items():

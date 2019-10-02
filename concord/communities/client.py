@@ -2,6 +2,7 @@ import json
 from typing import Tuple, Any
 
 from django.db.models import Model
+from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.client import BaseClient
 from concord.actions.models import PermissionedModel
@@ -46,12 +47,13 @@ class CommunityClient(BaseClient):
 
     def get_owner(self, *, owned_object: Model) -> Community:
         # Note: this is still target-less since we don't need anything set as a target
-        community_name = owned_object.get_owner()
+        community_name = owned_object.get_owner().name
         return self.get_community(community_name=community_name)
 
     def create_community(self, *, name: str) -> Community:
-        # TODO: should we have to specify owner_type here?
-        return Community.objects.create(name=name, owner_type="com", creator=self.actor)
+        content_type = ContentType.objects.get_for_model(self.actor)
+        return Community.objects.create(name=name, creator=self.actor.username,
+            owner_content_type=content_type, owner_object_id=self.actor.id)
 
     # Read methods which require target to be set
 
@@ -86,7 +88,7 @@ class CommunityClient(BaseClient):
         authHandler = AuthorityHandler.objects.get(community=self.target)
         return authHandler.is_owner(actor)
 
-    def has_governing_authority(self, *, actor: str) -> bool:  # Also returns role
+    def has_governing_authority(self, *, actor) -> bool:  # Also returns role
         authHandler = AuthorityHandler.objects.get(community=self.target)
         return authHandler.is_governor(actor)
 

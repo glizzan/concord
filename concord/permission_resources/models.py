@@ -49,9 +49,9 @@ class PermissionsItem(PermissionedModel):
 
     """
 
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    permitted_object = GenericForeignKey('content_type', 'object_id')
+    permitted_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    permitted_object_id = models.PositiveIntegerField()
+    permitted_object = GenericForeignKey('permitted_object_content_type', 'permitted_object_id')
 
     # FIXME: both actors & roles are list of strings saved as json, need to be custom field
     actors = models.CharField(max_length=200)  
@@ -83,7 +83,7 @@ class PermissionsItem(PermissionedModel):
 
     def get_condition(self):
         from concord.conditionals.client import PermissionConditionalClient
-        pcc = PermissionConditionalClient(actor="system", target=self)
+        pcc = PermissionConditionalClient(system=True, target=self)
         return pcc.get_condition_template()
 
     def get_target(self):
@@ -124,13 +124,18 @@ class PermissionsItem(PermissionedModel):
 
     def match_actor(self, actor):
 
+        # FIXME: Temporary fix so long as actor sometimes is referenced by username
+        actor = actor.username
+
         actors = self.get_actors()
+
         if actor in actors:
             return True, None
 
         role_pairs = self.get_roles()  # FIXME: "role_pair" is not super descriptive
+
         from concord.communities.client import CommunityClient
-        cc = CommunityClient(actor="system")
+        cc = CommunityClient(system=True)
         for pair in role_pairs:
             community_pk, role = pair.split("_")  # FIXME: bit hacky
             cc.set_target_community(community_pk=community_pk)

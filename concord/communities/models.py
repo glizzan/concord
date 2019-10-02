@@ -12,6 +12,10 @@ def english_list(list_to_display):
         return "".join(list_to_display)
     return ", ".join(list_to_display[:-1]) + " and " + "".join(list_to_display[-1])
 
+OWNER_CHOICES = (
+    ('ind', 'Individually Owned'),
+    ('com', 'Community Owned'),
+)
 
 ################################
 ### Community Resource/Items ###
@@ -19,6 +23,8 @@ def english_list(list_to_display):
 
 class BaseCommunityModel(PermissionedModel):
     is_community = True
+    owner_type = models.CharField(max_length=3, choices=OWNER_CHOICES, 
+        default='com')  # Community models are community-owned by default
 
     name = models.CharField(max_length=200)
     creator = models.CharField(max_length=200)  # needed to create authority defaults
@@ -34,7 +40,8 @@ class BaseCommunityModel(PermissionedModel):
         """
         Communities own themselves by default, unless they are subcommunities.
         """
-        return self.name
+        # BUG: this overwrites the get_owner on permissionedmodel, which doesn't seem ideal
+        return self
 
     def list_owners(self):
         """
@@ -83,12 +90,12 @@ class BaseCommunityModel(PermissionedModel):
             return "people in roles " + english_list(governors['roles'])
 
     def owner_condition_display(self):
-        comCondClient = CommunityConditionalClient(actor="system", target=self)
+        comCondClient = CommunityConditionalClient(system=True, target=self)
         owner_condition = comCondClient.get_condition_info_for_owner()
         return owner_condition if owner_condition else "unconditional"
 
     def governor_condition_display(self):
-        comCondClient = CommunityConditionalClient(actor="system", target=self)
+        comCondClient = CommunityConditionalClient(system=True, target=self)
         governor_condition = comCondClient.get_condition_template_for_governor()
         return governor_condition if governor_condition else "unconditional"
 
@@ -106,8 +113,8 @@ class BaseCommunityModel(PermissionedModel):
             governors = json.dumps({ "actors": [self.creator], "roles": []})
             owners = json.dumps({ "actors": [self.creator], "roles": []})
             handler = AuthorityHandler.objects.create(community=self, governors=governors, 
-                owners=owners)
-            roleset = RoleSet.objects.create(community=self, 
+                owners=owners, owner=self.owner)
+            roleset = RoleSet.objects.create(community=self, owner=self.owner, 
                 assigned=json.dumps({ "members": [self.creator] }))
 
 
@@ -315,13 +322,17 @@ class AuthorityHandler(PermissionedModel):
         return json.loads(self.governors)
 
     def is_governor(self, actor):
+
+        # FIXME: eventually should assume actor is always user
+        actor = actor.username
+
         governors = self.get_governors()
         if actor in governors['actors']: 
             return True, None
 
         # FIXME: copied from permission_resources.models and also duplicated for owners
         from concord.communities.client import CommunityClient
-        cc = CommunityClient(actor="system")
+        cc = CommunityClient(system=True)
         for pair in governors['roles']:
             community_pk, role = pair.split("_")  # FIXME: bit hacky
             cc.set_target_community(community_pk=community_pk)
@@ -358,6 +369,9 @@ class AuthorityHandler(PermissionedModel):
         return json.loads(self.owners)
 
     def is_owner(self, actor):
+
+        # FIXME: should eventually always assume actor is user
+        actor = actor.username
         
         owners = self.get_owners()
 
@@ -366,7 +380,7 @@ class AuthorityHandler(PermissionedModel):
 
         # FIXME: copied from permission_resources.models and also duplicated for owners
         from concord.communities.client import CommunityClient
-        cc = CommunityClient(actor="system")
+        cc = CommunityClient(system=True)
         for pair in owners['roles']:
             community_pk, role = pair.split("_")  # FIXME: bit hacky
             cc.set_target_community(community_pk=community_pk)

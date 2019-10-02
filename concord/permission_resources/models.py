@@ -8,32 +8,6 @@ from concord.actions.models import PermissionedModel
 from concord.permission_resources.utils import check_permission_inputs
 
 
-# Create your models here.
-class PermissionsResource(PermissionedModel):
-
-    # For now just using inbuilt generic relation, but may want to switch???
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    permitted_object = GenericForeignKey('content_type', 'object_id')
-    ignore_defaults = models.BooleanField(default=False)
-
-    # Basics
-
-    def get_name(self):
-        return "Permissions resource for " + self.permitted_object.get_name()
-
-    # Read-only
-
-    # FIXME: I don't think the permissions items are actually linking to the PR, and therefore
-    # I don't think self.permissionsitem_set.all will work.  But this isn't being called/tested
-    # anywhere.
-    def get_items(self):
-        result = []
-        for item in self.permissionsitem_set.all():
-            result.append(item.get_name())
-        return result
-
-
 class PermissionsItem(PermissionedModel):
     """
     Permission items contain data for who may change the state of the linked object in a 

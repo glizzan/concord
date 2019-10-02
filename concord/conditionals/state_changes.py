@@ -79,6 +79,39 @@ class RemoveConditionStateChange(BaseStateChange):
         return True
 
 
+class ChangeConditionStateChange(BaseStateChange):
+    description = "Change condition"
+
+    def __init__(self, condition_pk, permission_data: Dict, condition_data: Dict):
+        # Note that only permission data and condition data are changeable, if you want to switch
+        # the condition type, owner, etc, you'll have to remove and add another.
+        self.condition_pk = condition_pk
+        self.condition_data = condition_data if condition_data else "{}"
+        self.permission_data = permission_data
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.permission_resources.models import PermissionsItem
+        return [Community, SubCommunity, SuperCommunity, PermissionsItem]    
+
+    def description_present_tense(self):
+        return "change condition %s" % (self.condition_pk)  
+
+    def description_past_tense(self):
+        return "changed condition %s" % (self.condition_pk)  
+
+    def validate(self, actor, target):
+        return True
+
+    def implement(self, actor, target):
+        template = ConditionTemplate.objects.get(pk=self.condition_pk)
+        template.condition_data = self.condition_data
+        template.permission_data = self.permission_data
+        template.save()
+        return template
+
+
 ####################################
 ### Vote Condition State Changes ###
 ####################################

@@ -2,6 +2,7 @@ from concord.actions.state_changes import foundational_changes
 from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
 from concord.communities.client import CommunityClient
 from concord.permission_resources.client import PermissionResourceClient
+from concord.permission_resources.utils import check_configuration
 
 
 def check_conditional(action, condition_template, called_by, role=None):
@@ -18,13 +19,14 @@ def check_conditional(action, condition_template, called_by, role=None):
 
     condition_status = condition_item.condition_status()
 
-    if condition_status == "approved":        
+    if condition_status == "approved":
+        log = "action approved by condition of type %s" % condition_template.condition_type
         action.approve_action(resolved_through=called_by, role=role,
-            condition=condition_template.condition_type)
+            condition=condition_template.condition_type, log=log)
     elif condition_status == "rejected":
+        log = "action passed permission but rejected by type %s" % condition_template.condition_type
         action.reject_action(resolved_through=called_by, role=role,
-            condition=condition_template.condition_type,
-            log="action passed permission but rejected on condition")
+            condition=condition_template.condition_type, log=log)
     if condition_status == "waiting":
         action.status = "waiting"
         action.log="action passed permission pipeline " + called_by + " but waiting on condition " + condition_template.condition_type
@@ -34,9 +36,11 @@ def check_conditional(action, condition_template, called_by, role=None):
 def shortcut_for_individual_ownership(action, called_by):
     if action.target.owner_type == "ind":
         if action.actor == action.target.owner:
-            action.approve_action(resolved_through=called_by, log="approved via individual ownership shortcut")
+            log = "approved via individual ownership shortcut, called by %s" % called_by
+            action.approve_action(resolved_through=called_by, log=log)
         else:
-            action.reject_action(log="individual owner of target does not match actor")
+            log = "rejected via individual ownership shortcut (target does not match actor), called by %s" % called_by
+            action.reject_action(log=log)
         return action
 
 
@@ -64,7 +68,13 @@ def find_specific_permissions(action):
     """Returns matching permission or None."""
     permissionClient = PermissionResourceClient(actor="system")
     permissionClient.set_target(action.target)
-    return permissionClient.get_specific_permissions(change_type=action.change_type)
+    specific_permissions = []
+    for permission in permissionClient.get_specific_permissions(change_type=action.change_type):
+        # Check configuration returns false only if the permission has a configuration which the action doesn't satisfy
+        is_relevant = check_configuration(action, permission)
+        if is_relevant:
+            specific_permissions.append(permission)
+    return specific_permissions
 
 
 def specific_permission_pipeline(action, specific_permissions):
@@ -75,7 +85,7 @@ def specific_permission_pipeline(action, specific_permissions):
 
     matching_permission = None
     for permission in specific_permissions:
-        is_matched, matched_role = permissionClient.actor_matches_permission(actor=action.actor, permission=permission)
+        is_matched, matched_role = permissionClient.actor_satisfies_permission(action=action, permission=permission)
         if is_matched:
             matching_permission = permission
             break

@@ -1,4 +1,4 @@
-import json
+import json, warnings
 
 # TODO: make these explicit abstract class and subclasses *have* to implement validate and
 # implement
@@ -19,6 +19,12 @@ class BaseStateChange(object):
     @classmethod 
     def get_allowable_targets(cls):
         return cls.allowable_targets
+
+    @classmethod 
+    def get_configurable_fields(self):
+        if hasattr(self, 'check_configuration'): 
+            warnings.warn("You have added a check_configuration method to your state change without specifying any configurable fields.")
+        return []
 
     def validate(self, actor, target):
         ...
@@ -147,16 +153,97 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
         target.save()
         return target
 
+class EnableGoverningPermissionStateChange(BaseStateChange):
+    description = "Enable the governing permission"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        '''
+        Gets all models in registered apps and returns them if they have a foundational
+        permission enabled attribute (a bit of a hack to find anything descended from
+        PermissionedModel) and if they are not abstract models.
+
+        # NOTE: although this is for enabling governing permissions, the same hack works
+        '''
+        from django.apps import apps
+        models = apps.get_models()
+        allowable_targets = []
+        for model in models:
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                allowable_targets.append(model)  
+        return allowable_targets  
+
+    def description_present_tense(self):
+        return "enable governing permission" 
+
+    def description_past_tense(self):
+        return "enabled governing permission"
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.governing_permission_enabled = True
+        target.save()
+        return target
+
+
+class DisableGoverningPermissionStateChange(BaseStateChange):
+    description = "disable governing permission"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        '''
+        Gets all models in registered apps and returns them if they have a foundational
+        permission enabled attribute (a bit of a hack to find anything descended from
+        PermissionedModel) and if they are not abstract models.
+
+        Same hack works as for DisableFoundationalPermissionStateChange.
+        '''
+        from django.apps import apps
+        models = apps.get_models()
+        allowable_targets = []
+        for model in models:
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                allowable_targets.append(model)  
+        return allowable_targets  
+
+    def description_present_tense(self):
+        return "disable governing permission" 
+
+    def description_past_tense(self):
+        return "disabled governing permission"
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.governing_permission_enabled = False
+        target.save()
+        return target
+
 
 # TODO: create and add governing_permission_state_change here
 def foundational_changes():
     return [
         'concord.communities.state_changes.AddGovernorStateChange',
         'concord.communities.state_changes.AddOwnerStateChange',
+        'concord.communities.state_changes.RemoveGovernorStateChange',
+        'concord.communities.state_changes.RemoveOwnerStateChange',
         'concord.communities.state_changes.AddGovernorRoleStateChange',
         'concord.communities.state_changes.AddOwnerRoleStateChange',
+        'concord.communities.state_changes.RemoveGovernorRoleStateChange',
+        'concord.communities.state_changes.RemoveOwnerRoleStateChange',
         'concord.actions.state_changes.EnableFoundationalPermissionStateChange',
-        'concord.actions.state_changes.DisableFoundationalPermissionStateChange'
+        'concord.actions.state_changes.DisableFoundationalPermissionStateChange',
+        'concord.actions.state_changes.EnableGoverningPermissionStateChange',
+        'concord.actions.state_changes.DisableGoverningPermissionStateChange'
     ]
 
 

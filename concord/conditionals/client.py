@@ -107,6 +107,18 @@ class BaseConditionalClient(BaseClient):
         }
         return condition_dict[lookup_string]
 
+    def get_possible_conditions(self, *, formatted_as="objects"):
+        
+        # FIXME: need to get this from a list of actual objects
+        conditions = [ApprovalCondition, VoteCondition]
+
+        if formatted_as == "objects":
+            return conditions
+        if formatted_as == "string":
+            return [cond.__name__.lower() for cond in conditions]
+        if formatted_as == "shortstring":
+            return [cond.__name__.lower().split("condition")[0] for cond in conditions]
+
     # FIXME: this feels like too much logic for the client, but where else could it go?
     def create_condition_item(self, *, condition_template: ConditionTemplate, action: Action) -> Model:
 
@@ -122,11 +134,12 @@ class BaseConditionalClient(BaseClient):
             permission_dict = json.loads(condition_template.permission_data)
             # HACK to prevent permission addition from going through permissions pipeline
             from concord.permission_resources.models import PermissionsItem
-            PermissionsItem.objects.create(
+            item = PermissionsItem.objects.create(
                 permitted_object=condition_item,
                 actors = json.dumps(permission_dict["permission_actors"]),
                 roles = json.dumps(permission_dict["permission_roles"]),
                 change_type = permission_dict["permission_type"],
+                configuration = permission_dict["permission_configuration"],
                 owner = condition_template.get_owner(),
                 owner_type = condition_template.owner_type)
 
@@ -173,15 +186,23 @@ class PermissionConditionalClient(BaseConditionalClient):
         if result:
             return result[0]
         return
+        # FIXME: should probably return empty list, but that breaks a bunch of tests, so need to refactor
 
     # State changes
 
+    # FIXME: should be add_condition not addCondition
     def addCondition(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
         # TODO: It would be nice to be able to pass in the ConditionTemplate 
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data, 
             conditioning_choices="permission")
+        return self.create_and_take_action(change)
+
+    def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
+        condition_data: Dict = None) -> Tuple[int, Any]:
+        change = sc.ChangeConditionStateChange(condition_pk=condition_pk,
+            permission_data=permission_data, condition_data=condition_data)
         return self.create_and_take_action(change)
 
 
@@ -195,15 +216,40 @@ class CommunityConditionalClient(BaseConditionalClient):
 
     # Read methods which require target to be set
 
+    def instantiate_condition(self, condition_template):
+        """Helper method, does not save condition instance."""
+        data_dict = json.loads(condition_template.condition_data)
+        conditionModel = self.condition_lookup_helper(lookup_string=condition_template.condition_type)
+        temp_condition = conditionModel(owner=condition_template.get_owner(), owner_type=condition_template.owner_type,
+            **data_dict)
+        return temp_condition
+
+    def get_condition_info(self, condition_template):
+        temp_condition = self.instantiate_condition(condition_template)
+        display_string = temp_condition.description_for_passing_condition()
+        if condition_template.permission_data:
+            display_string += str(condition_template.permission_data)
+        return display_string
+
     def get_condition_template_for_owner(self) -> ConditionTemplate:
         result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
             conditioning_choices="community_owner")
         return result[0] if result else None
 
+    def get_condition_info_for_owner(self):
+        condition_template = self.get_condition_template_for_owner()
+        if condition_template:
+            return self.get_condition_info(condition_template)
+
     def get_condition_template_for_governor(self) -> ConditionTemplate:
         result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
             conditioning_choices="community_governor")
         return result[0] if result else None
+
+    def get_condition_info_for_governor(self):
+        condition_template = self.get_condition_template_for_governor()
+        if condition_template:
+            return self.get_condition_info(condition_template)
 
     # State Changes
 

@@ -68,7 +68,19 @@ class Action(models.Model):
         else:
             if hasattr(self.change, "description_present_tense"):
                 return self.actor + " asked to " + self.change.description_present_tense()
-        return self.__str__()       
+        return self.__str__() 
+
+    def get_condition(self):
+        from concord.conditionals.client import PermissionConditionalClient
+        pcc = PermissionConditionalClient(actor="system")
+        return pcc.get_condition_item_given_action(action_pk=self.pk) 
+
+    def get_condition_link(self):
+        '''Returns link to condition formatted as display, or None.'''
+        condition = self.get_condition()
+        if condition:
+            return "<a href='%s'>%s</a>" % (condition.get_url(), condition.get_display_string())
+        return ""
 
     # Steps of action execution
 
@@ -80,8 +92,9 @@ class Action(models.Model):
         # TODO: handle invalid actions
     
     def approve_action(self, resolved_through, log=None, condition=None, role=None):
-        self.status = "approved"
         self.log = log if log else ""
+        self.status = "approved"
+        self.resolution.status = "approved"
         self.resolution.is_resolved = True
         self.resolution.is_approved = True
         self.resolution.resolved_through = resolved_through
@@ -89,8 +102,9 @@ class Action(models.Model):
         self.resolution.role = role
 
     def reject_action(self, resolved_through=None, log=None, condition=None, role=None):
-        self.status = "rejected"
         self.log = log if log else ""
+        self.status = "rejected"
+        self.resolution.status = "rejected"
         self.resolution.is_resolved = True
         self.resolution.is_approved = False
         self.resolution.resolved_through = resolved_through
@@ -121,7 +135,7 @@ class Action(models.Model):
             current_result = self.implement_action()
 
         self.save()  # Save action, may not always be needed
-        
+
         return self, current_result
 
 

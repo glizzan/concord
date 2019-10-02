@@ -1,0 +1,28 @@
+<h4>Leadership</h4>
+
+<h5><i>Owners</i></h5>
+
+<p>The owner or owners of a group have the ultimate decision-making authority.  All groups have at
+least one owner.</p>
+
+<p>This group is owned by {{ object.owner_list_display }}.  Owner decisions are 
+    {{ object.owner_condition_display }}.</p>
+
+<h5><i>Governors</i></h5>
+
+<p>Governors are people who, by default, can do whatever has not been explicitly prohibited.  They do
+    <u>not</u> have ultimate decision-making authority - their powers are granted by the owners and 
+    can be taken away by them.</p>
+
+{% if object.has_governors %}
+
+    <p>The governors are {{ object.governor_list_display }} and their decisions are
+    {{ object.governor_condition_display }}.</p>
+
+{% else %}
+     
+    <p>This group does not have any governors set.</p>
+
+{% endif %}
+
+

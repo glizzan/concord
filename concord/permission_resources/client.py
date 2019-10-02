@@ -33,8 +33,8 @@ class PermissionResourceClient(BaseClient):
         content_type = ContentType.objects.get_for_model(object)
         return PermissionsItem.objects.filter(content_type=content_type, object_id=object.pk)
 
-    def actor_matches_permission(self, *, actor: str, permission: PermissionsItem) -> bool:
-        return permission.match_actor(actor)  # Returns boolean & role if it exists
+    def actor_satisfies_permission(self, *, action, permission: PermissionsItem) -> bool:
+        return permission.match_actor(action.actor)
 
     def get_permission_or_return_mock(self, permitted_object_pk, 
         permitted_object_ct, permission_change_type):
@@ -56,7 +56,12 @@ class PermissionResourceClient(BaseClient):
         content_type = ContentType.objects.get_for_model(self.target)
         return PermissionsItem.objects.filter(content_type=content_type, object_id=self.target.pk)
 
+    # FIXME: "specific" permissions is, ironically, a non-specific variable name
     def get_specific_permissions(self, *, change_type: str) -> PermissionsItem:
+        # FIXME: Possibly remove this check and refactor the permissions forms to be have more sensibly
+        # and not call this method if there's no valid target set.
+        if type(self.target) == utils.MockMetaPermission:
+            return []
         content_type = ContentType.objects.get_for_model(self.target)
         return PermissionsItem.objects.filter(content_type=content_type, object_id=self.target.pk, 
             change_type=change_type)
@@ -99,11 +104,12 @@ class PermissionResourceClient(BaseClient):
     # State changes
 
     def add_permission(self, *, permission_type: str, permission_actors: list = None, 
-            permission_role_pairs: list = None) -> Tuple[int, Any]:
+            permission_role_pairs: list = None, permission_configuration: dict = None) -> Tuple[int, Any]:
         if not permission_actors and not permission_role_pairs:
             raise Exception("Either actor or role_pair must be supplied when creating a permission")
         change = sc.AddPermissionStateChange(permission_type=permission_type, 
-            permission_actors=permission_actors, permission_role_pairs=permission_role_pairs)
+            permission_actors=permission_actors, permission_role_pairs=permission_role_pairs,
+            permission_configuration=permission_configuration)
         return self.create_and_take_action(change)
 
     def remove_permission(self, *, item_pk: int) -> Tuple[int, Any]:
@@ -128,7 +134,30 @@ class PermissionResourceClient(BaseClient):
             community_pk=community_pk)
         return self.create_and_take_action(change)
 
+    def change_configuration_of_permission(self, *, configurable_field_name: str, 
+        configurable_field_value: str, permission_pk: int) -> Tuple[int, Any]:
+        change = sc.ChangePermissionConfigurationStateChange(configurable_field_name=configurable_field_name,
+            configurable_field_value=configurable_field_value, permission_pk=permission_pk)
+        return self.create_and_take_action(change)
+
     # Complex/multiple state changes
+
+    def update_configuration(self, *, configuration_dict: dict, permission):
+        """Given a dict with the new configuration for a permission, change individual fields 
+        as needed."""
+
+        actions = []      
+        old_configuration = permission.get_configuration()
+
+        for field_name, field_value in configuration_dict.items():
+
+            if (field_name in old_configuration and old_configuration[field_name] != field_value) or \
+                (field_name not in old_configuration and field_value not in [None, '', []]):
+                action, result = self.change_configuration_of_permission(configurable_field_name=field_name,
+                    configurable_field_value=field_value, permission_pk=permission.pk)
+                actions.append(action)
+
+        return actions
 
     def update_roles_on_permission(self, *, role_data, permission, owner):
         """Given a list of roles, updates the given permission to match those roles."""
@@ -150,6 +179,7 @@ class PermissionResourceClient(BaseClient):
                 community_pk=owner.pk, permission_pk=permission.pk)
             actions.append(action)
 
+        # FIXME: why is this here??????
         permission = PermissionsItem.objects.get(pk=permission.pk)
 
         return actions

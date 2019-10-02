@@ -3,6 +3,14 @@ import json
 from django.db import models
 
 from concord.actions.models import PermissionedModel
+from concord.conditionals.client import CommunityConditionalClient
+
+
+# TODO: put this somewhere more sensible (or maybe all this stringy stuff should go in templatetags)
+def english_list(list_to_display):
+    if len(list_to_display) <= 1:
+        return "".join(list_to_display)
+    return ", ".join(list_to_display[:-1]) + " and " + "".join(list_to_display[-1])
 
 
 ################################
@@ -27,6 +35,62 @@ class BaseCommunityModel(PermissionedModel):
         Communities own themselves by default, unless they are subcommunities.
         """
         return self.name
+
+    def list_owners(self):
+        """
+        Communities mostly own themselves, but that's not particularly useful to know.
+        This method gets information on who specifically gets the community via the 
+        linked AuthorityHandler.
+        """
+        return self.authorityhandler.get_owners()
+
+    def list_governors(self):
+        """Helper method to get governors from linked AuthorityHandler."""
+        return self.authorityhandler.get_governors()
+
+    def has_governors(self):
+        governors = self.list_governors()
+        has_actors = 'actors' in governors and governors['actors']
+        has_roles = 'roles' in governors and governors['roles']
+        return True if has_actors or has_roles else False
+    
+    def owner_list_display(self):
+        """
+        Helper function to display results of list_owners() more nicely.
+        """
+        owners = self.list_owners()
+        has_actors = 'actors' in owners and owners['actors']
+        has_roles = 'roles' in owners and owners['roles']
+        if has_actors and has_roles:
+            return english_list(owners['actors']) + " and people in roles " + english_list(owners['roles'])
+        if has_actors:
+            return english_list(owners['actors'])
+        if has_roles:
+            return "people in roles " + english_list(owners['roles'])
+
+    def governor_list_display(self):
+        """
+        Helper function to display results of list_governors() more nicely.
+        """
+        governors = self.list_governors()
+        has_actors = 'actors' in governors and governors['actors']
+        has_roles = 'roles' in governors and governors['roles']
+        if has_actors and has_roles:
+            return english_list(governors['actors']) + " and people in roles " + english_list(governors['roles'])
+        if has_actors:
+            return english_list(governors['actors'])
+        if has_roles:
+            return "people in roles " + english_list(governors['roles'])
+
+    def owner_condition_display(self):
+        comCondClient = CommunityConditionalClient(actor="system", target=self)
+        owner_condition = comCondClient.get_condition_info_for_owner()
+        return owner_condition if owner_condition else "unconditional"
+
+    def governor_condition_display(self):
+        comCondClient = CommunityConditionalClient(actor="system", target=self)
+        governor_condition = comCondClient.get_condition_template_for_governor()
+        return governor_condition if governor_condition else "unconditional"
 
     def save(self, *args, **kwargs):
         """
@@ -241,6 +305,7 @@ class AuthorityHandler(PermissionedModel):
 
     def remove_governor_role(self, role, community):
         role_to_remove = str(community) + "_" + role
+        governors = json.loads(self.governors)
         governors['roles'].remove(role_to_remove)
         self.governors = json.dumps(governors)
 
@@ -283,6 +348,7 @@ class AuthorityHandler(PermissionedModel):
 
     def remove_owner_role(self, role, community):
         role_to_remove = str(community) + "_" + role
+        owners = json.loads(self.owners)
         owners['roles'].remove(role_to_remove)
         self.owners = json.dumps(owners)
 

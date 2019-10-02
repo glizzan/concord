@@ -12,8 +12,11 @@ from concord.conditionals.client import (ApprovalConditionClient, VoteConditionC
 from concord.communities.client import CommunityClient
 
 from concord.communities.forms import RoleForm
-from concord.permission_resources.forms import AccessForm, PermissionForm, MetaPermissionForm
+from concord.permission_resources.forms import PermissionForm, MetaPermissionForm
+from concord.conditionals.forms import ConditionSelectionForm, conditionFormDict
 from concord.actions.models import Action  # For testing action status later, do we want a client?
+from concord.permission_resources.models import PermissionsItem
+from concord.conditionals.models import ApprovalCondition
 
 
 ### TODO: 
@@ -59,6 +62,7 @@ class ResourceModelTests(TestCase):
         self.assertEquals(resource.get_items(), ["Aha"])
         self.rc.remove_item(item_pk=item.pk)
         self.assertEquals(resource.get_items(), [])
+
 
 class PermissionResourceModelTests(TestCase):
 
@@ -171,7 +175,9 @@ class ConditionalsTest(TestCase):
         self.rc = ResourceClient(actor="shauna")
         self.prc = PermissionResourceClient(actor="shauna")
         self.target = self.rc.create_resource(name="Aha")
-        self.action = Action.objects.create(actor="elena", target=self.target)
+        self.action = Action.objects.create(actor="elena", target=self.target,
+            change_type="concord.resources.state_changes.ChangeResourceNameStateChange",
+            change_data=json.dumps({"new_name": "Hah"}))
 
     def test_create_vote_conditional(self):
         default_vote = self.cc.createVoteCondition(action=self.action)
@@ -268,11 +274,6 @@ class ConditionalsTest(TestCase):
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
     
         # And Buffy's item has been added
-
-        # HACK: we need to set up signals or something to update this automatically
-        action = Action.objects.get(pk=buffy_action.pk)
-        action.take_action()
-
         self.assertEquals(Action.objects.get(pk=buffy_action.pk).status, "implemented")
         self.assertEquals(resource.get_items(), ["Buffy's item"])
 
@@ -299,7 +300,8 @@ class ConditionalsTest(TestCase):
             permission_data=json.dumps({
                 'permission_type': 'concord.conditionals.state_changes.ApproveStateChange', 
                 'permission_actors': ['willow'],
-                'permission_roles': []}))
+                'permission_roles': [],
+                'permission_configuration': '{}'}))
 
         # When Buffy tries to add an item it is stuck waiting
         self.rc.set_actor(actor="buffy")
@@ -317,17 +319,283 @@ class ConditionalsTest(TestCase):
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
     
         # And Buffy's item has been added
-
-        # HACK: we need to set up signals or something to update this automatically
-        action = Action.objects.get(pk=buffy_action.pk)
-        action.take_action()
-
         self.assertEquals(Action.objects.get(pk=buffy_action.pk).status, "implemented")
         self.assertEquals(resource.get_items(), ["Buffy's item"])
 
     def test_cant_self_approve(self):
         # TODO: add this test!
-        pass
+        ...
+
+
+class ConditionalsFormTest(TestCase):
+    
+    def setUp(self):
+
+        # Create users
+        self.user = "buffy"
+        self.willow = "willow"
+        self.faith = "faith"
+        self.tara = "tara"
+
+        # Create a community
+        self.commClient = CommunityClient(actor=self.user)
+        self.instance = self.commClient.create_community(name="Scooby Gang")
+        self.commClient.set_target(self.instance)
+
+        # Make separate clients 
+        self.willowClient = CommunityClient(actor="willow", target=self.instance)
+        self.faithClient = CommunityClient(actor="faith", target=self.instance)
+        self.taraClient = CommunityClient(actor="tara", target=self.instance)
+
+        # Create request objects
+        import collections
+        User = collections.namedtuple('User', 'username')
+        Request = collections.namedtuple('Request', 'user')
+        self.request = Request(user=User(username=self.user))
+        self.willowRequest = Request(user=User(username="willow"))  # Not sure it's necessary
+        self.faithRequest = Request(user=User(username="faith"))  # Not sure it's necessary
+        self.taraRequest = Request(user=User(username="tara"))
+
+        # Create a permission to set a condition on 
+        self.prc = PermissionResourceClient(actor=self.user, target=self.instance)
+        action, result = self.prc.add_permission(permission_type="concord.resources.state_changes.ChangeResourceNameStateChange",
+            permission_actors=["willow"])
+        self.target_permission = result
+
+        # Create PermissionConditionalClient
+        self.pcc = PermissionConditionalClient(actor=self.user, target=self.target_permission)
+
+        # Create permissions data for response dict
+        self.response_dict = {}
+        self.prClient = PermissionResourceClient(actor=self.user, target=ApprovalCondition)
+        permissions = self.prClient.get_settable_permissions(return_format="permission_objects")
+        for count, permission in enumerate(permissions):
+            self.response_dict[str(count) + "~" + "name"] = permission.get_change_type()
+            self.response_dict[str(count) + "~" + "roles"] = []
+            self.response_dict[str(count) + "~" + "individuals"] = []
+            for field in permission.get_configurable_fields():
+                self.response_dict['%s~configurablefield~%s' % (count, field)] = ""
+
+        # Create a resource
+        self.rc = ResourceClient(actor=self.user)
+
+    def test_conditional_selection_form_init(self):
+        csForm = ConditionSelectionForm(instance=self.instance, request=self.request)
+        choices = [choice[0] for choice in csForm.fields["condition"].choices]
+        self.assertEquals(choices, ["approvalcondition", "votecondition"])
+
+    def test_conditional_selection_form_get_condition_choice_method(self):
+        response_data = { 'condition': ["approvalcondition"] }
+        csForm = ConditionSelectionForm(instance=self.instance, request=self.request, data=response_data)
+        csForm.is_valid()
+        self.assertEquals(csForm.get_condition_choice(), "approvalcondition")
+        response_data = { 'condition': ["votecondition"] }
+        csForm = ConditionSelectionForm(instance=self.instance, request=self.request, data=response_data)
+        csForm.is_valid()
+        self.assertEquals(csForm.get_condition_choice(), "votecondition")
+
+    def test_approval_condition_form_lets_you_create_condition(self):
+        
+        # We start off with no templates on our target permission
+        result = self.pcc.get_condition_template()
+        self.assertEquals(result, None)
+
+        # We create and save an ApprovalForm
+        ApprovalForm = conditionFormDict["approvalcondition"]
+        response_data = {'self_approval_allowed': True}
+        approvalForm = ApprovalForm(permission=self.target_permission, request=self.request, 
+            data=response_data)
+        approvalForm.is_valid()
+        approvalForm.save()
+
+        # Now a condition template exists, with our configuration
+        result = self.pcc.get_condition_template()
+        self.assertEquals(result.condition_data, '{"self_approval_allowed": true}')
+
+    def test_approval_form_displays_inital_data_in_edit_mode(self):
+
+        # Create condition template
+        ApprovalForm = conditionFormDict["approvalcondition"]
+        response_data = {'self_approval_allowed': True}
+        approvalForm = ApprovalForm(permission=self.target_permission, request=self.request, 
+            data=response_data)
+        approvalForm.is_valid()
+        approvalForm.save()
+        condTemplate = self.pcc.get_condition_template()
+
+        # Feed into form
+        approvalForm = ApprovalForm(instance=condTemplate, permission=self.target_permission, 
+            request=self.request)
+        self.assertEquals(approvalForm.fields['self_approval_allowed'].initial, True)
+
+    def test_approval_condition_form_lets_you_edit_condition(self):
+        
+        # Create condition template
+        ApprovalForm = conditionFormDict["approvalcondition"]
+        response_data = {'self_approval_allowed': True}
+        approvalForm = ApprovalForm(permission=self.target_permission, request=self.request, 
+            data=response_data)
+        approvalForm.is_valid()
+        approvalForm.save()
+        condTemplate = self.pcc.get_condition_template()
+        self.assertEquals(condTemplate.condition_data, '{"self_approval_allowed": true}')
+
+        # Feed into form as instance along with edited data
+        response_data2 = {'self_approval_allowed': False}
+        approvalForm2 = ApprovalForm(instance=condTemplate, permission=self.target_permission, 
+            request=self.request, data=response_data2)
+        approvalForm2.is_valid()
+        approvalForm2.save()
+
+        # Now configuration is different
+        condTemplate = self.pcc.get_condition_template()
+        self.assertEquals(condTemplate.condition_data, '{"self_approval_allowed": false}')
+
+    def test_vote_condition_form_lets_you_create_condition(self):
+
+        # We start off with no templates on our target permission
+        result = self.pcc.get_condition_template()
+        self.assertEquals(result, None)
+
+        # We create and save an VoteForm
+        VoteForm = conditionFormDict["votecondition"]
+        response_data = {'allow_abstain': False, 'require_majority': True, 
+            'publicize_votes': False, 'voting_period': '5'}
+        voteForm = VoteForm(permission=self.target_permission, request=self.request, 
+            data=response_data)
+        voteForm.is_valid()
+        voteForm.save()
+
+        # Now a condition template exists, with our configuration
+        result = self.pcc.get_condition_template()
+        self.assertEquals(result.condition_data, 
+            '{"allow_abstain": false, "require_majority": true, "publicize_votes": false, "voting_period": 5.0}')
+
+    def test_vote_form_displays_inital_data_in_edit_mode(self):
+
+        # Create condition template
+        VoteForm = conditionFormDict["votecondition"]
+        response_data = {'allow_abstain': False, 'require_majority': True, 
+            'publicize_votes': False, 'voting_period': '23'}
+        voteForm = VoteForm(permission=self.target_permission, request=self.request, 
+            data=response_data)
+        voteForm.is_valid()
+        voteForm.save()
+        condTemplate = self.pcc.get_condition_template()
+
+        # Feed into form
+        voteForm = VoteForm(instance=condTemplate, permission=self.target_permission, 
+            request=self.request)
+        self.assertEquals(voteForm.fields['voting_period'].initial, 23.0)
+
+    def test_vote_condition_form_lets_you_edit_condition(self):
+    
+        # Create condition template
+        VoteForm = conditionFormDict["votecondition"]
+        response_data = {'allow_abstain': False, 'require_majority': True, 
+            'publicize_votes': False, 'voting_period': '23'}
+        voteForm = VoteForm(permission=self.target_permission, request=self.request, 
+            data=response_data)
+        voteForm.is_valid()
+        voteForm.save()
+        condTemplate = self.pcc.get_condition_template()
+
+        # Feed into form as instance along with edited data
+        response_data['voting_period'] = '30'
+        response_data['publicize_votes'] = True
+        voteForm2 = VoteForm(instance=condTemplate, permission=self.target_permission, 
+            request=self.request, data=response_data)
+        voteForm2.is_valid()
+        voteForm2.save()
+
+        # Now configuration is different
+        condTemplate = self.pcc.get_condition_template()
+        self.assertEquals(condTemplate.condition_data, 
+            '{"allow_abstain": false, "require_majority": true, "publicize_votes": true, "voting_period": 30.0}')
+
+    def test_approval_condition_processes_permissions_data(self):
+
+        # Create condition template
+        ApprovalForm = conditionFormDict["approvalcondition"]
+        self.response_dict['self_approval_allowed'] = True
+        self.response_dict['0~individuals'] = "willow"
+        approvalForm = ApprovalForm(permission=self.target_permission, request=self.request, 
+            data=self.response_dict)
+
+        approvalForm.is_valid()
+        approvalForm.save()
+        condTemplate = self.pcc.get_condition_template()
+        self.assertEquals(json.loads(condTemplate.permission_data), 
+                {"permission_type": "concord.conditionals.state_changes.ApproveStateChange", "permission_actors": "willow", "permission_roles": [], "permission_configuration": {}})
+
+    def test_approval_condition_form_creates_working_condition(self):
+        
+        # First Buffy creates a resource
+        resource = self.rc.create_resource(name="Scooby Gang Forum")
+
+        # Then she adds a permission that says that Tara can add items.
+        self.prc.set_target(target=resource)
+        action, permission = self.prc.add_permission(permission_type="concord.resources.state_changes.AddItemResourceStateChange",
+            permission_actors=["tara"])
+
+        # Buffy uses the form to place a condition on the permission she just created, such that
+        # Tara's action needs Willow's approval.
+        ApprovalForm = conditionFormDict["approvalcondition"]
+        self.response_dict['0~individuals'] = "willow"
+        approvalForm = ApprovalForm(permission=permission, request=self.request, 
+            data=self.response_dict)
+        approvalForm.is_valid()
+        approvalForm.save()
+
+        # When Tara tries to add an item it is stuck waiting
+        self.rc.set_actor(actor="tara")
+        self.rc.set_target(target=resource)
+        tara_action, item = self.rc.add_item(item_name="Tara's item")
+        self.assertEquals(resource.get_items(), [])
+        self.assertEquals(Action.objects.get(pk=tara_action.pk).status, "waiting")
+
+        # Get the condition item created by action
+        self.cc = PermissionConditionalClient(actor="buffy")
+        condition = self.cc.get_condition_item_given_action(action_pk=tara_action.pk)
+
+        # Now Willow approves it
+        acc = ApprovalConditionClient(target=condition, actor="willow")
+        action, result = acc.approve()
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+
+        # And Tara's item has been added
+        self.assertEquals(Action.objects.get(pk=tara_action.pk).status, "implemented")
+        self.assertEquals(resource.get_items(), ["Tara's item"])
+
+    def test_editing_condition_allows_editing_of_permissions(self):
+
+         # Create condition template with permissions info
+         ApprovalForm = conditionFormDict["approvalcondition"]
+         self.response_dict['self_approval_allowed'] = True
+         self.response_dict['0~individuals'] = "willow"
+         approvalForm = ApprovalForm(permission=self.target_permission, request=self.request, 
+             data=self.response_dict)
+         approvalForm.is_valid()
+         approvalForm.save()
+         condTemplate = self.pcc.get_condition_template()
+         self.assertEquals(condTemplate.condition_data, '{"self_approval_allowed": true}')
+         self.assertEquals(json.loads(condTemplate.permission_data)["permission_actors"], "willow")
+ 
+         # Feed into form as instance along with edited data
+         self.response_dict['self_approval_allowed'] = False
+         self.response_dict['0~individuals'] = "faith"
+         approvalForm2 = ApprovalForm(instance=condTemplate, permission=self.target_permission, 
+             request=self.request, data=self.response_dict)
+         approvalForm2.is_valid()
+         approvalForm2.save()
+ 
+         # Now configuration is different
+         condTemplate = self.pcc.get_condition_template()
+         self.assertEquals(condTemplate.condition_data, '{"self_approval_allowed": false}')
+         self.assertEquals(json.loads(condTemplate.permission_data)["permission_actors"], "faith")
+
+    # TODO: Test you can set a condition on metapermission as well as permission, specifically I'm 
+    # worried that there might be issues determining ownership.
 
 
 class BasicCommunityTest(TestCase):
@@ -447,7 +715,8 @@ class GoverningAuthorityTest(TestCase):
             permission_data=json.dumps({
                 'permission_type': 'concord.conditionals.state_changes.ApproveStateChange',
                 'permission_actors': ['alexandra'],
-                'permission_roles': ''}))
+                'permission_roles': '',
+                'permission_configuration': '{}'}))
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented") # Action accepted
 
         # Check that the condition template's owner is correct
@@ -464,10 +733,6 @@ class GoverningAuthorityTest(TestCase):
         acc = ApprovalConditionClient(target=conditional_action, actor="alexandra")
         review_action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=review_action.pk).status, "implemented")
-
-        # HACK: we need to set up signals or something to update this automatically
-        action = Action.objects.get(pk=action.pk)
-        action.take_action()
 
         # Now governor A's thing passes.
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
@@ -563,7 +828,8 @@ class FoundationalAuthorityTest(TestCase):
             permission_data = json.dumps({
                 'permission_type': 'concord.conditionals.state_changes.AddVoteStateChange',
                 'permission_actors': '[]',
-                'permission_roles': ['1_members']}),
+                'permission_roles': ['1_members'],
+                'permission_configuration': '{}'}),
             condition_data=json.dumps({"voting_period": 0.0001 }))
 
         # Dana tries to change the name of the resource but is not successful.
@@ -588,10 +854,6 @@ class FoundationalAuthorityTest(TestCase):
         vcc.vote(vote="yea")
 
         time.sleep(.02)
-
-        # HACK: we need to set up signals or something to update this automatically
-        action = Action.objects.get(pk=key_action.pk)
-        action.take_action()
 
         self.assertEquals(Action.objects.get(pk=key_action.pk).status, "implemented")
         resource = self.resourceClient.get_resource_given_pk(pk=self.resource.pk)
@@ -820,195 +1082,6 @@ class RolesetTest(TestCase):
     # TODO: skipping automated roles for now
     
 
-class CommunityAccessFormTest(TestCase):
-
-    def setUp(self):
-
-        # Create a user
-        self.user = "lisemeitner"
-
-        # Create a community
-        self.commClient = CommunityClient(actor=self.user)
-        self.instance = self.commClient.create_community(name="Nuclear Physicists")
-        self.commClient.set_target(self.instance)
-
-        # Create a request object
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.request = Request(user=User(username=self.user))
-
-        # Create permissions client too
-        self.permClient = PermissionResourceClient(actor=self.user, target=self.instance)
-
-        # Initial data
-        self.data = {"0_rolename": "members", "0_members": "lisemeitner", "0_permissions": []}
-
-    def test_initialize_access_form(self):
-
-        self.access_form = AccessForm(instance=self.instance, request=self.request)
-        self.assertEquals(list(self.access_form.fields.keys()), 
-            ['0_rolename', '0_members', '0_permissions', '1_rolename', '1_members', '1_permissions'])
-        self.assertEquals(self.access_form.fields["0_rolename"].initial, "members")
-        self.assertEquals(self.access_form.fields["0_members"].initial, "lisemeitner")
-        self.assertEquals(self.access_form.fields["0_permissions"].initial, [])
-
-        # Add some roles+permissions, so fields and initial will have more data
-        self.commClient.add_assigned_role(role_name="PrincipalInvestigators")
-        self.commClient.add_people_to_role(role_name="PrincipalInvestigators",
-            people_to_add=["IreneJoliot-Curie", "IdaNoddack"])
-        action, permission = self.permClient.add_permission(
-            permission_type="concord.communities.state_changes.ChangeNameStateChange",
-            permission_role_pairs=["1_PrincipalInvestigators"])
-
-        # Test again
-        self.access_form = AccessForm(instance=self.instance, request=self.request)
-        self.assertEquals(list(self.access_form.fields.keys()), 
-            ['0_rolename', '0_members', '0_permissions', '1_rolename', '1_members', 
-            '1_permissions', '2_rolename', '2_members', '2_permissions'])
-
-        if self.access_form.fields["1_rolename"].initial == 'PrincipalInvestigators':
-            self.assertCountEqual(self.access_form.fields["1_members"].initial.split(" "),
-                ["IdaNoddack", "IreneJoliot-Curie"])        
-            self.assertEquals(self.access_form.fields["1_permissions"].initial, 
-                ["concord.communities.state_changes.ChangeNameStateChange"])  
-        else:
-            self.assertCountEqual(self.access_form.fields["0_members"].initial.split(" "),
-                ["IdaNoddack", "IreneJoliot-Curie"])        
-            self.assertEquals(self.access_form.fields["0_permissions"].initial, 
-                ["concord.communities.state_changes.ChangeNameStateChange"])    
-
-    def test_add_role_via_access_form(self):
-
-        # Add a role! 
-
-        self.data.update({
-            '1_rolename': 'PrincipalInvestigators',
-            '1_members': 'IdaNoddack IreneJoliot-Curie',
-            '1_permissions': ['concord.communities.state_changes.ChangeNameStateChange']
-        })
-        self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
-        result = self.access_form.is_valid()
-        self.assertEquals(self.access_form.cleaned_data, 
-            {'0_rolename': 'members', '0_members': 'lisemeitner', '0_permissions': [], 
-                '1_rolename': 'PrincipalInvestigators', '1_members': 'IdaNoddack IreneJoliot-Curie',
-                '1_permissions': ['concord.communities.state_changes.ChangeNameStateChange']})
-
-        self.access_form.save()
-        perms = self.permClient.get_permissions_on_object(object=self.instance)
-        self.assertEquals(perms[0].get_roles(), ['1_PrincipalInvestigators'])
-
-        roles = self.commClient.get_assigned_roles()
-        self.assertCountEqual(list(roles.keys()), ['members', 'PrincipalInvestigators'])
-
-        # Now remove role from permission
-
-        self.data = {"0_rolename": "members", "0_members": "lisemeitner", "0_permissions": []}
-        self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
-        result = self.access_form.is_valid()
-        self.access_form.save()
-
-        perms = self.permClient.get_permissions_on_object(object=self.instance)
-        self.assertFalse(perms)  # Empty queryset should be falsy
-
-        # Does not remove role from community
-        roles = self.commClient.get_assigned_roles()
-        self.assertCountEqual(list(roles.keys()), ['members', 'PrincipalInvestigators'])
-   
-    def test_add_permission_to_existing_role_via_access_form(self):
-
-        self.data["0_permissions"] = ['concord.communities.state_changes.ChangeNameStateChange']
-
-        self.access_form = AccessForm(instance=self.instance, request=self.request, data=self.data)
-        result = self.access_form.is_valid()
-        self.access_form.save()
-
-        roles = self.commClient.get_assigned_roles()
-        self.assertEquals(list(roles.keys()), ['members'])
-
-        perms = self.permClient.get_permissions_on_object(object=self.instance)
-        self.assertEquals(perms[0].get_roles(), ['1_members'])
-        self.assertEquals(perms[0].change_type, 'concord.communities.state_changes.ChangeNameStateChange')
-
-    # do we want to test the view itself? ie with https://docs.djangoproject.com/en/2.2/topics/testing/advanced/#the-request-factory
-
-class ResourceAccessFormTest(TestCase):
-
-    def setUp(self):
-
-        # Create a user
-        self.user = "lisemeitner"
-
-        # Create a community
-        self.commClient = CommunityClient(actor=self.user)
-        self.instance = self.commClient.create_community(name="Nuclear Physicists")
-        self.commClient.set_target(self.instance)
-
-        # Create a resource
-        self.resClient = ResourceClient(actor=self.user)
-        self.resource = self.resClient.create_resource(name="Table of the Elements")
-        self.resClient.set_target(target=self.resource)
-        self.resClient.change_owner_of_target(new_owner="Nuclear Physicists", new_owner_type="com")
- 
-        # Perm client for resource
-        self.permClient = PermissionResourceClient(actor=self.user, target=self.resource)
-
-        # Add more people to 'members' role
-        self.commClient.add_people_to_role(role_name="members",
-            people_to_add=["IreneJoliot-Curie", "IdaNoddack"])
-
-        # Create request objects for various users
-        import collections
-        User = collections.namedtuple('User', 'username')
-        Request = collections.namedtuple('Request', 'user')
-        self.lise_request = Request(user=User(username=self.user))
-        self.ida_request = Request(user=User(username="IdaNoddack"))
-
-        # Initial data
-        self.data = {"0_rolename": "members", "0_members": "lisemeitner IdaNoddack IreneJoliot-Curie", "0_permissions": []}
-
-    def test_access_form_on_owned_resource(self):
-
-        self.commClient.add_assigned_role(role_name="PrincipalInvestigators")
-
-        self.data.update({
-            '1_rolename': 'PrincipalInvestigators',
-            '1_members': 'IdaNoddack IreneJoliot-Curie',
-            '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange']
-        })
-
-        # member of community cannot use access form to change permissions
-
-        self.access_form = AccessForm(instance=self.resource, request=self.ida_request, data=self.data)
-        result = self.access_form.is_valid()
-        self.assertDictEqual(self.access_form.cleaned_data, 
-            {'0_rolename': 'members', 
-            '0_members': 'lisemeitner IdaNoddack IreneJoliot-Curie', 
-            '0_permissions': [], 
-            '1_rolename': 'PrincipalInvestigators', 
-            '1_members': 'IdaNoddack IreneJoliot-Curie',
-            '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange'],
-            '2_members': '', '2_permissions': [], '2_rolename': ''})
-        
-        self.access_form.save()
-        perms = self.permClient.get_permissions_on_object(object=self.resource)
-        self.assertFalse(perms)  # Empty queryset should be falsy
-
-        # creator of community can use access form to change permissions
-
-        self.access_form = AccessForm(instance=self.resource, request=self.lise_request, data=self.data)
-        result = self.access_form.is_valid()
-        self.assertEquals(self.access_form.cleaned_data, 
-            {'0_rolename': 'members', '0_members': 'lisemeitner IdaNoddack IreneJoliot-Curie', '0_permissions': [], 
-            '1_rolename': 'PrincipalInvestigators', '1_members': 'IdaNoddack IreneJoliot-Curie',
-            '1_permissions': ['concord.resources.state_changes.ChangeResourceNameStateChange'],
-            '2_members': '', '2_permissions': [], '2_rolename': ''})
-
-        self.access_form.save()
-        perms = self.permClient.get_permissions_on_object(object=self.resource)
-        self.assertEquals(perms[0].get_roles(), ['1_PrincipalInvestigators'])
-
-
 class RoleFormTest(TestCase):
 
     def setUp(self):
@@ -1017,7 +1090,7 @@ class RoleFormTest(TestCase):
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
-        self.instance = self.commClient.create_community(name="Barbershop Quartet")
+        self.instance = self.commClient.create_community(name="Team Cap")
         self.commClient.set_target(self.instance)
 
         # Create request object
@@ -1027,7 +1100,7 @@ class RoleFormTest(TestCase):
         self.request = Request(user=User(username=self.user))
 
         # Initial data
-        self.data = {"0_rolename": "members", "0_members": "cap"}
+        self.data = {"0~rolename": "members", "0~members": "cap"}
 
     def test_add_role_via_role_form(self):
 
@@ -1037,17 +1110,17 @@ class RoleFormTest(TestCase):
 
         # Add a new role using the role form
         self.data.update({
-            '1_rolename': 'runners',
-            '1_members': 'cap falcon'})
+            '1~rolename': 'runners',
+            '1~members': 'cap falcon'})
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
         
         # Form is valid and cleaned data is correct
         result = self.role_form.is_valid()
         self.assertEquals(self.role_form.cleaned_data, 
-            {'0_rolename': 'members', 
-            '0_members': 'cap', 
-            '1_rolename': 'runners', 
-            '1_members': 'cap falcon'})
+            {'0~rolename': 'members', 
+            '0~members': 'cap', 
+            '1~rolename': 'runners', 
+            '1~members': 'cap falcon'})
 
         # After saving, data is updated.
         self.role_form.save()
@@ -1061,17 +1134,17 @@ class RoleFormTest(TestCase):
 
         # Add a user using the role form
         self.data.update({
-            '0_rolename': 'members', 
-            '0_members': 'cap falcon'})
+            '0~rolename': 'members', 
+            '0~members': 'cap falcon'})
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
         
         # Form is valid and cleaned data is correct
         result = self.role_form.is_valid()
         self.assertEquals(self.role_form.cleaned_data, 
-            {'0_rolename': 'members', 
-            '0_members': 'cap falcon',
-            '1_members': '',    # empty row, will be discarded
-            '1_rolename': ''})  # empty row, will be discarded
+            {'0~rolename': 'members', 
+            '0~members': 'cap falcon',
+            '1~members': '',    # empty row, will be discarded
+            '1~rolename': ''})  # empty row, will be discarded
 
         # After saving, data is updated.
         self.role_form.save()
@@ -1085,8 +1158,8 @@ class RoleFormTest(TestCase):
 
         # Quick add via form
         self.data.update({
-            '1_rolename': 'runners',
-            '1_members': 'cap falcon'})
+            '1~rolename': 'runners',
+            '1~members': 'cap falcon'})
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
         self.role_form.is_valid()
         self.role_form.save()
@@ -1096,16 +1169,16 @@ class RoleFormTest(TestCase):
             ["cap", "falcon"])
 
         # Remove role via form
-        self.data = {"0_rolename": "members", "0_members": "cap", 
-            '1_rolename': 'runners', '1_members': 'cap'}
+        self.data = {"0~rolename": "members", "0~members": "cap", 
+            '1~rolename': 'runners', '1~members': 'cap'}
         self.role_form = RoleForm(instance=self.instance, request=self.request, data=self.data)
 
          # Form is valid and cleaned data is correct
         result = self.role_form.is_valid()
         self.assertEquals(self.role_form.cleaned_data, 
-            {'0_rolename': 'members', '0_members': 'cap', 
-            '1_rolename': 'runners', '1_members': 'cap',
-            '2_rolename': '', '2_members': ''})
+            {'0~rolename': 'members', '0~members': 'cap', 
+            '1~rolename': 'runners', '1~members': 'cap',
+            '2~rolename': '', '2~members': ''})
 
         # After saving, data is updated.
         self.role_form.save()
@@ -1121,7 +1194,7 @@ class PermissionFormTest(TestCase):
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
-        self.instance = self.commClient.create_community(name="Barbershop Quartet")
+        self.instance = self.commClient.create_community(name="Team Cap")
         self.commClient.set_target(self.instance)
 
         # Create new roles
@@ -1143,9 +1216,9 @@ class PermissionFormTest(TestCase):
         self.prClient = PermissionResourceClient(actor=self.user, target=self.instance)
         permissions = self.prClient.get_settable_permissions(return_format="list_of_strings")
         for count, permission in enumerate(permissions):
-            self.data[str(count) + "_" + "name"] = permission
-            self.data[str(count) + "_" + "roles"] = []
-            self.data[str(count) + "_" + "individuals"] = []
+            self.data[str(count) + "~" + "name"] = permission
+            self.data[str(count) + "~" + "roles"] = []
+            self.data[str(count) + "~" + "individuals"] = []
 
     def test_instantiate_permission_form(self):
         # NOTE: this only works for community permission form with role_choices set
@@ -1158,7 +1231,9 @@ class PermissionFormTest(TestCase):
         permissions = self.prClient.get_settable_permissions(return_format="list_of_strings")
 
         # Number of fields on permission form should be permissions x 3
-        self.assertEqual(len(permissions)*3, len(self.permission_form.fields))
+        # FIXME: configurable fields throw this off, hack below is kinda ugly
+        self.assertEqual(len(permissions)*3, 
+            len([p for p in self.permission_form.fields if "configurablefield" not in p]))
 
     def test_add_role_to_permission(self):
 
@@ -1168,13 +1243,13 @@ class PermissionFormTest(TestCase):
         self.assertEqual(permissions_for_role, [])
 
         # add role to permission
-        self.data["4_roles"] = ["assassins"]
+        self.data["4~roles"] = ["assassins"]
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
 
         # Check that it's valid
         self.permission_form.is_valid()
-        self.assertEquals(self.permission_form.cleaned_data["4_roles"], ["assassins"])
+        self.assertEquals(self.permission_form.cleaned_data["4~roles"], ["assassins"])
         
         # Check that it works on save
         self.permission_form.save()
@@ -1191,13 +1266,13 @@ class PermissionFormTest(TestCase):
         self.assertEqual(permissions_for_role, [])
 
         # add role to permission
-        self.data["4_roles"] = ["assassins", "veterans"]  # Use this format since it's a multiple choice field
+        self.data["4~roles"] = ["assassins", "veterans"]  # Use this format since it's a multiple choice field
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
 
         # Check that it's valid
         self.permission_form.is_valid()
-        self.assertEquals(self.permission_form.cleaned_data["4_roles"], ["assassins", "veterans"])
+        self.assertEquals(self.permission_form.cleaned_data["4~roles"], ["assassins", "veterans"])
         
         # Check that it works on save
         self.permission_form.save()
@@ -1218,13 +1293,13 @@ class PermissionFormTest(TestCase):
         self.assertEqual(permissions_for_actor, [])
 
         # Add actor to permission
-        self.data["4_individuals"] = "whitewolf"  # use this format since it's a character field
+        self.data["4~individuals"] = "whitewolf"  # use this format since it's a character field
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
 
         # Check that it's valid
         self.permission_form.is_valid()
-        self.assertEquals(self.permission_form.cleaned_data["4_individuals"], 
+        self.assertEquals(self.permission_form.cleaned_data["4~individuals"], 
             "whitewolf")        
 
         # Check form works on save
@@ -1242,13 +1317,13 @@ class PermissionFormTest(TestCase):
         self.assertEqual(permissions_for_actor, [])
 
         # Add actor to permission
-        self.data["4_individuals"] = "whitewolf blackwidow"  # uses this format since it's a charfield
+        self.data["4~individuals"] = "whitewolf blackwidow"  # uses this format since it's a charfield
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
 
         # Check that it's valid
         self.permission_form.is_valid()
-        self.assertEquals(self.permission_form.cleaned_data["4_individuals"], 
+        self.assertEquals(self.permission_form.cleaned_data["4~individuals"], 
             "whitewolf blackwidow")        
 
         # Check form works on save
@@ -1275,11 +1350,11 @@ class PermissionFormTest(TestCase):
         self.assertEqual(permissions_for_actor, [])
 
         # Add roles to multiple permissions & actors to multiple permissions
-        self.data["4_individuals"] = "whitewolf"
-        self.data["5_individuals"] = "whitewolf blackwidow falcon"
-        self.data["4_roles"] = ["assassins", "veterans"]
-        self.data["2_roles"] = ["assassins", "veterans"]
-        self.data["1_roles"] = ["veterans"]
+        self.data["4~individuals"] = "whitewolf"
+        self.data["5~individuals"] = "whitewolf blackwidow falcon"
+        self.data["4~roles"] = ["assassins", "veterans"]
+        self.data["2~roles"] = ["assassins", "veterans"]
+        self.data["1~roles"] = ["veterans"]
 
         # Create, validate and save form
         self.permission_form = PermissionForm(instance=self.instance, 
@@ -1315,7 +1390,7 @@ class PermissionFormTest(TestCase):
     def test_remove_role_from_permission(self):
 
         # add role to permission
-        self.data["4_roles"] = ["assassins"]
+        self.data["4~roles"] = ["assassins"]
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1326,7 +1401,7 @@ class PermissionFormTest(TestCase):
             'concord.communities.state_changes.AddPeopleToRoleStateChange')
 
         # now remove it
-        self.data["4_roles"] = []
+        self.data["4~roles"] = []
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1338,7 +1413,7 @@ class PermissionFormTest(TestCase):
     def test_remove_roles_from_permission(self):
 
         # add roles to permission
-        self.data["4_roles"] = ["assassins", "veterans"]
+        self.data["4~roles"] = ["assassins", "veterans"]
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1353,7 +1428,7 @@ class PermissionFormTest(TestCase):
             'concord.communities.state_changes.AddPeopleToRoleStateChange')
 
         # now remove them
-        self.data["4_roles"] = []
+        self.data["4~roles"] = []
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1368,7 +1443,7 @@ class PermissionFormTest(TestCase):
     def test_remove_individual_from_permission(self):
         
         # Add actor to permission
-        self.data["4_individuals"] = "whitewolf"  # use this format since it's a character field
+        self.data["4~individuals"] = "whitewolf"  # use this format since it's a character field
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1379,7 +1454,7 @@ class PermissionFormTest(TestCase):
             'concord.communities.state_changes.AddPeopleToRoleStateChange')
 
         # Remove actor from permission
-        self.data["4_individuals"] = ""  # use this format since it's a character field
+        self.data["4~individuals"] = ""  # use this format since it's a character field
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1391,7 +1466,7 @@ class PermissionFormTest(TestCase):
     def test_remove_individuals_from_permission(self):
         
         # Add actors to permission
-        self.data["4_individuals"] = "blackwidow falcon"  # use this format since it's a character field
+        self.data["4~individuals"] = "blackwidow falcon"  # use this format since it's a character field
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1406,7 +1481,7 @@ class PermissionFormTest(TestCase):
             'concord.communities.state_changes.AddPeopleToRoleStateChange')
 
         # Remove actors from permission
-        self.data["4_individuals"] = ""  # use this format since it's a character field
+        self.data["4~individuals"] = ""  # use this format since it's a character field
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1421,11 +1496,11 @@ class PermissionFormTest(TestCase):
     def test_add_and_remove_multiple_from_multiple_permissions(self):
 
         # Add roles to multiple permissions & actors to multiple permissions
-        self.data["4_individuals"] = "whitewolf"
-        self.data["5_individuals"] = "whitewolf blackwidow falcon"
-        self.data["4_roles"] = ["assassins", "veterans"]
-        self.data["2_roles"] = ["assassins", "veterans"]
-        self.data["1_roles"] = ["veterans"]
+        self.data["4~individuals"] = "whitewolf"
+        self.data["5~individuals"] = "whitewolf blackwidow falcon"
+        self.data["4~roles"] = ["assassins", "veterans"]
+        self.data["2~roles"] = ["assassins", "veterans"]
+        self.data["1~roles"] = ["veterans"]
 
         # Create, validate and save form
         self.permission_form = PermissionForm(instance=self.instance, 
@@ -1445,11 +1520,11 @@ class PermissionFormTest(TestCase):
             'AddGovernorStateChange']) 
 
         # Okay, now remove some of these
-        self.data["4_individuals"] = ""
-        self.data["5_individuals"] = "blackwidow falcon"
-        self.data["4_roles"] = []
-        self.data["2_roles"] = ["assassins"]
-        self.data["1_roles"] = ["veterans"]
+        self.data["4~individuals"] = ""
+        self.data["5~individuals"] = "blackwidow falcon"
+        self.data["4~roles"] = []
+        self.data["2~roles"] = ["assassins"]
+        self.data["1~roles"] = ["veterans"]
 
         # Create, validate and save form
         self.permission_form = PermissionForm(instance=self.instance, 
@@ -1497,7 +1572,7 @@ class PermissionFormTest(TestCase):
 
         # Then Steve alters, through the permissions form, who can add people to
         # a role to include Natasha.
-        self.data["4_individuals"] = "blackwidow"
+        self.data["4~individuals"] = "blackwidow"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.data)
         self.permission_form.is_valid()
@@ -1529,7 +1604,7 @@ class MetaPermissionsFormTest(TestCase):
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
-        self.instance = self.commClient.create_community(name="Barbershop Quartet")
+        self.instance = self.commClient.create_community(name="Team Cap")
         self.commClient.set_target(self.instance)
 
         # Make separate clients for Sam and Nat.
@@ -1553,12 +1628,12 @@ class MetaPermissionsFormTest(TestCase):
         self.prClient = PermissionResourceClient(actor=self.user, target=self.instance)
         permissions = self.prClient.get_settable_permissions(return_format="list_of_strings")
         for count, permission in enumerate(permissions):
-            self.permissions_data[str(count) + "_" + "name"] = permission
-            self.permissions_data[str(count) + "_" + "roles"] = []
-            self.permissions_data[str(count) + "_" + "individuals"] = []
+            self.permissions_data[str(count) + "~" + "name"] = permission
+            self.permissions_data[str(count) + "~" + "roles"] = []
+            self.permissions_data[str(count) + "~" + "individuals"] = []
 
         # Give Natasha permission to add people to roles
-        self.permissions_data["4_individuals"] = "blackwidow"
+        self.permissions_data["4~individuals"] = "blackwidow"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.request, data=self.permissions_data)
         self.permission_form.is_valid()
@@ -1568,12 +1643,13 @@ class MetaPermissionsFormTest(TestCase):
         self.target_permission = self.prClient.get_specific_permissions(
             change_type="concord.communities.state_changes.AddPeopleToRoleStateChange")[0]
         self.metapermissions_data = {}
+        
         self.metaClient = PermissionResourceClient(actor=self.user, target=self.target_permission)
         permissions = self.metaClient.get_settable_permissions(return_format="list_of_strings")
         for count, permission in enumerate(permissions):
-            self.metapermissions_data[str(count) + "_" + "name"] = permission
-            self.metapermissions_data[str(count) + "_" + "roles"] = []
-            self.metapermissions_data[str(count) + "_" + "individuals"] = []
+            self.metapermissions_data[str(count) + "~" + "name"] = permission
+            self.metapermissions_data[str(count) + "~" + "roles"] = []
+            self.metapermissions_data[str(count) + "~" + "individuals"] = []        
 
     def test_adding_metapermission_adds_access_to_permission(self):
         # Currently, only Tony is in the Avengers role, only Natasha has permission to 
@@ -1588,7 +1664,7 @@ class MetaPermissionsFormTest(TestCase):
         # add people to roles.  It fails, and we can see that Sam lacks the relevant
         # metapermission and Bucky the relevant permission.
 
-        self.permissions_data["4_individuals"] = "blackwidow whitewolf"
+        self.permissions_data["4~individuals"] = "blackwidow whitewolf"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.samRequest, data=self.permissions_data)
         self.permission_form.is_valid()
@@ -1610,7 +1686,7 @@ class MetaPermissionsFormTest(TestCase):
         # AddPeopleToRole permission.  He alters the metapermission on the AddPeopleToRole 
         # permission, adding the individual Sam.
 
-        self.metapermissions_data["0_individuals"] = "falcon"
+        self.metapermissions_data["0~individuals"] = "falcon"
         self.metapermission_form = MetaPermissionForm(instance=self.target_permission, 
             request=self.request, data=self.metapermissions_data)
         self.metapermission_form.is_valid()
@@ -1623,7 +1699,7 @@ class MetaPermissionsFormTest(TestCase):
 
         # Now Sam can give Bucky permission to add people to roles.
 
-        self.permissions_data["4_individuals"] = "blackwidow whitewolf"
+        self.permissions_data["4~individuals"] = "blackwidow whitewolf"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.samRequest, data=self.permissions_data)
         self.permission_form.is_valid()
@@ -1657,14 +1733,14 @@ class MetaPermissionsFormTest(TestCase):
 
     def test_removing_metapermission_removes_access_to_permission(self):
         # Steve gives Sam ability to add people to permission.
-        self.metapermissions_data["0_individuals"] = "falcon"
+        self.metapermissions_data["0~individuals"] = "falcon"
         self.metapermission_form = MetaPermissionForm(instance=self.target_permission, 
             request=self.request, data=self.metapermissions_data)
         self.metapermission_form.is_valid()
         self.metapermission_form.save()
 
         # Sam can do so.  When he gives Bucky permission to add people to roles, he can.
-        self.permissions_data["4_individuals"] = "blackwidow whitewolf"
+        self.permissions_data["4~individuals"] = "blackwidow whitewolf"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.samRequest, data=self.permissions_data)
         self.permission_form.is_valid()
@@ -1674,7 +1750,7 @@ class MetaPermissionsFormTest(TestCase):
         self.assertCountEqual(roles["avengers"], ["ironman", "scarletwitch"])
 
         # Now Steve removes that ability.
-        self.metapermissions_data["0_individuals"] = ""
+        self.metapermissions_data["0~individuals"] = ""
         self.metapermission_form = MetaPermissionForm(instance=self.target_permission, 
             request=self.request, data=self.metapermissions_data)
         self.metapermission_form.is_valid()
@@ -1685,7 +1761,7 @@ class MetaPermissionsFormTest(TestCase):
             actor="falcon")
         self.assertFalse(permissions_for_actor)
 
-        self.permissions_data["4_individuals"] = "blackwidow whitewolf agentcarter"
+        self.permissions_data["4~individuals"] = "blackwidow whitewolf agentcarter"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.samRequest, data=self.permissions_data)
         self.permission_form.is_valid()
@@ -1715,7 +1791,7 @@ class MetaPermissionsFormTest(TestCase):
         self.assertEqual(target_permission.__class__.__name__, "MockMetaPermission")
 
         # Then we actually update metapermissions via the form.
-        self.metapermissions_data["0_individuals"] = "falcon"
+        self.metapermissions_data["0~individuals"] = "falcon"
         self.metapermission_form = MetaPermissionForm(instance=target_permission, 
             request=self.request, data=self.metapermissions_data)
         self.metapermission_form.is_valid()
@@ -1724,6 +1800,7 @@ class MetaPermissionsFormTest(TestCase):
         # Now that Steve has done that, the specific permission exists.  
         remove_permission = self.prClient.get_specific_permissions(change_type=
             'concord.communities.state_changes.RemovePeopleFromRoleStateChange')
+        ah = PermissionsItem.objects.filter(change_type='concord.communities.state_changes.RemovePeopleFromRoleStateChange')
         self.assertEqual(len(remove_permission), 1)         
 
         # The metapermission Steve created for Sam also exists.
@@ -1733,7 +1810,7 @@ class MetaPermissionsFormTest(TestCase):
         self.assertEqual(perms[0].short_change_type(), "AddActorToPermissionStateChange")
 
         # Sam can add Natasha to the permission "remove people from role".
-        self.permissions_data["7_individuals"] = "blackwidow"
+        self.permissions_data["11~individuals"] = "blackwidow"
         self.permission_form = PermissionForm(instance=self.instance, 
             request=self.samRequest, data=self.permissions_data)
         self.permission_form.is_valid()
@@ -1786,12 +1863,12 @@ class ResourcePermissionsFormTest(TestCase):
 
         # Initial form data
         self.data = {
-            '0_name': 'concord.resources.state_changes.AddItemResourceStateChange',
-            '0_individuals': None, '0_roles': None,
-            '1_name': 'concord.resources.state_changes.ChangeResourceNameStateChange',
-            '1_individuals': None, '1_roles': None,
-            '2_name': 'concord.resources.state_changes.RemoveItemResourceStateChange',
-            '2_individuals': None, '2_roles': None}
+            '0~name': 'concord.resources.state_changes.AddItemResourceStateChange',
+            '0~individuals': None, '0~roles': None,
+            '1~name': 'concord.resources.state_changes.ChangeResourceNameStateChange',
+            '1~individuals': None, '1~roles': None,
+            '2~name': 'concord.resources.state_changes.RemoveItemResourceStateChange',
+            '2~individuals': None, '2~roles': None}
 
     def test_add_and_remove_actor_permission_to_resource_via_form(self):
 
@@ -1802,11 +1879,11 @@ class ResourcePermissionsFormTest(TestCase):
 
         # T'Challa gives her permission to change the name via the individual 
         # actor field on the permission form.
-        self.data['1_individuals'] = "shuri"
+        self.data['1~individuals'] = "shuri"
         form = PermissionForm(instance=self.resource, request=self.request, 
             data=self.data)
         form.is_valid()
-        self.assertEquals(form.cleaned_data['1_individuals'], "shuri")
+        self.assertEquals(form.cleaned_data['1~individuals'], "shuri")
         form.save()
 
         # Now Shuri succeeds.
@@ -1815,11 +1892,11 @@ class ResourcePermissionsFormTest(TestCase):
         self.assertEquals(self.resource.name, "Shuri Rulez")
 
         # T'Challa takes it away again.
-        self.data['1_individuals'] = ""
+        self.data['1~individuals'] = ""
         form = PermissionForm(instance=self.resource, request=self.request, 
             data=self.data)
         form.is_valid()
-        self.assertEquals(form.cleaned_data['1_individuals'], "")
+        self.assertEquals(form.cleaned_data['1~individuals'], "")
         form.save()       
 
         # Shuri can no longer change the name.
@@ -1836,11 +1913,11 @@ class ResourcePermissionsFormTest(TestCase):
 
         # T'Challa gives her permission to change the name via the royal family
         # role field on the permission form.
-        self.data['1_roles'] = ["royalfamily"]
+        self.data['1~roles'] = ["royalfamily"]
         form = PermissionForm(instance=self.resource, request=self.request, 
             data=self.data)
         form.is_valid()
-        self.assertEquals(form.cleaned_data['1_roles'], ["royalfamily"])
+        self.assertEquals(form.cleaned_data['1~roles'], ["royalfamily"])
         form.save()
 
         # Now Shuri succeeds, but Okoye does not.
@@ -1852,11 +1929,11 @@ class ResourcePermissionsFormTest(TestCase):
         self.assertEquals(self.resource.name, "Shuri Rulez")
 
         # T'Challa takes it away again.
-        self.data['1_roles'] = []
+        self.data['1~roles'] = []
         form = PermissionForm(instance=self.resource, request=self.request, 
             data=self.data)
         form.is_valid()
-        self.assertEquals(form.cleaned_data['1_roles'], [])
+        self.assertEquals(form.cleaned_data['1~roles'], [])
         form.save()
 
         # Shuri can no longer change the name.
@@ -1878,7 +1955,7 @@ class ResolutionFieldTest(TestCase):
 
         # Create a community
         self.commClient = CommunityClient(actor=self.user)
-        self.instance = self.commClient.create_community(name="Barbershop Quartet")
+        self.instance = self.commClient.create_community(name="Team Cap")
         self.commClient.set_target(self.instance)
 
         # Make separate clients for Tony, Bucky, Sam.
@@ -2045,8 +2122,7 @@ class ResolutionFieldTest(TestCase):
         self.assertEquals(action.status, "implemented")
 
         # Bucky's action is implemented
-        bucky_action = Action.objects.get(pk=bucky_action.pk)
-        bucky_action.take_action()  # FIXME: this needs to be triggered automatically
+        bucky_action = Action.objects.get(pk=bucky_action.pk)  # Refresh action
         self.assertEquals(bucky_action.status, "implemented")
         self.assertTrue(bucky_action.resolution.is_resolved)
         self.assertTrue(bucky_action.resolution.is_approved)
@@ -2060,8 +2136,7 @@ class ResolutionFieldTest(TestCase):
             action_pk=bucky_action.pk)
         acc = ApprovalConditionClient(target=condition_item, actor=self.user)
         action, result = acc.reject()
-        bucky_action = Action.objects.get(pk=bucky_action.pk)
-        bucky_action.take_action()  # FIXME: this needs to be triggered automatically
+        bucky_action = Action.objects.get(pk=bucky_action.pk)  # Refresh action again
         self.assertEquals(bucky_action.status, "rejected")
         self.assertEquals(self.instance.name, "Friends")
         self.assertTrue(bucky_action.resolution.is_resolved)
@@ -2072,11 +2147,191 @@ class ResolutionFieldTest(TestCase):
 class ConfigurablePermissionTest(TestCase):
 
     def setUp(self):
-        pass
+
+        # Create a user
+        self.user = "blackpanther"
+
+        # Create a community & client
+        self.commClient = CommunityClient(actor=self.user)
+        self.instance = self.commClient.create_community(name="Wakanda")
+        self.commClient.set_target(self.instance)
+
+        # Add roles to community and assign members
+        self.commClient.add_people_to_role(role_name="members", 
+            people_to_add=["shuri", "ayo", "okoye", "ramonda"])
+        self.commClient.add_assigned_role(role_name="royalfamily")
+        self.commClient.add_assigned_role(role_name="doramilaje")
+
+        # Make separate clients for other users.
+        self.okoyeClient = CommunityClient(actor="okoye", target=self.instance)
+        self.shuriClient = CommunityClient(actor="shuri", target=self.instance)
+        self.nakiaClient = CommunityClient(actor="nakia", target=self.instance)
+
+        # Create permission client for T'Challa
+        self.permClient = PermissionResourceClient(actor=self.user, target=self.instance)
+
+        # Create request objects
+        import collections
+        User = collections.namedtuple('User', 'username')
+        Request = collections.namedtuple('Request', 'user')
+        self.request = Request(user=User(username=self.user))
 
     def test_configurable_permission(self):
-        '''I need to implement before I can sketch this out in any detail, but
-        essentially, at a high level, let's say we're testing that T'Challa can
-        configure a metapermission so that Okoye can only add people (Ayo and Aneka)
-        to the dora milaje role and not the royalfamily role.'''
-        pass
+
+        # T'Challa configures a permission so that Okoye can only add 
+        # people to the dora milaje role and not the royal family role.
+        self.permClient.add_permission(
+            permission_type="concord.communities.state_changes.AddPeopleToRoleStateChange",
+            permission_actors=["okoye"],
+            permission_configuration={"role_name": "doramilaje"})
+
+        # Okoye can add Ayo to the dora milaje role
+        action, result = self.okoyeClient.add_people_to_role(role_name="doramilaje", people_to_add=["ayo"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertEquals(roles["doramilaje"], ["ayo"])
+        
+        # Okoye cannot add Ayo to the royal family role
+        self.okoyeClient.add_people_to_role(role_name="royalfamily", people_to_add=["ayo"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertEquals(roles["royalfamily"], [])
+
+    def test_configurable_permission_via_form(self):
+
+        # Create initial data to mess with
+        self.permission_form = PermissionForm(instance=self.instance, 
+            request=self.request)
+        self.data = {}
+        for field_name, field in self.permission_form.fields.items():
+            self.data[field_name] = field.initial
+
+        # Update form to add configurable permission
+        self.data["4~individuals"] = "okoye"
+        self.data["4~configurablefield~role_name"] = 'doramilaje'
+
+        # Now re-create and save form
+        self.permission_form = PermissionForm(instance=self.instance, request=self.request,
+            data=self.data)
+        self.permission_form.is_valid()
+        self.permission_form.save()
+
+        # Okoye can add Ayo to the dora milaje role
+        action, result = self.okoyeClient.add_people_to_role(role_name="doramilaje", people_to_add=["ayo"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertEquals(roles["doramilaje"], ["ayo"])
+        
+        # Okoye cannot add Ayo to the royal family role
+        self.okoyeClient.add_people_to_role(role_name="royalfamily", people_to_add=["ayo"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertEquals(roles["royalfamily"], [])
+
+        # Update permission to allow the reverse
+        self.data["4~configurablefield~role_name"] = 'royalfamily'
+        self.permission_form = PermissionForm(instance=self.instance, request=self.request,
+            data=self.data)
+        self.permission_form.is_valid()
+        self.permission_form.save()
+
+        # Okoye cannot add Aneka to the dora milaje role
+        action, result = self.okoyeClient.add_people_to_role(role_name="doramilaje", people_to_add=["aneka"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertEquals(roles["doramilaje"], ["ayo"])
+        
+        # But she can add Shuri to the royal family role
+        self.okoyeClient.add_people_to_role(role_name="royalfamily", people_to_add=["shuri"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertEquals(roles["royalfamily"], ["shuri"])
+
+    def test_configurable_metapermission(self):
+        # NOTE: This broke my brain a little.  See platform to dos doc for a brief disquisition on 
+        # the four types of potential configurable metapermissions.
+
+        # T'Challa creates a role called 'admins' in community Wakanda and adds Nakia to the role. He
+        # adds Shuri to the royalfamily role.
+        self.commClient.add_assigned_role(role_name="admins")
+        self.commClient.add_people_to_role(role_name="admins", people_to_add=["nakia"])
+        self.commClient.add_people_to_role(role_name="royalfamily", people_to_add=["shuri"])
+
+        # T'Challa creates a configured permission on community Wakanda where people with role
+        # 'admins', as well as the role 'royalfamily', can add people to the role 'doramilaje'.
+        action, permission = self.permClient.add_permission(
+            permission_type="concord.communities.state_changes.AddPeopleToRoleStateChange",
+            permission_role_pairs=["1_admins", "1_royalfamily"],
+            permission_configuration={"role_name": "doramilaje"})
+        roles = permission.get_roles()
+        self.assertCountEqual(roles, ["1_admins", "1_royalfamily"]) 
+
+        # We test that Shuri, in the role royalfamily, can add Ayo to doramilaje, and that 
+        # Nakia, in the role admins, can add Aneka to the doramilaje.
+        self.shuriClient.add_people_to_role(role_name="doramilaje", people_to_add=["ayo"])
+        self.nakiaClient.add_people_to_role(role_name="doramilaje", people_to_add=["aneka"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertCountEqual(roles["doramilaje"], ["ayo", "aneka"])
+
+        # T'Challa then creates a configured metapermission on that configured permission that allows
+        # Okoye to remove the role 'admins' but not the role 'royalfamily'.
+        self.metaPermClient = PermissionResourceClient(actor=self.user, target=permission)
+        self.metaPermClient.add_permission(
+            permission_type="concord.permission_resources.state_changes.RemoveRoleFromPermissionStateChange",
+            permission_actors=["okoye"],
+            permission_configuration={"role_name": "admins"})
+
+        # Okoye tries to remove both.  She is successful in removing admins but not royalfamily.
+        self.okoyePermClient = PermissionResourceClient(actor="okoye", target=permission)
+        self.okoyePermClient.remove_role_from_permission(role_name="admins", 
+            community_pk=self.instance.pk, permission_pk=permission.pk)
+        self.okoyePermClient.remove_role_from_permission(role_name="royalfamily", 
+            community_pk=self.instance.pk, permission_pk=permission.pk)
+        permission = PermissionsItem.objects.get(pk=permission.pk)  # Refresh
+        roles = permission.get_roles()
+        self.assertCountEqual(roles, ["1_royalfamily"])        
+
+        # We check again: Shuri, in the royalfamily role, can add X to the doramilaje, but 
+        # Nakia, as an admin, can no longer add anyone to the dora milaje.
+        self.shuriClient.add_people_to_role(role_name="doramilaje", people_to_add=["xoliswa"])
+        self.nakiaClient.add_people_to_role(role_name="doramilaje", people_to_add=["folami"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertCountEqual(roles["doramilaje"], ["ayo", "aneka", "xoliswa"])
+
+    def test_configurable_metapermission_via_form(self):
+        '''Duplicates above test but does the configurable metapermission part via form.'''
+
+        # Setup (copied from above)
+        self.commClient.add_assigned_role(role_name="admins")
+        self.commClient.add_people_to_role(role_name="admins", people_to_add=["nakia"])
+        self.commClient.add_people_to_role(role_name="royalfamily", people_to_add=["shuri"])
+        action, target_permission = self.permClient.add_permission(
+            permission_type="concord.communities.state_changes.AddPeopleToRoleStateChange",
+            permission_role_pairs=["1_admins", "1_royalfamily"],
+            permission_configuration={"role_name": "doramilaje"})
+        self.shuriClient.add_people_to_role(role_name="doramilaje", people_to_add=["ayo"])
+        self.nakiaClient.add_people_to_role(role_name="doramilaje", people_to_add=["aneka"])
+
+        # T'Challa creates configured metapermission on permission that allows
+        # Okoye to remove the role 'admins' but not the role 'royalfamily'
+        self.metaPermClient = PermissionResourceClient(actor=self.user, target=target_permission)
+        self.metapermissions_data = {}
+        permissions = self.metaPermClient.get_settable_permissions(return_format="permission_object")
+        for count, permission in enumerate(permissions):
+            self.metapermissions_data[str(count) + "~" + "name"] = permission.get_change_type()
+            self.metapermissions_data[str(count) + "~" + "roles"] = []
+            self.metapermissions_data[str(count) + "~" + "individuals"] = []
+            for field in permission.get_configurable_fields():
+                self.metapermissions_data['%s~configurablefield~%s' % (count, field)] = ""
+        self.metapermissions_data["4~configurablefield~role_name"] = "admins"
+        self.metapermissions_data["4~individuals"] = "okoye"
+
+        self.metapermission_form = MetaPermissionForm(request=self.request, instance=target_permission,
+            data=self.metapermissions_data)
+        self.metapermission_form.is_valid()
+        self.metapermission_form.save()
+
+        # Test that it worked (again, copied from above)
+        self.okoyePermClient = PermissionResourceClient(actor="okoye", target=target_permission)
+        action, result = self.okoyePermClient.remove_role_from_permission(role_name="admins", 
+            community_pk=self.instance.pk, permission_pk=target_permission.pk)
+        action, result = self.okoyePermClient.remove_role_from_permission(role_name="royalfamily", 
+            community_pk=self.instance.pk, permission_pk=target_permission.pk)        
+        self.shuriClient.add_people_to_role(role_name="doramilaje", people_to_add=["xoliswa"])
+        self.nakiaClient.add_people_to_role(role_name="doramilaje", people_to_add=["folami"])
+        roles = self.commClient.get_assigned_roles()
+        self.assertCountEqual(roles["doramilaje"], ["ayo", "aneka", "xoliswa"])

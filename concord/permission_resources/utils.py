@@ -25,6 +25,12 @@ class MockMetaPermission:
         self.permitted_object = ct_class.objects.get(pk=self.permitted_object_pk)
         return self.permitted_object
 
+    def get_state_change_objects(self):
+        import importlib, inspect
+        relative_import = ".permission_resources.state_changes"
+        state_changes_module = importlib.import_module(relative_import, package="concord")
+        return inspect.getmembers(state_changes_module) 
+
     def get_owner(self):
         permitted_object = self.get_permitted_object()
         return permitted_object.get_owner()
@@ -32,9 +38,16 @@ class MockMetaPermission:
     def create_self(self, owner):
         from concord.permission_resources.models import PermissionsItem
         permitted_object = self.get_permitted_object()
+        # FIXME: this is a hack to be fixed during ownership refactoring
+        if type(owner) == str:
+            owner_type = "ind"
+        else:
+            owner_type = "com"
+            owner = owner.name
         return PermissionsItem.objects.create(
             permitted_object = permitted_object,
             change_type = self.permission_change_type,
+            owner_type = owner_type,
             owner=owner)
 
 
@@ -121,3 +134,19 @@ def check_permission_inputs(dict_of_inputs):
         return function_wrapper
     return check_permission_inputs_decorator
 
+
+def check_configuration(action, permission):
+
+    # Does permission.configuration contain keys?  If not, the permission is not
+    # configured, so the action passes.
+    if not json.loads(permission.configuration):
+        return True
+
+    # If configuration exists, instantiate the action's change type with its
+    # change data.  
+    from concord.actions.state_changes import create_change_object
+    change_object = create_change_object(action.change_type, action.change_data)
+
+    # Then call check_configuration on the state_change, passing in the permission
+    # configuration data, and return the result.
+    return change_object.check_configuration(permission)

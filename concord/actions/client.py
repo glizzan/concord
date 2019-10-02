@@ -19,12 +19,19 @@ class BaseClient(object):
     def set_target(self, target):
         self.target = target
 
+    def validate_target(self):
+        if not self.target:
+            raise BaseException("Target is required")
+
+    def optionally_overwrite_target(self, target):
+        self.target = target if target else self.target
+        self.validate_target()
+
     def set_actor(self, actor):
         self.actor = actor
 
     def create_and_take_action(self, change):
-        if not self.target:
-            raise BaseException("Target is required")
+        self.validate_target()
         action = create_action(change=change, target=self.target, actor=self.actor)
         return action.take_action()
     
@@ -43,18 +50,58 @@ class BaseClient(object):
         change = sc.DisableFoundationalPermissionStateChange()
         return self.create_and_take_action(change)
 
+    def enable_governing_permission(self) -> Tuple[int, Any]:
+        change = sc.EnableGoverningPermissionStateChange()
+        return self.create_and_take_action(change)
+
+    def disable_governing_permission(self) -> Tuple[int, Any]:
+        change = sc.DisableGoverningPermissionStateChange()
+        return self.create_and_take_action(change)
+
 
 class ActionClient(BaseClient):
 
     # Read only
 
-    def get_action_history_given_target(self, target) -> QuerySet:
-        content_type = ContentType.objects.get_for_model(target)
+    def get_action_given_pk(self, pk):
+        actions = Action.objects.filter(pk=pk)
+        if actions:
+            return actions[0]
+        return None
+
+    def get_action_history_given_target(self, target=None) -> QuerySet:
+        self.optionally_overwrite_target(target=target)
+        content_type = ContentType.objects.get_for_model(self.target)
         return Action.objects.filter(content_type=content_type.id,
-            object_id=target.id)
+            object_id=self.target.id)
 
     def get_action_history_given_actor(self, actor: str) -> QuerySet:
         return Action.objects.filter(actor=actor)
 
+    def get_foundational_actions_given_target(self, target=None) -> QuerySet:
+        self.optionally_overwrite_target(target=target)
+        actions = self.get_action_history_given_target(self.target)
+        changes = sc.foundational_changes()
+        foundational_actions = []
+        for action in actions:
+            if action.change_type in changes:
+                foundational_actions.append(action)
+        return foundational_actions
 
+    def get_governing_actions_given_target(self, target=None) -> QuerySet:
+        self.optionally_overwrite_target(target=target)
+        actions = self.get_action_history_given_target(self.target)
+        governing_actions = []
+        for action in actions:
+            if action.resolution.resolved_through == "governing":
+                governing_actions.append(action)
+        return governing_actions
 
+    def get_owning_actions_given_target(self, target=None) -> QuerySet:
+        self.optionally_overwrite_target(target=target)
+        actions = self.get_action_history_given_target(self.target)
+        owning_actions = []
+        for action in actions:
+            if action.resolution.resolved_through == "foundational":
+                owning_actions.append(action)
+        return owning_actions

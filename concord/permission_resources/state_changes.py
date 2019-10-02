@@ -17,12 +17,14 @@ class PermissionResourceBaseStateChange(BaseStateChange):
 class AddPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Add permission"
 
-    def __init__(self, permission_type, permission_actors, permission_role_pairs):
+    def __init__(self, permission_type, permission_actors, permission_role_pairs, 
+        permission_configuration):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
         self.permission_type = permission_type
         self.permission_actors = permission_actors if permission_actors else []
         self.permission_role_pairs = permission_role_pairs if permission_role_pairs else []
+        self.permission_configuration = permission_configuration
 
     @classmethod
     def get_allowable_targets(cls):
@@ -31,10 +33,16 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         return [Community, SubCommunity, SuperCommunity, Resource, Item]    
 
     def description_present_tense(self):
-        return "add permission of type %s" % (self.permission_type)
+        permission_string = "add permission of type %s" % (self.permission_type)
+        if self.permission_configuration:
+            permission_string += " (configuration: %s)" % (str(self.permission_configuration))
+        return permission_string
 
     def description_past_tense(self):
-        return "added permission of type %s" % (self.permission_type)
+        permission_string = "added permission of type %s" % (self.permission_type)
+        if self.permission_configuration:
+            permission_string += " (configuration: %s)" % (str(self.permission_configuration))
+        return permission_string
 
     def validate(self, actor, target):
         """
@@ -53,6 +61,13 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         for role_pair in self.permission_role_pairs:
             if role_pair:
                 permission.add_role_pair_to_permission(role_pair_to_add=role_pair)
+        if self.permission_configuration:
+            #FIXME: probably not the place to do this formatting :/
+            configuration_dict = {}
+            for key, value in self.permission_configuration.items():
+                if value not in [None, [], ""]:
+                    configuration_dict[key] = value
+            permission.set_configuration(configuration_dict=configuration_dict)
         permission.save()
         return permission
 
@@ -228,6 +243,10 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
     def get_allowable_targets(cls):
         return [PermissionsItem]   
 
+    @classmethod 
+    def get_configurable_fields(self):
+        return ["role_name"]
+
     def description_present_tense(self):
         return "remove role %s (community %d) from permission %d (%s)" % (self.role_name, 
             self.community_pk, self.permission_pk, self.permission.short_change_type())  
@@ -246,6 +265,14 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         del(new_vars)["permission"]
         return json.dumps(new_vars)
 
+    def check_configuration(self, permission):
+        '''All configurations must pass for the configuration check to pass.'''
+        configuration = permission.get_configuration()
+        if "role_name" in configuration:  
+            if self.role_name not in configuration["role_name"]:
+                return False
+        return True
+
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
@@ -253,5 +280,51 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
     def implement(self, actor, target):
         self.permission.remove_role_from_permission(role=self.role_name,
             community=str(self.community_pk))
+        self.permission.save()
+        return self.permission
+
+
+class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange):
+    description = "Change configuration of permission"
+
+    def __init__(self, *, configurable_field_name: str, configurable_field_value: str, 
+        permission_pk: int):
+        self.configurable_field_name = configurable_field_name
+        self.configurable_field_value = configurable_field_value
+        self.permission_pk = permission_pk
+        self.permission = self.look_up_permission()
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [PermissionsItem]   
+
+    def description_present_tense(self):
+        return "change configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
+            self.configurable_field_value, self.permission_pk, self.permission.short_change_type())
+    
+    def description_past_tense(self):
+        return "changed configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
+            self.configurable_field_value, self.permission_pk, self.permission.short_change_type())
+
+    def get_change_data(self):
+        # TODO: make permission a custom field so we don't need to override get_change_data
+        '''
+        Given the python Change object, generates a json list of field names
+        and values.
+        '''
+        new_vars = vars(self)
+        del(new_vars)["permission"]
+        return json.dumps(new_vars)
+
+    def validate(self, actor, target):
+        # TODO: put real logic here
+        return True
+    
+    def implement(self, actor, target):
+        configuration = self.permission.get_configuration()
+        # FIXME: might there be problems with formatting of configurable field value? like, how is a 
+        # list of role names formatted?
+        configuration[self.configurable_field_name] = self.configurable_field_value
+        self.permission.set_configuration(configuration)
         self.permission.save()
         return self.permission

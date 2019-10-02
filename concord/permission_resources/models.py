@@ -58,6 +58,7 @@ class PermissionsItem(PermissionedModel):
     roles = models.CharField(max_length=500)
 
     change_type = models.CharField(max_length=200)  # Replace with choices field???
+    configuration = models.CharField(max_length=5000, default='{}')
 
     def get_name(self):
         return "Permission %s (for %s on %s)" % (str(self.pk), self.change_type, self.permitted_object)
@@ -65,7 +66,25 @@ class PermissionsItem(PermissionedModel):
     def get_permitted_object(self):
         return self.permitted_object
 
+    def display_string(self):
+        display_string = ""
+        actor_names = self.get_actors()
+        role_names = self.get_role_names()
+        if actor_names:
+            display_string += "individuals " + actor_names
+        if actor_names and role_names:
+            display_string += " and "
+        if role_names:
+            display_string += "those with roles " + role_names
+        display_string += " have permission to " + self.change_type.split(".")[-1]
+        return display_string
+
     # Permissions-specific helpers
+
+    def get_condition(self):
+        from concord.conditionals.client import PermissionConditionalClient
+        pcc = PermissionConditionalClient(actor="system", target=self)
+        return pcc.get_condition_template()
 
     def get_target(self):
         return self.resource.permitted_object
@@ -76,6 +95,12 @@ class PermissionsItem(PermissionedModel):
     def match_change_type(self, change_type):
         return self.change_type == change_type
 
+    def get_configuration(self):
+        return json.loads(self.configuration) if self.configuration else {}
+
+    def set_configuration(self, configuration_dict):
+        self.configuration = json.dumps(configuration_dict)
+        
     def get_actors(self):
         return json.loads(self.actors) if self.actors else []
 

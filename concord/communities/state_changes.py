@@ -47,6 +47,12 @@ class AddGovernorStateChange(BaseStateChange):
         from concord.communities.models import Community, SubCommunity, SuperCommunity
         return [Community, SubCommunity, SuperCommunity]
 
+    def description_present_tense(self):
+        return "add %s as governor in" % (self.governor_name)  
+
+    def description_past_tense(self):
+        return "added %s as governor in" % (self.governor_name)  
+
     def validate(self, actor, target):
         """
         TODO: put real logic here
@@ -61,6 +67,37 @@ class AddGovernorStateChange(BaseStateChange):
         return target
 
 
+class RemoveGovernorStateChange(BaseStateChange):
+    description = "Remove governor from community"
+
+    def __init__(self, governor_name):
+        self.governor_name = governor_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "remove %s as governor in" % (self.governor_name)  
+
+    def description_past_tense(self):
+        return "removed %s as governor in" % (self.governor_name)  
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        # FIXME: if we forget to accidentally add this state change to our list of foundational
+        # changes we could have access issues
+        target.authorityhandler.remove_governor(self.governor_name)
+        target.authorityhandler.save()
+        return target
+
+
 class AddGovernorRoleStateChange(BaseStateChange):
     description = "Add role of governor to community"
 
@@ -71,6 +108,12 @@ class AddGovernorRoleStateChange(BaseStateChange):
     def get_allowable_targets(cls):
         from concord.communities.models import Community, SubCommunity, SuperCommunity
         return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "add role %s as governor in" % (self.role_name)  
+
+    def description_past_tense(self):
+        return "added role %s as governor in" % (self.role_name)  
 
     def validate(self, actor, target):
         """
@@ -87,6 +130,38 @@ class AddGovernorRoleStateChange(BaseStateChange):
         return target
 
 
+class RemoveGovernorRoleStateChange(BaseStateChange):
+    description = "Remove role of governor from community"
+
+    def __init__(self, role_name):
+        self.role_name = role_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "remove role %s as governor in" % (self.role_name)  
+
+    def description_past_tense(self):
+        return "removed role %s as governor in" % (self.role_name) 
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        # FIXME: if we forget to accidentally add this state change to our list of foundational
+        # changes we could have access issues
+        # NOTE: we assume the role added is ALWAYS in the target community
+        target.authorityhandler.remove_governor_role(self.role_name, target.pk)
+        target.authorityhandler.save()
+        return target
+
+
 class AddOwnerStateChange(BaseStateChange):
     description = "Add owner to community"
 
@@ -97,6 +172,12 @@ class AddOwnerStateChange(BaseStateChange):
     def get_allowable_targets(cls):
         from concord.communities.models import Community, SubCommunity, SuperCommunity
         return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "add %s as owner in" % (self.owner_name)  
+
+    def description_past_tense(self):
+        return "added %s as owner in" % (self.owner_name)  
 
     def validate(self, actor, target):
         """
@@ -112,6 +193,37 @@ class AddOwnerStateChange(BaseStateChange):
         return target
 
 
+class RemoveOwnerStateChange(BaseStateChange):
+    description = "Remove owner from community"
+
+    def __init__(self, owner_name):
+        self.owner_name = owner_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "remove %s as owner in" % (self.owner_name)  
+
+    def description_past_tense(self):
+        return "removed %s as owner in" % (self.owner_name) 
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        # FIXME: if we forget to accidentally add this state change to our list of foundational
+        # changes we could have access issues
+        target.authorityhandler.remove_owner(self.owner_name)
+        target.authorityhandler.save()
+        return target
+
+
 class AddOwnerRoleStateChange(BaseStateChange):
     description = "Add role of owner to community"
 
@@ -122,6 +234,12 @@ class AddOwnerRoleStateChange(BaseStateChange):
     def get_allowable_targets(cls):
         from concord.communities.models import Community, SubCommunity, SuperCommunity
         return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "add role %s as owner in" % (self.role_name)  
+
+    def description_past_tense(self):
+        return "added role %s as owner in" % (self.role_name) 
 
     def validate(self, actor, target):
         """
@@ -134,6 +252,38 @@ class AddOwnerRoleStateChange(BaseStateChange):
         # changes we could have access issues
         # NOTE: we assume the role added is ALWAYS in the target community
         target.authorityhandler.add_owner_role(self.role_name, target.pk)
+        target.authorityhandler.save()
+        return target
+
+
+class RemoveOwnerRoleStateChange(BaseStateChange):
+    description = "Remove role from owners of community"
+
+    def __init__(self, role_name):
+        self.role_name = role_name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        return [Community, SubCommunity, SuperCommunity]
+
+    def description_present_tense(self):
+        return "remove role %s as owner in" % (self.role_name)  
+
+    def description_past_tense(self):
+        return "remove role %s as owner in" % (self.role_name) 
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        # FIXME: if we forget to accidentally add this state change to our list of foundational
+        # changes we could have access issues
+        # NOTE: we assume the role added is ALWAYS in the target community
+        target.authorityhandler.remove_owner_role(self.role_name, target.pk)
         target.authorityhandler.save()
         return target
 
@@ -205,11 +355,23 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         from concord.communities.models import Community, SubCommunity, SuperCommunity
         return [Community, SubCommunity, SuperCommunity]
 
+    @classmethod 
+    def get_configurable_fields(self):
+        return ["role_name"]
+
     def description_present_tense(self):
         return "add %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
 
     def description_past_tense(self):
         return "added %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
+
+    def check_configuration(self, permission):
+        '''All configurations must pass for the configuration check to pass.'''
+        configuration = permission.get_configuration()
+        if "role_name" in configuration:  
+            if self.role_name not in configuration["role_name"]:
+                return False
+        return True
 
     def validate(self, actor, target):
         return True

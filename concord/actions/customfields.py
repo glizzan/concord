@@ -12,6 +12,15 @@ class Resolution:
     def __init__(self, *, status, resolved_through=None, role=None, 
         condition=None):
 
+        # Initialize attributes
+        self.is_resolved = None
+        self.is_approved = None
+        self.resolved_through = None
+        self.passed_as = None
+        self.role = None
+
+        self.condition = condition
+
         if status in ["approved", "rejected", "implemented"]:
             self.status = status
             self.is_resolved = True
@@ -21,7 +30,7 @@ class Resolution:
         else: 
             raise ValueError("Status passed to Resolution object must be ",
                 " approved, rejected, implemented or sent, was: ", status)
-        
+
         if self.is_resolved:
 
             self.is_approved = True if self.status in ["approved", "implemented"] else False
@@ -40,15 +49,6 @@ class Resolution:
                 else:
                     self.passed_as = "individual"
                     self.role = None
-        
-        else:
-
-            self.is_approved = None
-            self.resolved_through = None
-            self.passed_as = None
-            self.role = None
-
-        self.condition = condition
 
     def __str__(self):
         # FIXME: should a __str__ be this complicated?

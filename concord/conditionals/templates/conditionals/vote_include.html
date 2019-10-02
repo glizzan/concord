@@ -1,0 +1,15 @@
+
+<h2>Please select your vote</h2>
+
+<a href="{% url 'conditionals:cast_vote' action_pk=action.pk selection='yea' %}">
+        <button>Yes</button></a>
+
+<a href="{% url 'conditionals:cast_vote' action_pk=action.pk selection='nay' %}">        
+        <button>No</button></a>
+
+{% if condition.allow_abstain %}
+
+        <a href="{% url 'conditionals:cast_vote' action_pk=action.pk selection='abstain' %}">
+                <button>Abstain</button></a>
+
+{% endif %}

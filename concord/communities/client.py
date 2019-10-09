@@ -3,11 +3,12 @@ from typing import Tuple, Any
 
 from django.db.models import Model
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import User
 
 from concord.actions.client import BaseClient
 from concord.actions.models import PermissionedModel
 
-from concord.communities.models import Community, AuthorityHandler, RoleSet
+from concord.communities.models import Community
 from concord.communities import state_changes as sc
 
 
@@ -52,8 +53,11 @@ class CommunityClient(BaseClient):
 
     def create_community(self, *, name: str) -> Community:
         content_type = ContentType.objects.get_for_model(self.actor)
-        return Community.objects.create(name=name, creator=self.actor.username,
-            owner_content_type=content_type, owner_object_id=self.actor.id)
+        community = Community(name=name, owner_content_type=content_type, 
+            owner_object_id=self.actor.id)
+        community.roles.initialize_with_creator(creator=self.actor.pk)
+        community.save()
+        return community
 
     # Read methods which require target to be set
 
@@ -61,51 +65,68 @@ class CommunityClient(BaseClient):
         return self.target
 
     def get_members(self) -> list:
-        return self.target.roleset.list_users_given_role("members")
+        # TODO: currently members are stored as pks, but we need to get them
+        # as user models.
+        member_pks = self.target.roles.get_users_given_role("members")
+        user_list = [User.objects.get(pk=pk) for pk in member_pks]
+        return user_list
 
-    def get_assigned_roles(self):
-        return self.target.roleset.get_assigned_roles()
+    def get_roles(self):
+        return self.target.roles.get_roles()
 
-    def get_assigned_role_names(self):
-        return list(self.target.roleset.get_assigned_roles().keys())
+    def get_custom_roles(self):
+        return self.target.roles.get_custom_roles()
+
+    def get_role_names(self):
+        return self.target.roles.get_role_names()
 
     def get_users_given_role(self, *, role_name: str):
-        return self.target.roleset.list_users_given_role(role_name)
+        return self.target.roles.get_users_given_role(role_name)
 
     def get_ownership_info(self, shorten_roles=False) -> dict:
-        owner_data = self.target.authorityhandler.get_owners()
+        owner_data = self.target.roles.get_owners()
         if shorten_roles:
             owner_data["roles"] = [role.split("_")[1] for role in owner_data["roles"]]
         return owner_data
 
     def get_governorship_info(self, shorten_roles=False) -> dict:
-        governor_data = self.target.authorityhandler.get_governors()
+        governor_data = self.target.roles.get_governors()
         if shorten_roles:
             governor_data["roles"] = [role.split("_")[1] for role in governor_data["roles"]]
         return governor_data
 
-    def has_foundational_authority(self, *, actor: str) -> bool:  # Also returns role
-        authHandler = AuthorityHandler.objects.get(community=self.target)
-        return authHandler.is_owner(actor)
+    def has_foundational_authority(self, *, actor) -> bool:  # Also returns role
+        return self.target.roles.is_owner(actor.pk) 
 
     def has_governing_authority(self, *, actor) -> bool:  # Also returns role
-        authHandler = AuthorityHandler.objects.get(community=self.target)
-        return authHandler.is_governor(actor)
+        return self.target.roles.is_governor(actor.pk) # TODO: actor should be pk
 
-    def has_role_in_community(self, *, role: str, actor: str) -> bool:
-        return self.target.roleset.user_has_assigned_role(role, actor)
+    def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:
+        return self.target.roles.has_specific_role(role, actor_pk)
 
     # State changes
 
     def make_self_owned(self):
         pass
 
-    def add_governor(self, *, governor_name: str) -> Tuple[int, Any]:
-        change = sc.AddGovernorStateChange(governor_name=governor_name)
+    def add_member(self, member_pk: int) -> Tuple[int, Any]:
+        change = sc.AddMemberStateChange(member_pk=member_pk)
         return self.create_and_take_action(change)
 
-    def remove_governor(self, *, governor_name: str) -> Tuple[int, Any]:
-        change = sc.RemoveGovernorStateChange(governor_name=governor_name)
+    def add_members(self, member_pk_list: list) -> Tuple[int, Any]:
+        change = sc.AddMembersStateChange(member_pk_list=member_pk_list)
+        return self.create_and_take_action(change)
+
+    def remove_member(self, member_pk: int) -> Tuple[int, Any]:
+        change = sc.RemoveMemberStateChange(member_pk=member_pk)
+        return self.create_and_take_action(change)
+
+    def add_governor(self, *, governor_pk: int) -> Tuple[int, Any]:
+        change = sc.AddGovernorStateChange(governor_pk=governor_pk)
+        return self.create_and_take_action(change)
+
+    def remove_governor(self, *, governor_pk: int) -> Tuple[int, Any]:
+        change = sc.RemoveGovernorStateChange(governor_pk=governor_pk)
         return self.create_and_take_action(change)
 
     def add_governor_role(self, *, governor_role: str) -> Tuple[int, Any]:
@@ -116,12 +137,12 @@ class CommunityClient(BaseClient):
         change = sc.RemoveGovernorRoleStateChange(role_name=governor_role)
         return self.create_and_take_action(change)
 
-    def add_owner(self, *, owner_name: str) -> Tuple[int, Any]:
-        change = sc.AddOwnerStateChange(owner_name=owner_name)
+    def add_owner(self, *, owner_pk: int) -> Tuple[int, Any]:
+        change = sc.AddOwnerStateChange(owner_pk=owner_pk)
         return self.create_and_take_action(change)
 
-    def remove_owner(self, *, owner_name: str) -> Tuple[int, Any]:
-        change = sc.RemoveOwnerStateChange(owner_name=owner_name)
+    def remove_owner(self, *, owner_pk: int) -> Tuple[int, Any]:
+        change = sc.RemoveOwnerStateChange(owner_pk=owner_pk)
         return self.create_and_take_action(change)
 
     def add_owner_role(self, *, owner_role: str) -> Tuple[int, Any]:
@@ -132,17 +153,15 @@ class CommunityClient(BaseClient):
         change = sc.RemoveOwnerRoleStateChange(role_name=owner_role)
         return self.create_and_take_action(change)
 
-    # TODO: add remove versions of governor, owner, gov role, owner role SCs
-
     def change_name(self, *, new_name: str) -> Tuple[int, Any]:
         change = sc.ChangeNameStateChange(new_name=new_name)
         return self.create_and_take_action(change)
 
-    def add_assigned_role(self, *, role_name: str) -> Tuple[int, Any]:
+    def add_role(self, *, role_name: str) -> Tuple[int, Any]:
         change = sc.AddRoleStateChange(role_name=role_name)
         return self.create_and_take_action(change)
 
-    def remove_assigned_role(self, *, role_name: str) -> Tuple[int, Any]:
+    def remove_role(self, *, role_name: str) -> Tuple[int, Any]:
         change = sc.RemoveRoleStateChange(role_name=role_name)
         return self.create_and_take_action(change)
 
@@ -152,14 +171,6 @@ class CommunityClient(BaseClient):
 
     def remove_people_from_role(self, *, role_name: str, people_to_remove: list) -> Tuple[int, Any]:
         change = sc.RemovePeopleFromRoleStateChange(role_name=role_name, people_to_remove=people_to_remove)
-        return self.create_and_take_action(change)
-
-    def add_member(self, *, name: str) -> Tuple[int, Any]:
-        change = sc.AddPeopleToRoleStateChange(role_name="members", people_to_add=[name])
-        return self.create_and_take_action(change)
-
-    def remove_member(self, *, name: str) -> Tuple[int, Any]:
-        change = sc.RemovePeopleFromRoleStateChange(role_name="members", people_to_remove=[name])
         return self.create_and_take_action(change)
 
     # Complex/multiple state changes
@@ -232,12 +243,12 @@ class CommunityClient(BaseClient):
 
         actions = []
 
-        existing_roles = self.get_assigned_roles()
+        existing_roles = self.get_roles()
 
         for index, role in role_data.items():
             # Check if role exists, if not make it
             if role["rolename"] not in existing_roles:
-                action, result = self.add_assigned_role(role_name=role["rolename"])
+                action, result = self.add_role(role_name=role["rolename"])
                 actions.append(action)
 
         return actions
@@ -252,7 +263,7 @@ class CommunityClient(BaseClient):
 
         for index, role in role_data.items():
 
-            member_data = role["members"].split(" ")
+            member_data = [int(pk) for pk in role["members"]]
             previous_members = self.get_users_given_role(role_name=role["rolename"])
             if not previous_members:  
                 previous_members = []  # returns nonetype if no role exists, which breaks set comparison

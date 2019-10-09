@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.models import PermissionedModel
 from concord.permission_resources.utils import check_permission_inputs
+from concord.permission_resources.customfields import ActorList, ActorListField
 
 
 class PermissionsItem(PermissionedModel):
@@ -17,7 +18,7 @@ class PermissionsItem(PermissionedModel):
     change_type -> specifies what action the permission covers
 
     actors -> individually listed people
-    roles -> reference to roleset specified in community
+    roles -> reference to roles specified in community
 
     if someone matches an actor OR a role they have the permission. actors are checked first.
 
@@ -28,17 +29,16 @@ class PermissionsItem(PermissionedModel):
     permitted_object = GenericForeignKey('permitted_object_content_type', 'permitted_object_id')
 
     # FIXME: both actors & roles are list of strings saved as json, need to be custom field
-    actors = models.CharField(max_length=200)  
+    actors = ActorListField(default=ActorList) # Defaults to empty ActorList object  
     roles = models.CharField(max_length=500)
 
     change_type = models.CharField(max_length=200)  # Replace with choices field???
     configuration = models.CharField(max_length=5000, default='{}')
 
+    # Get model-level information
+
     def get_name(self):
         return "Permission %s (for %s on %s)" % (str(self.pk), self.change_type, self.permitted_object)
-
-    def get_permitted_object(self):
-        return self.permitted_object
 
     def display_string(self):
         display_string = ""
@@ -53,15 +53,22 @@ class PermissionsItem(PermissionedModel):
         display_string += " have permission to " + self.change_type.split(".")[-1]
         return display_string
 
-    # Permissions-specific helpers
+    # Get misc info
+
+    def get_target(self):
+        # FIXME: does this get used? what does it do?
+        return self.resource.permitted_object
+
+    def get_permitted_object(self):
+        return self.permitted_object
 
     def get_condition(self):
+        """Get condition set on permission"""
         from concord.conditionals.client import PermissionConditionalClient
         pcc = PermissionConditionalClient(system=True, target=self)
         return pcc.get_condition_template()
 
-    def get_target(self):
-        return self.resource.permitted_object
+    # Get change type and configuration info (replace with customfield?)
 
     def short_change_type(self):
         return self.change_type.split(".")[-1]
@@ -74,17 +81,27 @@ class PermissionsItem(PermissionedModel):
 
     def set_configuration(self, configuration_dict):
         self.configuration = json.dumps(configuration_dict)
-        
-    def get_actors(self):
-        return json.loads(self.actors) if self.actors else []
+    
+    # ActorList-related methods
+
+    def get_actors(self, as_instances=False):
+        if as_instances:
+            return self.actors.as_instances()
+        return self.actors.as_pks()
+
+    def get_actor_names(self):
+        return " ".join([user.username for user in self.actors.as_instances()])
+
+    def add_actors_to_permission(self, *, actors: list):
+        self.actors.add_actors(actors)
+    
+    def remove_actors_from_permission(self, *, actors: list):
+        self.actors.remove_actors(actors)
+
+    # RoleList-related methods
 
     def get_roles(self):
         return json.loads(self.roles) if self.roles else []
-
-    def get_actor_names(self):
-        if self.get_actors():
-            return " ".join(self.get_actors())
-        return ""
 
     # NOTE: I'm using this method with the assumption that all roles 
     # are from the same community, which may not always be true.
@@ -95,51 +112,6 @@ class PermissionsItem(PermissionedModel):
             community, role_name = role_pair.split("_")
             role_names.append(role_name)
         return role_names
-
-    def match_actor(self, actor):
-
-        # FIXME: Temporary fix so long as actor sometimes is referenced by username
-        actor = actor.username
-
-        actors = self.get_actors()
-
-        if actor in actors:
-            return True, None
-
-        role_pairs = self.get_roles()  # FIXME: "role_pair" is not super descriptive
-
-        from concord.communities.client import CommunityClient
-        cc = CommunityClient(system=True)
-        for pair in role_pairs:
-            community_pk, role = pair.split("_")  # FIXME: bit hacky
-            cc.set_target_community(community_pk=community_pk)
-            if cc.has_role_in_community(role=role, actor=actor):
-                return True, pair
-
-        # TODO: thing the above through.  If every role is queried separately, that's a lot of 
-        # lookups.  You could provide the roles to each community in bulk?
-
-        return False, None
-
-    # Write stuff called by statechanges
-
-    @check_permission_inputs(dict_of_inputs={'actor': 'simple_string'})
-    def add_actor_to_permission(self, *, actor: str):
-        actors = self.get_actors()
-        if actor not in actors:
-            actors.append(actor)
-            self.actors = json.dumps(actors)
-        else:
-            print("Actor ", actor, " already in permission item actors")
-    
-    @check_permission_inputs(dict_of_inputs={'actor': 'simple_string'})
-    def remove_actor_from_permission(self, *, actor: str):
-        actors = self.get_actors()
-        if actor in actors:
-            actors.remove(actor)
-            self.actors = json.dumps(actors)
-        else:
-            print("Actor ", actor, " not in permission item actors")
 
     @check_permission_inputs(dict_of_inputs={'role': 'simple_string', 'community': 'string_pk'})
     def add_role_to_permission(self, *, role: str, community: str):
@@ -179,3 +151,28 @@ class PermissionsItem(PermissionedModel):
         else:
             print("Role pair to delete, ", role_pair_to_remove, ", is not in permission item roles")
 
+
+    def match_actor(self, actor):
+
+        # FIXME: Temporary fix so long as actor sometimes is referenced by username
+        actor = actor.pk
+
+        actors = self.get_actors()
+
+        if actor in actors:
+            return True, None
+
+        role_pairs = self.get_roles()  # FIXME: "role_pair" is not super descriptive
+
+        from concord.communities.client import CommunityClient
+        cc = CommunityClient(system=True)
+        for pair in role_pairs:
+            community_pk, role = pair.split("_")  # FIXME: bit hacky
+            cc.set_target_community(community_pk=community_pk)
+            if cc.has_role_in_community(role=role, actor_pk=actor):
+                return True, pair
+
+        # TODO: thing the above through.  If every role is queried separately, that's a lot of 
+        # lookups.  You could provide the roles to each community in bulk?
+
+        return False, None

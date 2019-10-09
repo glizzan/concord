@@ -23,9 +23,9 @@ class AddConditionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.communities.models import Community
         from concord.permission_resources.models import PermissionsItem
-        return [Community, SubCommunity, SuperCommunity, PermissionsItem]    
+        return [Community, PermissionsItem]    
 
     def description_present_tense(self):
         return "add condition %s to %s" % (self.condition_type, self.conditioning_choices)  
@@ -59,9 +59,9 @@ class RemoveConditionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.communities.models import Community
         from concord.permission_resources.models import PermissionsItem
-        return [Community, SubCommunity, SuperCommunity, PermissionsItem]    
+        return [Community, PermissionsItem]    
 
     def description_present_tense(self):
         return "remove condition %s" % (self.condition_pk)  
@@ -91,9 +91,9 @@ class ChangeConditionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.communities.models import Community
         from concord.permission_resources.models import PermissionsItem
-        return [Community, SubCommunity, SuperCommunity, PermissionsItem]    
+        return [Community, PermissionsItem]    
 
     def description_present_tense(self):
         return "change condition %s" % (self.condition_pk)  

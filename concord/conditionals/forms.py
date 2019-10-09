@@ -59,7 +59,7 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
 
         # Add permissions info
         self.determine_owner(owned_object=self.target_permission)
-        self.set_role_choices() 
+        self.set_choices() 
         self.initialize_permission_fields() 
         if hasattr(self, "condition") and self.condition:
             self.add_permission_initial_data()

@@ -101,8 +101,25 @@ def format_as_list_of_strings(permissions):
     return formatted_permissions
 
 
+def create_permission_outside_pipeline(permission_dict, condition_item, condition_template):
+    '''Helper method used internally to bypass permissions pipeline when creating 
+    a permission.'''
+    from concord.permission_resources.models import PermissionsItem
+    permission = PermissionsItem(permitted_object=condition_item)            
+    if "permission_actors" in permission_dict:
+        permission.actors.add_actors(actors=permission_dict["permission_actors"])
+    if "permission_roles" in permission_dict:
+        permission.roles = json.dumps(permission_dict["permission_roles"])
+        # permission.roles.add_roles(roles=permission_dict["permission_roles"])
+    permission.change_type = permission_dict["permission_type"]
+    permission.configuration = permission_dict["permission_configuration"]
+    permission.owner = condition_template.get_owner()
+    permission.owner_type = condition_template.owner_type
+    permission.save()
+
 
 # Checks inputs of actors, roles, etc.
+# FIXME: should be able to delete this once custom fields are implemented
 def check_permission_inputs(dict_of_inputs):
     """
     Decorator to help with type issues, example usage: 

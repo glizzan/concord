@@ -14,7 +14,7 @@ class LeadershipForm(forms.Form):
 
         from concord.communities.client import CommunityClient
         self.commClient = CommunityClient(actor=self.request.user, target=self.instance)
-        ROLE_CHOICES = [(role,role) for role in self.commClient.get_assigned_roles()]
+        ROLE_CHOICES = [(role,role) for role in self.commClient.get_roles()]
 
         # Set up owner list ('ol') fields
         owners = self.instance.list_owners()
@@ -55,13 +55,13 @@ class LeadershipForm(forms.Form):
 
         # Process owner list data
         if self.cleaned_data['ol_individuals']:
-            leadership_data["ol"]["individuals"] = self.cleaned_data['ol_individuals'].split(" ")
+            leadership_data["ol"]["individuals"] = self.cleaned_data['ol_individuals']
         if self.cleaned_data["ol_roles"]:
             leadership_data["ol"]["roles"] = self.cleaned_data['ol_roles']
 
         # Process governor list data
         if self.cleaned_data['gl_individuals']:
-            leadership_data["gl"]["individuals"] = self.cleaned_data['gl_individuals'].split(" ")
+            leadership_data["gl"]["individuals"] = self.cleaned_data['gl_individuals']
         if self.cleaned_data["gl_roles"]:
             leadership_data["gl"]["roles"] = self.cleaned_data['gl_roles']
 
@@ -87,23 +87,25 @@ class RoleForm(forms.Form):
         self.request = kwargs.pop('request')
         super().__init__(*args, **kwargs)
 
+        self.commClient = CommunityClient(target=self.instance, system=True)
+        ACTOR_CHOICES = [(user.pk, user.username) for user in self.commClient.get_members()]
+
         # Get list of existing roles and generate fields
         count = 0
-        for role_name, members in self.instance.roleset.get_assigned_roles().items():
+        for role_name, members in self.instance.roles.get_custom_roles().items():
 
             self.fields['%s~rolename' % count] = forms.CharField(label="Role Name", 
                 initial=role_name, required=True)
             
-            self.fields['%s~members' % count] = forms.CharField(label="Members", 
-                initial=" ".join(members), required=False, 
-                help_text="members must be separated by spaces")            
+            self.fields['%s~members' % count] = forms.MultipleChoiceField(label="Members",
+                choices=ACTOR_CHOICES, required=False, initial=members)    
 
             count += 1
 
         # Add an additional blank row in case user wants to add a role
         self.fields['%s~rolename' % count] = forms.CharField(label="Role Name", required=False)
-        self.fields['%s~members' % count] = forms.CharField(label="Members", 
-            required=False, help_text="members must be separated by spaces")
+        self.fields['%s~members' % count] = forms.MultipleChoiceField(label="Members",
+            choices=ACTOR_CHOICES, required=False)  
 
     def process_roles(self):
         """Process form fields into roles"""
@@ -116,7 +118,7 @@ class RoleForm(forms.Form):
             if field_type == "rolename":
                 role_data[count]["rolename"] = value
             if field_type == "members":
-                role_data[count]["members"] = value.strip()                
+                role_data[count]["members"] = value               
 
         # Not the best place for this, but.  Deletes empty fields.
         for key in list(role_data.keys()):

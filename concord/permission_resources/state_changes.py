@@ -28,9 +28,9 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.communities.models import Community
         from concord.resources.models import Resource, Item
-        return [Community, SubCommunity, SuperCommunity, Resource, Item]    
+        return [Community, Resource, Item]    
 
     def description_present_tense(self):
         permission_string = "add permission of type %s" % (self.permission_type)
@@ -55,9 +55,8 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         permission.owner = actor # Do we care about owner type here?
         permission.permitted_object = target
         permission.change_type = self.permission_type        
-        for actor in self.permission_actors:
-            if actor:
-                permission.add_actor_to_permission(actor=actor)
+        if self.permission_actors:  # FIXME: maybe don't need to check if empty here
+            permission.add_actors_to_permission(actors=self.permission_actors)
         for role_pair in self.permission_role_pairs:
             if role_pair:
                 permission.add_role_pair_to_permission(role_pair_to_add=role_pair)
@@ -80,9 +79,9 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
+        from concord.communities.models import Community
         from concord.resources.models import Resource, Item
-        return [Community, SubCommunity, SuperCommunity, Resource, Item]    
+        return [Community, Resource, Item]    
 
     def description_present_tense(self):
         return "remove permission %d" % (self.item_pk)  
@@ -143,7 +142,7 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target):
-        self.permission.add_actor_to_permission(actor=self.actor_to_add)
+        self.permission.add_actors_to_permission(actors=[self.actor_to_add])
         self.permission.save()
         return self.permission
 
@@ -183,7 +182,7 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target):
-        self.permission.remove_actor_from_permission(actor=self.actor_to_remove)
+        self.permission.remove_actors_from_permission(actors=[self.actor_to_remove])
         self.permission.save()
         return self.permission
 

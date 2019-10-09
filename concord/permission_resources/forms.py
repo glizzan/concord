@@ -47,13 +47,16 @@ class PermissionFormMixin(object):
         # TODO: handle individually owned resources
 
     # NOTE: this was originally a separate mixin and may need to be again
-    def set_role_choices(self):
+    def set_choices(self):
 
         if self.owned_by_community:
             self.commClient.set_target(target=self.owner)
-            self.ROLE_CHOICES = [(role,role) for role in self.commClient.get_assigned_roles()]
+            self.ROLE_CHOICES = [(role,role) for role in self.commClient.get_roles()]
+            self.ACTOR_CHOICES = [(user.pk, user.username) for user in self.commClient.get_members()]
         else:
             self.ROLE_CHOICES = None
+            self.ACTOR_CHOICES = None
+
 
     def get_settable_permissions(self):
         # content of return format doesn't matter, just overrides default
@@ -73,8 +76,10 @@ class PermissionFormMixin(object):
                 widget=forms.widgets.Textarea(attrs={'readonly':'True', 
                     'rows': 2, 'cols':40}))
             
-            self.fields['%s~individuals' % count] = forms.CharField(
-                label="Individuals with this permission", required=False)
+            ACTOR_CHOICES = self.ACTOR_CHOICES if self.ACTOR_CHOICES else [('none', "Add some people!")]
+            self.fields['%s~individuals' % count] = forms.MultipleChoiceField(
+                label="Individuals with this permission", required=False,
+                choices=ACTOR_CHOICES)
 
             if self.ROLE_CHOICES:
                 self.fields['%s~roles' % count] = forms.MultipleChoiceField(
@@ -88,7 +93,7 @@ class PermissionFormMixin(object):
             # Add initial values from existing ("specific") permissions.
             specific_permissions = self.prClient.get_specific_permissions(change_type=permission.get_change_type())
             for specific_permission in specific_permissions:
-                self.fields['%s~individuals' % count].initial = specific_permission.get_actor_names()    
+                self.fields['%s~individuals' % count].initial = specific_permission.get_actors()    
                 for key, value in specific_permission.get_configuration().items():
                     fieldname = "%s~configurablefield~%s" % (count, key)
                     if fieldname in self.fields:
@@ -113,7 +118,7 @@ class PermissionFormMixin(object):
             if field_type == "name":
                 self.permission_data[count]["name"] = value
             if field_type == "individuals":
-                self.permission_data[count]["individuals"] = value
+                self.permission_data[count]["individuals"] = [int(pk) for pk in value]
             if field_type == "roles":
                 self.permission_data[count]["roles"] = value
 
@@ -146,9 +151,7 @@ class PermissionFormMixin(object):
                 # Only create permission if there's relevant form data.
 
                 if "individuals" in form_permission and form_permission["individuals"]:
-                    if "," in form_permission["individuals"]:
-                        raise ValueError("Actors in permission forms must be separated by spaces only")
-                    actors = form_permission["individuals"].split(" ")
+                    actors = form_permission["individuals"]
                 else:
                     actors = []                
                 
@@ -182,7 +185,7 @@ class PermissionForm(PermissionFormMixin, forms.Form):
         super().__init__(*args, **kwargs)
 
         self.determine_owner()  
-        self.set_role_choices()  
+        self.set_choices()  
         self.initialize_permission_fields() 
 
     def save(self):
@@ -202,7 +205,7 @@ class MetaPermissionForm(PermissionFormMixin, forms.Form):
         super().__init__(*args, **kwargs)
 
         self.determine_owner() 
-        self.set_role_choices()  
+        self.set_choices()  
         self.initialize_permission_fields()
 
     def get_settable_permissions(self):

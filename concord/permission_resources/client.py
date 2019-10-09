@@ -81,11 +81,11 @@ class PermissionResourceClient(BaseClient):
         permission = PermissionsItem.objects.filter(pk=permission_pk).first()
         return permission.get_roles()
 
-    def get_permissions_associated_with_actor(self, actor: str) -> List[PermissionsItem]:
+    def get_permissions_associated_with_actor(self, actor: int) -> List[PermissionsItem]:
         permissions = self.get_permissions_on_object(object=self.target)
         matching_permissions = []
         for permission in permissions:
-            if actor in permission.get_actors():
+            if permission.actors.actor_in_list(actor):
                 matching_permissions.append(permission)
         return matching_permissions
 
@@ -192,7 +192,7 @@ class PermissionResourceClient(BaseClient):
         actions = []
 
         old_actors = set(permission.get_actors())
-        new_actors = set(actor_data.split(" "))
+        new_actors = set(actor_data)
         actors_to_add = new_actors.difference(old_actors)
         actors_to_remove = old_actors.difference(new_actors)
 

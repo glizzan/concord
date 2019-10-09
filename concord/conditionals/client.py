@@ -132,16 +132,9 @@ class BaseConditionalClient(BaseClient):
         # Add permission
         if condition_template.permission_data is not None:
             permission_dict = json.loads(condition_template.permission_data)
-            # HACK to prevent permission addition from going through permissions pipeline
-            from concord.permission_resources.models import PermissionsItem
-            item = PermissionsItem.objects.create(
-                permitted_object=condition_item,
-                actors = json.dumps(permission_dict["permission_actors"]),
-                roles = json.dumps(permission_dict["permission_roles"]),
-                change_type = permission_dict["permission_type"],
-                configuration = permission_dict["permission_configuration"],
-                owner = condition_template.get_owner(),
-                owner_type = condition_template.owner_type)
+            from concord.permission_resources.utils import create_permission_outside_pipeline
+            # TODO: check if this is still needed once custom permission+condition field created
+            create_permission_outside_pipeline(permission_dict, condition_item, condition_template)
 
         return condition_item
 

@@ -13,8 +13,8 @@ class ChangeNameStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]    
+        from concord.communities.models import Community
+        return [Community]    
 
     def description_present_tense(self):
         return "change name of community to %s" % (self.new_name)  
@@ -36,22 +36,109 @@ class ChangeNameStateChange(BaseStateChange):
         return target
 
 
-class AddGovernorStateChange(BaseStateChange):
-    description = "Add governor of community"
+class AddMemberStateChange(BaseStateChange):
+    description = "Add member to community"
 
-    def __init__(self, governor_name):
-        self.governor_name = governor_name
+    def __init__(self, member_pk):
+        self.member_pk = member_pk
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
-        return "add %s as governor in" % (self.governor_name)  
+        return "add %s as member in" % (self.member_pk)  
 
     def description_past_tense(self):
-        return "added %s as governor in" % (self.governor_name)  
+        return "added %s as member in" % (self.member_pk)  
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.roles.add_member(self.member_pk) 
+        target.save()
+        return target
+
+
+class AddMembersStateChange(BaseStateChange):
+    description = "Add members to community"
+
+    def __init__(self, member_pk_list):
+        self.member_pk_list = member_pk_list
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community
+        return [Community]
+
+    def description_present_tense(self):
+        return "add %s as members in" % (", ".join(self.member_pk_list))  
+
+    def description_past_tense(self):
+        return "added %s as members in" % (", ".join(self.member_pk_list))  
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.roles.add_members(self.member_pk_list) 
+        target.save()
+        return target
+
+
+class RemoveMemberStateChange(BaseStateChange):
+    description = "Remove mmember from community"
+
+    def __init__(self, member_pk):
+        self.member_pk = member_pk
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community
+        return [Community]
+
+    def description_present_tense(self):
+        return "remove %s as member in" % (self.member_pk)  
+
+    def description_past_tense(self):
+        return "removed %s as member in" % (self.member_pk)  
+
+    def validate(self, actor, target):
+        """
+        TODO: put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        target.roles.remove_member(self.member_pk) 
+        target.save()
+        return target
+
+
+class AddGovernorStateChange(BaseStateChange):
+    description = "Add governor of community"
+
+    def __init__(self, governor_pk):
+        self.governor_pk = governor_pk
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.communities.models import Community
+        return [Community]
+
+    def description_present_tense(self):
+        return "add %s as governor in" % (self.governor_pk)  
+
+    def description_past_tense(self):
+        return "added %s as governor in" % (self.governor_pk)  
 
     def validate(self, actor, target):
         """
@@ -62,27 +149,27 @@ class AddGovernorStateChange(BaseStateChange):
     def implement(self, actor, target):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
-        target.authorityhandler.add_governor(self.governor_name)
-        target.authorityhandler.save()
+        target.roles.add_governor(self.governor_pk) 
+        target.save()
         return target
 
 
 class RemoveGovernorStateChange(BaseStateChange):
     description = "Remove governor from community"
 
-    def __init__(self, governor_name):
-        self.governor_name = governor_name
+    def __init__(self, governor_pk):
+        self.governor_pk = governor_pk
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
-        return "remove %s as governor in" % (self.governor_name)  
+        return "remove %s as governor in" % (self.governor_pk)  
 
     def description_past_tense(self):
-        return "removed %s as governor in" % (self.governor_name)  
+        return "removed %s as governor in" % (self.governor_pk)  
 
     def validate(self, actor, target):
         """
@@ -93,8 +180,8 @@ class RemoveGovernorStateChange(BaseStateChange):
     def implement(self, actor, target):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
-        target.authorityhandler.remove_governor(self.governor_name)
-        target.authorityhandler.save()
+        target.roles.remove_governor(self.governor_pk)  
+        target.roles.save()
         return target
 
 
@@ -106,8 +193,8 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "add role %s as governor in" % (self.role_name)  
@@ -125,8 +212,8 @@ class AddGovernorRoleStateChange(BaseStateChange):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
         # NOTE: we assume the role added is ALWAYS in the target community
-        target.authorityhandler.add_governor_role(self.role_name, target.pk)
-        target.authorityhandler.save()
+        target.roles.add_governor_role(self.role_name)
+        target.save()
         return target
 
 
@@ -138,8 +225,8 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "remove role %s as governor in" % (self.role_name)  
@@ -157,27 +244,27 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
         # NOTE: we assume the role added is ALWAYS in the target community
-        target.authorityhandler.remove_governor_role(self.role_name, target.pk)
-        target.authorityhandler.save()
+        target.roles.remove_governor_role(self.role_name)
+        target.save()
         return target
 
 
 class AddOwnerStateChange(BaseStateChange):
     description = "Add owner to community"
 
-    def __init__(self, owner_name):
-        self.owner_name = owner_name
+    def __init__(self, owner_pk):
+        self.owner_pk = owner_pk
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
-        return "add %s as owner in" % (self.owner_name)  
+        return "add %s as owner in" % (self.owner_pk)  
 
     def description_past_tense(self):
-        return "added %s as owner in" % (self.owner_name)  
+        return "added %s as owner in" % (self.owner_pk)  
 
     def validate(self, actor, target):
         """
@@ -188,27 +275,27 @@ class AddOwnerStateChange(BaseStateChange):
     def implement(self, actor, target):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
-        target.authorityhandler.add_owner(self.owner_name)
-        target.authorityhandler.save()
+        target.roles.add_owner(self.owner_pk)
+        target.save()
         return target
 
 
 class RemoveOwnerStateChange(BaseStateChange):
     description = "Remove owner from community"
 
-    def __init__(self, owner_name):
-        self.owner_name = owner_name
+    def __init__(self, owner_pk):
+        self.owner_pk = owner_pk
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
-        return "remove %s as owner in" % (self.owner_name)  
+        return "remove %s as owner in" % (self.owner_pk)  
 
     def description_past_tense(self):
-        return "removed %s as owner in" % (self.owner_name) 
+        return "removed %s as owner in" % (self.owner_pk) 
 
     def validate(self, actor, target):
         """
@@ -219,8 +306,8 @@ class RemoveOwnerStateChange(BaseStateChange):
     def implement(self, actor, target):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
-        target.authorityhandler.remove_owner(self.owner_name)
-        target.authorityhandler.save()
+        target.roles.remove_owner(owner_pk)
+        target.save()
         return target
 
 
@@ -232,8 +319,8 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "add role %s as owner in" % (self.role_name)  
@@ -251,8 +338,8 @@ class AddOwnerRoleStateChange(BaseStateChange):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
         # NOTE: we assume the role added is ALWAYS in the target community
-        target.authorityhandler.add_owner_role(self.role_name, target.pk)
-        target.authorityhandler.save()
+        target.roles.add_owner_role(self.role_name)
+        target.save()
         return target
 
 
@@ -264,8 +351,8 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "remove role %s as owner in" % (self.role_name)  
@@ -283,8 +370,8 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
         # NOTE: we assume the role added is ALWAYS in the target community
-        target.authorityhandler.remove_owner_role(self.role_name, target.pk)
-        target.authorityhandler.save()
+        target.roles.remove_owner_role(self.role_name, target.pk)
+        target.save()
         return target
 
 
@@ -296,8 +383,8 @@ class AddRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "add role %s to" % (self.role_name)  
@@ -309,11 +396,9 @@ class AddRoleStateChange(BaseStateChange):
         # maybe make sure 'governor' and 'owner' aren't specified here?
         return True
 
-    # FIXME: I don't love how the target is the community but we're changing roleset (or
-    # authority handler, above)
     def implement(self, actor, target):
-        target.roleset.add_assigned_role(self.role_name)
-        target.roleset.save()
+        target.roles.add_role(self.role_name)
+        target.save()
         return target
 
 
@@ -325,8 +410,8 @@ class RemoveRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "remove role %s from" % (self.role_name)  
@@ -338,8 +423,8 @@ class RemoveRoleStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.roleset.remove_assigned_role(self.role_name)
-        target.roleset.save()
+        target.roles.remove_role(self.role_name)
+        target.save()
         return target
 
 
@@ -352,8 +437,8 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     @classmethod 
     def get_configurable_fields(self):
@@ -377,8 +462,8 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.roleset.add_people_to_role(self.role_name, self.people_to_add)
-        target.roleset.save()
+        target.roles.add_people_to_role(self.role_name, self.people_to_add)
+        target.save()
         return target
 
 
@@ -391,8 +476,8 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community, SubCommunity, SuperCommunity
-        return [Community, SubCommunity, SuperCommunity]
+        from concord.communities.models import Community
+        return [Community]
 
     def description_present_tense(self):
         return "remove %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  
@@ -404,6 +489,6 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.roleset.remove_people_from_role(self.role_name, self.people_to_remove)
-        target.roleset.save()
+        target.roles.remove_people_from_role(self.role_name, self.people_to_remove)
+        target.save()
         return target

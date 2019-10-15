@@ -1,4 +1,4 @@
-import json
+import json, collections
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -143,5 +143,132 @@ class ActorListField(models.Field):
     def get_prep_value(self, value):
         if isinstance(value, ActorList):
             return json.dumps(value.as_pks())
+        if value in [None, 'null', '[]']:
+            return '[]'
+
+
+RolePair = collections.namedtuple('RolePair', 'community_pk role_name')
+
+class RoleList(object):
+
+    role_list = []
+
+    def __init__(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
+        role_name_list=None):
+        '''Accepts a variety of formats, saves to role_list as a list of RolePair namedtuples.'''
+
+        self.role_list = self.format_as_role_pair(role_pair_list=role_pair_list, 
+            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
+            role_name_list=role_name_list)
+        
+    def format_as_role_pair(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
+        role_name_list=None):
+        """Accepts a variety of formats and returns as list of role_pairs or an empty list."""
+
+        role_list = []
+
+        if role_pair_list and not (list_of_pair_strings or community_pk or role_name_list):
+            if any(not isinstance(role_pair, RolePair) for role_pair in role_pair_list):
+                raise ValueError("All items in role_pair_list must be of type RolePair, not ", type(role_pair))
+            return role_pair_list
+
+        if list_of_pair_strings and not (role_pair_list or community_pk or role_name_list):
+            for pair_string in list_of_pair_strings:
+                pk, name = pair_string.split("_")
+                role_list.append(RolePair(community_pk=int(pk), role_name=name))
+            return role_list
+
+        if community_pk and role_name_list and not (list_of_pair_strings or role_pair_list):
+            for role_name in role_name_list:
+                role_list.append(RolePair(community_pk=int(community_pk), role_name=role_name))
+            return role_list
+
+        if not (role_pair_list or list_of_pair_strings or community_pk or role_name_list):
+            return []
+
+        raise ValueError("Invalid input to format_as_role_pair")
+
+    def get_roles(self):
+        return self.role_list
+
+    def as_strings(self):
+        role_strings = []
+        for role in self.role_list:
+            role_strings.append(str(role.community_pk) + "_" + role.role_name)
+        return role_strings
+
+    def role_name_in_list(self, role_name):
+        for role in self.role_list:
+            if role_name == role.role_name:
+                return True
+        return False
+
+    def role_pair_in_list(self, role_pair):
+        if type(role_pair) != RolePair:
+            pk, name = role_pair.split("_")
+            role_pair = RolePair(community_pk=int(pk), role_name=name)
+        for existing_role in self.role_list:
+            if existing_role.role_name == role_pair.role_name and \
+                existing_role.community_pk == role_pair.community_pk:
+                return True
+        return False
+
+    def add_roles(self, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
+        role_name_list=None):
+
+        roles = self.format_as_role_pair(role_pair_list=role_pair_list, 
+            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
+            role_name_list=role_name_list)
+
+        role_set = set(self.role_list)
+        for role in roles:
+            role_set.add(role)
+        self.role_list = list(role_set)
+
+    def remove_roles(self, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
+        role_name_list=None):
+
+        roles = self.format_as_role_pair(role_pair_list=role_pair_list, 
+            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
+            role_name_list=role_name_list)
+
+        role_set = set(self.role_list)
+        for role in roles:
+            role_set.discard(role)
+        self.role_list = list(role_set)
+
+
+def parse_role_list_string(role_list_string):
+    return RoleList(list_of_pair_strings=json.loads(role_list_string))
+
+
+class RoleListField(models.Field):
+    """This custom field allows us to access our list of role pairs."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        return name, path, args, kwargs
+
+    def db_type(self, connection):
+        return 'rolelist'  
+
+    def from_db_value(self, value, expression, connection):
+        if value is None:
+            return RoleList()
+        return parse_role_list_string(value)
+
+    def to_python(self, value):
+        if isinstance(value, RoleList):
+            return value
+        if value is None:
+            return RoleList()
+        return parse_role_list_string(value)
+
+    def get_prep_value(self, value):
+        if isinstance(value, RoleList):
+            return json.dumps(value.as_strings())
         if value in [None, 'null', '[]']:
             return '[]'

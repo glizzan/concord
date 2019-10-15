@@ -103,8 +103,7 @@ def create_permission_outside_pipeline(permission_dict, condition_item, conditio
     if "permission_actors" in permission_dict:
         permission.actors.add_actors(actors=permission_dict["permission_actors"])
     if "permission_roles" in permission_dict:
-        permission.roles = json.dumps(permission_dict["permission_roles"])
-        # permission.roles.add_roles(roles=permission_dict["permission_roles"])
+        permission.roles.add_roles(list_of_pair_strings=permission_dict["permission_roles"])
     permission.change_type = permission_dict["permission_type"]
     permission.configuration = permission_dict["permission_configuration"]
     permission.owner = condition_template.get_owner()

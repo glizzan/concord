@@ -57,9 +57,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         permission.change_type = self.permission_type        
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here
             permission.add_actors_to_permission(actors=self.permission_actors)
-        for role_pair in self.permission_role_pairs:
-            if role_pair:
-                permission.add_role_pair_to_permission(role_pair_to_add=role_pair)
+        permission.add_roles_to_permission(list_of_pair_strings=self.permission_role_pairs)
         if self.permission_configuration:
             #FIXME: probably not the place to do this formatting :/
             configuration_dict = {}

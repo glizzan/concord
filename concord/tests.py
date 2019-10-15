@@ -2124,7 +2124,8 @@ class ResolutionFieldTest(DataTestCase):
         action, result = self.buckyClient.change_name(new_name="Reckless Idiots")
         self.assertTrue(action.resolution.is_approved)
         self.assertEquals(action.resolution.resolved_through, "specific")
-        self.assertEquals(action.resolution.role, "1_members")
+        self.assertEquals(action.resolution.role.role_name, "members")
+        self.assertEquals(action.resolution.role.community_pk, 1)
 
     def test_resolution_field_for_role_for_governing_permission(self):
 
@@ -2327,7 +2328,7 @@ class ConfigurablePermissionTest(DataTestCase):
             permission_type="concord.communities.state_changes.AddPeopleToRoleStateChange",
             permission_role_pairs=["1_admins", "1_royalfamily"],
             permission_configuration={"role_name": "doramilaje"})
-        roles = permission.get_roles()
+        roles = permission.roles.as_strings()
         self.assertCountEqual(roles, ["1_admins", "1_royalfamily"]) 
 
         # We test that Shuri, in the role royalfamily, can add Ayo to doramilaje, and that 
@@ -2352,7 +2353,7 @@ class ConfigurablePermissionTest(DataTestCase):
         self.okoyePermClient.remove_role_from_permission(role_name="royalfamily", 
             community_pk=self.instance.pk, permission_pk=permission.pk)
         permission = PermissionsItem.objects.get(pk=permission.pk)  # Refresh
-        roles = permission.get_roles()
+        roles = roles = permission.roles.as_strings()
         self.assertCountEqual(roles, ["1_royalfamily"])        
 
         # We check again: Shuri, in the royalfamily role, can add X to the doramilaje, but 

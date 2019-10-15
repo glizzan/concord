@@ -70,10 +70,9 @@ class PermissionResourceClient(BaseClient):
 
     def get_permissions_associated_with_role(self, *, role_name: str, community: Model) -> List[PermissionsItem]:
         permissions = self.get_permissions_on_object(object=self.target)
-        role_pair = str(community.pk) + "_" + role_name
         matching_permissions = []
         for permission in permissions:
-            if role_pair in permission.get_roles():
+            if permission.has_role(role=role_name, community=str(community.pk)):
                 matching_permissions.append(permission)
         return matching_permissions
 
@@ -163,7 +162,7 @@ class PermissionResourceClient(BaseClient):
 
     def update_roles_on_permission(self, *, role_data, permission, owner):
         """Given a list of roles, updates the given permission to match those roles."""
-
+        
         actions = []
 
         old_roles = set(permission.get_role_names())

@@ -789,8 +789,8 @@ class GoverningAuthorityTest(DataTestCase):
 
         # Now governor A's thing passes.
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
-        community = self.commClient.get_community(community_pk=self.community.pk) # Refresh
-        self.assertEquals(community.name, "A Newly Named Community")
+        self.community.refresh_from_db()
+        self.assertEquals(self.community.name, "A Newly Named Community")
 
 
 class FoundationalAuthorityTest(DataTestCase):
@@ -2191,7 +2191,7 @@ class ResolutionFieldTest(DataTestCase):
         self.assertEquals(action.status, "implemented")
 
         # Bucky's action is implemented
-        bucky_action = Action.objects.get(pk=bucky_action.pk)  # Refresh action
+        bucky_action.refresh_from_db()
         self.assertEquals(bucky_action.status, "implemented")
         self.assertTrue(bucky_action.resolution.is_resolved)
         self.assertTrue(bucky_action.resolution.is_approved)
@@ -2205,7 +2205,7 @@ class ResolutionFieldTest(DataTestCase):
             action_pk=bucky_action.pk)
         acc = ApprovalConditionClient(target=condition_item, actor=self.user)
         action, result = acc.reject()
-        bucky_action = Action.objects.get(pk=bucky_action.pk)  # Refresh action again
+        bucky_action.refresh_from_db()
         self.assertEquals(bucky_action.status, "rejected")
         self.assertEquals(self.instance.name, "Friends")
         self.assertTrue(bucky_action.resolution.is_resolved)
@@ -2352,7 +2352,7 @@ class ConfigurablePermissionTest(DataTestCase):
             community_pk=self.instance.pk, permission_pk=permission.pk)
         self.okoyePermClient.remove_role_from_permission(role_name="royalfamily", 
             community_pk=self.instance.pk, permission_pk=permission.pk)
-        permission = PermissionsItem.objects.get(pk=permission.pk)  # Refresh
+        permission.refresh_from_db()
         roles = roles = permission.roles.as_strings()
         self.assertCountEqual(roles, ["1_royalfamily"])        
 

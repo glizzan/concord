@@ -14,9 +14,9 @@ class PermissionFormMixin(object):
 
     # NOTE: this was originally a separate mixin and may need to be again
     def determine_owner(self, owned_object=None):
-        '''Determine's owner of an instance passed to a form.  Handles instances of permissions,
-        communities, and non-community objects differently.  After this method is called, 
-        self.owner, self.commClient, and self.owned_by_community should be available to the form.'''
+        '''Determine's owner of an instance passed to a form.  Handles instances of 
+        permissions, differently - the owner there is the permission target's owner.  
+        Afterwards, self.owner & self.commClient should be available to the form.'''
 
         from concord.communities.client import CommunityClient
         self.commClient = CommunityClient(system=True)
@@ -24,39 +24,18 @@ class PermissionFormMixin(object):
         if not owned_object:
             owned_object = self.instance
 
-        # If the instance is a permission, get owner of permitted object
         if type(owned_object).__name__ == "PermissionsItem":  # FIXME: this won't work
+            # If the instance is a permission, get owner of permitted object
             permitted_object = owned_object.get_permitted_object()
-            if permitted_object.owner_type == "com":
-                self.owner = self.commClient.get_owner(
-                    owned_object=owned_object.get_permitted_object())
-                self.owned_by_community = True
-            else:
-                self.owner = permitted_object.get_owner()  # Gets indv owner
-                self.owned_by_community = False
-            return
-
-        # If the instance is a community, owner is self, otherwise owner is owner community.        
-        if hasattr(owned_object, "is_community") and owned_object.is_community:
-            self.owner = owned_object
-            self.owned_by_community = True
-        else: 
-            self.owner = self.commClient.get_owner(owned_object=owned_object)
-            self.owned_by_community = True  # Not 100% sure this is true
-        
-        # TODO: handle individually owned resources
+            self.owner = permitted_object.get_owner()
+        else:
+            self.owner = owned_object.get_owner()
 
     # NOTE: this was originally a separate mixin and may need to be again
     def set_choices(self):
-
-        if self.owned_by_community:
-            self.commClient.set_target(target=self.owner)
-            self.ROLE_CHOICES = [(role,role) for role in self.commClient.get_roles()]
-            self.ACTOR_CHOICES = [(user.pk, user.username) for user in self.commClient.get_members()]
-        else:
-            self.ROLE_CHOICES = None
-            self.ACTOR_CHOICES = None
-
+        self.commClient.set_target(target=self.owner)
+        self.ROLE_CHOICES = [(role,role) for role in self.commClient.get_roles()]
+        self.ACTOR_CHOICES = [(user.pk, user.username) for user in self.commClient.get_members()]
 
     def get_settable_permissions(self):
         # content of return format doesn't matter, just overrides default
@@ -64,7 +43,7 @@ class PermissionFormMixin(object):
 
     def initialize_permission_fields(self):
         '''Called in the init method of a form, adds permission field for the target instance.'''
-        # TODO: possibly allow user to pass in a custom target, not just assuming selfl.instance?
+        # TODO: possibly allow user to pass in a custom target, not just assuming self.instance?
 
         self.prClient = PermissionResourceClient(actor=self.request.user, 
             target=self.instance)
@@ -76,15 +55,13 @@ class PermissionFormMixin(object):
                 widget=forms.widgets.Textarea(attrs={'readonly':'True', 
                     'rows': 2, 'cols':40}))
             
-            ACTOR_CHOICES = self.ACTOR_CHOICES if self.ACTOR_CHOICES else [('none', "Add some people!")]
             self.fields['%s~individuals' % count] = forms.MultipleChoiceField(
                 label="Individuals with this permission", required=False,
-                choices=ACTOR_CHOICES)
+                choices=self.ACTOR_CHOICES)
 
-            if self.ROLE_CHOICES:
-                self.fields['%s~roles' % count] = forms.MultipleChoiceField(
-                        label="Roles with this permission", 
-                        required=False, choices=self.ROLE_CHOICES)
+            self.fields['%s~roles' % count] = forms.MultipleChoiceField(
+                label="Roles with this permission", required=False, 
+                choices=self.ROLE_CHOICES)
 
             for field in permission.get_configurable_fields():
                 self.fields['%s~configurablefield~%s' % (count, field)] = forms.CharField(
@@ -98,8 +75,7 @@ class PermissionFormMixin(object):
                     fieldname = "%s~configurablefield~%s" % (count, key)
                     if fieldname in self.fields:
                         self.fields[fieldname].initial = value
-                if self.ROLE_CHOICES:
-                    self.fields['%s~roles' % count].initial = specific_permission.get_role_names()
+                self.fields['%s~roles' % count].initial = specific_permission.get_role_names()
 
     def process_permissions(self):
         """Process form fields into a dict with key change_type"""
@@ -138,8 +114,7 @@ class PermissionFormMixin(object):
 
                 newClient = PermissionResourceClient(actor=self.request.user, 
                     target=db_permission[0])
-                if self.ROLE_CHOICES:
-                    newClient.update_roles_on_permission(role_data=form_permission["roles"], 
+                newClient.update_roles_on_permission(role_data=form_permission["roles"], 
                         permission=db_permission[0], owner=self.owner)
                 newClient.update_actors_on_permission(actor_data=form_permission["individuals"],
                     permission=db_permission[0])

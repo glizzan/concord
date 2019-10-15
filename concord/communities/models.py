@@ -2,6 +2,7 @@ import json
 
 from django.db import models
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
 from concord.conditionals.client import CommunityConditionalClient
@@ -14,10 +15,6 @@ def english_list(list_to_display):
         return "".join(list_to_display)
     return ", ".join(list_to_display[:-1]) + " and " + "".join(list_to_display[-1])
 
-OWNER_CHOICES = (
-    ('ind', 'Individually Owned'),
-    ('com', 'Community Owned'),
-)
 
 ################################
 ### Community Resource/Items ###
@@ -26,12 +23,9 @@ OWNER_CHOICES = (
 class BaseCommunityModel(PermissionedModel):
     '''The base community model is the abstract type for all communities.  Much of its 
     logic is contained in customfields.RoleField and customfields.RoleHandler.'''
-
     is_community = True
-    owner_type = models.CharField(max_length=3, choices=OWNER_CHOICES, 
-        default='com')  # Community models are community-owned by default
-    name = models.CharField(max_length=200)
-    
+
+    name = models.CharField(max_length=200)    
     roles = RoleField(default=RoleHandler)
 
     class Meta:
@@ -42,9 +36,8 @@ class BaseCommunityModel(PermissionedModel):
 
     def get_owner(self):
         """
-        Communities own themselves by default, unless they are subcommunities.
+        Communities own themselves by default, although subtypes may differ.
         """
-        # BUG: this overwrites the get_owner on permissionedmodel, which doesn't seem ideal
         return self
     
     def owner_list_display(self):
@@ -85,6 +78,9 @@ class BaseCommunityModel(PermissionedModel):
         governor_condition = comCondClient.get_condition_template_for_governor()
         return governor_condition if governor_condition else "unconditional"
 
+    # BUG: maybe overwrite save method to raise error if there community's rolefield
+    # doesn't meet bare minimum valid conditions?
+
 
 class Community(BaseCommunityModel):
     """
@@ -96,4 +92,25 @@ class Community(BaseCommunityModel):
     may edit data added to a dataset.
     """
     ...
-    
+
+class DefaultCommunity(BaseCommunityModel):
+    """
+    Every user has a default community of which they are the BDFL.  (They can
+    theoretically give someone else power over their default community, but we should 
+    probably prevent that on the backend.)
+
+    We're almost always accessing this through the related_name.  We have the user, and
+    we want to know what community to stick our object in.
+    """
+    user_owner = models.OneToOneField(User, on_delete=models.CASCADE, 
+        related_name="default_community")
+        
+def create_default_community(sender, instance, created, **kwargs):
+    if created:
+        name = "%s's Default Community" % instance.username
+        roles = RoleHandler()
+        roles.initialize_with_creator(creator=instance.pk)
+        community = DefaultCommunity.objects.create(name=name, user_owner=instance,
+            roles=roles)
+
+post_save.connect(create_default_community, sender=User)

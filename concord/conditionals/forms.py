@@ -141,8 +141,10 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
 
         for index, permission in self.permission_data.items():
 
-            p_actors = permission["individuals"] if \
-                "individuals" in permission and permission["individuals"] else []
+            if "individuals" in permission:
+                p_actors = [int(actor) for actor in permission["individuals"]]
+            else:
+                p_actors = []
 
             p_roles = permission["roles"] if  "roles" in permission and permission["roles"] else []
 

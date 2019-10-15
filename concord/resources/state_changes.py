@@ -66,7 +66,7 @@ class AddItemResourceStateChange(BaseStateChange):
 
     def implement(self, actor, target):
         item = Item.objects.create(name=self.item_name, resource=target, 
-            owner=actor)
+            owner=actor.default_community)
         return item
 
 

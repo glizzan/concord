@@ -27,6 +27,9 @@ class BaseClient(object):
     def set_target(self, target):
         self.target = target
 
+    def refresh_target(self):
+        self.target.refresh_from_db()
+
     def validate_target(self):
         if not self.target:
             raise BaseException("Target is required")
@@ -45,10 +48,10 @@ class BaseClient(object):
     
     # Writing
 
-    def change_owner_of_target(self, new_owner, new_owner_type: str) -> Tuple[int, Any]:
+    def change_owner_of_target(self, new_owner) -> Tuple[int, Any]:
         new_owner_content_type = ContentType.objects.get_for_model(new_owner)
         change = sc.ChangeOwnerStateChange(new_owner_content_type=new_owner_content_type.id, 
-            new_owner_id=new_owner.id, new_owner_type=new_owner_type)
+            new_owner_id=new_owner.id)
         return self.create_and_take_action(change)
 
     def enable_foundational_permission(self) -> Tuple[int, Any]:

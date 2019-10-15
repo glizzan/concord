@@ -126,8 +126,7 @@ class BaseConditionalClient(BaseClient):
         data_dict = json.loads(condition_template.condition_data)
         conditionModel = self.condition_lookup_helper(lookup_string=condition_template.condition_type)
         condition_item = conditionModel.objects.create(action=action.pk, 
-                owner=condition_template.get_owner(), owner_type=condition_template.owner_type,
-                **data_dict)
+                owner=condition_template.get_owner(), **data_dict)
 
         # Add permission
         if condition_template.permission_data is not None:
@@ -145,14 +144,9 @@ class BaseConditionalClient(BaseClient):
                 action=action)
         return condition_item 
 
-    def override_owner_if_target_is_owned_by_community(self, *, action_target: Model) -> str:
-        # FIXME: don't like the way this abstraction is leaking.  honestly I don't even remember
-        # why this is here which is always a bad sign.
-        return self.actor if action_target.owner_type == "ind" else action_target.owner
-
     def createVoteCondition(self, *, action: Action, **kwargs) -> VoteConditionClient:
-        owner = self.override_owner_if_target_is_owned_by_community(action_target=action.target)
-        vote_object = VoteCondition.objects.create(owner=owner, action=action.pk, **kwargs)
+        vote_object = VoteCondition.objects.create(owner=action.target.get_owner(), 
+            action=action.pk, **kwargs)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
     # Read methods which require target to be set
@@ -213,8 +207,7 @@ class CommunityConditionalClient(BaseConditionalClient):
         """Helper method, does not save condition instance."""
         data_dict = json.loads(condition_template.condition_data)
         conditionModel = self.condition_lookup_helper(lookup_string=condition_template.condition_type)
-        temp_condition = conditionModel(owner=condition_template.get_owner(), owner_type=condition_template.owner_type,
-            **data_dict)
+        temp_condition = conditionModel(owner=condition_template.get_owner(), **data_dict)
         return temp_condition
 
     def get_condition_info(self, condition_template):

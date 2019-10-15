@@ -9,6 +9,7 @@ from concord.actions.client import BaseClient
 from concord.actions.models import PermissionedModel
 
 from concord.communities.models import Community
+from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
 
 
@@ -47,16 +48,14 @@ class CommunityClient(BaseClient):
         ... 
 
     def get_owner(self, *, owned_object: Model) -> Community:
+        """Gets the owner of the owned object, which should always be a community."""
         # Note: this is still target-less since we don't need anything set as a target
-        community_name = owned_object.get_owner().name
-        return self.get_community(community_name=community_name)
+        return owned_object.get_owner()
 
     def create_community(self, *, name: str) -> Community:
-        content_type = ContentType.objects.get_for_model(self.actor)
-        community = Community(name=name, owner_content_type=content_type, 
-            owner_object_id=self.actor.id)
-        community.roles.initialize_with_creator(creator=self.actor.pk)
-        community.save()
+        roles = RoleHandler()
+        roles.initialize_with_creator(creator=self.actor.pk)
+        community = Community.objects.create(name=name, roles=roles)
         return community
 
     # Read methods which require target to be set
@@ -99,6 +98,7 @@ class CommunityClient(BaseClient):
         return self.target.roles.is_owner(actor.pk) 
 
     def has_governing_authority(self, *, actor) -> bool:  # Also returns role
+        self.target.refresh_from_db()  # FIXME: seems expensive to do this every time?
         return self.target.roles.is_governor(actor.pk) # TODO: actor should be pk
 
     def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:

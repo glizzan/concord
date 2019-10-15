@@ -5,10 +5,6 @@ from django.contrib.contenttypes.models import ContentType
 # TODO: make these explicit abstract class and subclasses *have* to implement validate and
 # implement
 
-# TODO: I think there should be a good way to do the check caller here, so that when
-# implementing this system a model can check that it's being called via a subclass of 
-# this object, which is the only way for models to change I believe.
-
 
 class BaseStateChange(object):
 
@@ -45,11 +41,9 @@ class BaseStateChange(object):
 class ChangeOwnerStateChange(BaseStateChange):
     description = "Change owner"
 
-    def __init__(self, new_owner_content_type, new_owner_id, new_owner_type):
-        # NOTE: should remove new_owner_type soon
+    def __init__(self, new_owner_content_type, new_owner_id):
         self.new_owner_content_type = new_owner_content_type
         self.new_owner_id = new_owner_id
-        self.new_owner_type = new_owner_type
 
     @classmethod
     def get_allowable_targets(cls):
@@ -86,7 +80,6 @@ class ChangeOwnerStateChange(BaseStateChange):
         new_owner = model_class.objects.get(id=self.new_owner_id)
 
         target.owner = new_owner
-        target.owner_type = self.new_owner_type
         target.save()
         return target
 

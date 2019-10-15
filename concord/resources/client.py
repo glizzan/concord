@@ -24,8 +24,8 @@ class ResourceClient(BaseClient):
     def get_all_resources(self) -> QuerySet:
         return Resource.objects.all()
 
-    def get_all_resources_given_owner(self, *, owner_name: str) -> QuerySet:
-        return Resource.objects.filter(owner=owner_name)
+    # def get_all_resources_given_owner(self, *, owner_name: str) -> QuerySet:
+    #     return Resource.objects.filter(owner=owner_name)
 
     def get_resource_given_name(self, *, resource_name: str) -> QuerySet:
         return Resource.objects.filter(name=resource_name)
@@ -34,7 +34,7 @@ class ResourceClient(BaseClient):
         return Resource.objects.filter(pk=pk)
 
     def create_resource(self, *, name: str) -> Resource:
-        created = Resource.objects.create(name=name, owner=self.actor)
+        created = Resource.objects.create(name=name, owner=self.actor.default_community)
         return created
 
     # Read only

@@ -144,22 +144,22 @@ class Action(models.Model):
 def create_action(change, target, actor):
     return Action.objects.create(actor=actor, target=target, 
         change_type=change.get_change_type(), change_data=change.get_change_data())
-    
 
-OWNER_CHOICES = (
-    ('ind', 'Individually Owned'),
-    ('com', 'Community Owned'),
-)
+
+# Helper method to limit owners to communities. Probably need to get this via settings or
+# similar so third party users can add community subtypes.
+def get_community_types():
+    from concord.communities.models import Community
+    return [Community]
+
 
 class PermissionedModel(models.Model):
 
     owner_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,
-        related_name="%(app_label)s_%(class)s_owned_objects")
-    owner_object_id = models.PositiveIntegerField()
+        related_name="%(app_label)s_%(class)s_owned_objects", 
+        limit_choices_to=get_community_types, blank=True, null=True)
+    owner_object_id = models.PositiveIntegerField(blank=True, null=True)
     owner = GenericForeignKey('owner_content_type', 'owner_object_id')
-    # FIXME: should be able to delete this and just check content_type when determining ownership
-    owner_type = models.CharField(max_length=3, choices=OWNER_CHOICES, 
-        default='ind')
     
     # Permission-related fields
     foundational_permission_enabled = models.BooleanField(default=False)
@@ -190,12 +190,25 @@ class PermissionedModel(models.Model):
 
     def save(self, *args, **kwargs):
         '''
-        A permissioned model's save method can *only* be invoked by a 
-        descendant of BaseStateChange, on update (create is fine).
+        There are two things happening here.  
 
-        For now, we inspect who is calling us.  This is a hack.  Once we
-        have better testing, we will enforce this via tests.
+        1:  Subtypes of BaseCommunity are the *only* children of PermissionedModel that 
+        should be allowed to have a null owner.  We check that here and raise an error if 
+        a non-community model has null values for owner fields.
+
+        2:  A permissioned model's save method can *only* be invoked by a descendant of 
+        BaseStateChange, on update (create is fine). For now, we inspect who is calling us. 
+        This is a hack.  Once we have better testing, we will enforce this via tests.
         '''
+
+        # CHECK 1: only allow null owner for communities
+        
+        if not (self.owner and self.owner_content_type and self.owner_object_id):
+            if not (hasattr(self, "is_community") and self.is_community):
+                raise ValueError("Owner must be specified for model of type ", type(self))
+
+        # CHECK 2: only invoke save method via descendant of BaseStateChange
+
         if not self.pk:  # Don't need to check for newly created objects
             return super().save(*args, **kwargs)  # Call the "real" save() method.
         import inspect

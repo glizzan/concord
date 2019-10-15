@@ -37,10 +37,8 @@ class AddConditionStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        self.owner = actor if target.owner_type == "ind" else target.get_owner()
         return ConditionTemplate.objects.create(
-            owner = self.owner, 
-            owner_type = target.owner_type,
+            owner = target.get_owner(), 
             condition_type=self.condition_type,
             condition_data=self.condition_data,
             permission_data=self.permission_data,

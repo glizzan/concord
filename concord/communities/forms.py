@@ -15,34 +15,30 @@ class LeadershipForm(forms.Form):
         from concord.communities.client import CommunityClient
         self.commClient = CommunityClient(actor=self.request.user, target=self.instance)
         ROLE_CHOICES = [(role,role) for role in self.commClient.get_roles()]
+        ACTOR_CHOICES = [(user.pk, user.username) for user in self.commClient.get_members()]
+        # FIXME: remove owners and governors as options here?  get_roles gets everything
 
         # Set up owner list ('ol') fields
         owners = self.instance.list_owners()
         initial_individuals = " ".join(owners['actors'])
         initial_roles = [role_pair.split("_")[1] for role_pair in owners['roles']]
-        self.fields["ol_individuals"] = forms.CharField(label="Individual Owners", 
-                initial=initial_individuals, required=False)
+        self.fields["ol_individuals"] = forms.MultipleChoiceField(label="Individual Owners",
+            required=False, choices=ACTOR_CHOICES, initial=initial_individuals)  
         self.fields["ol_roles"] = forms.MultipleChoiceField(label="Owner Roles", 
-                required=False, choices=ROLE_CHOICES)
-        self.fields["ol_roles"].initial = initial_roles
+            required=False, choices=ROLE_CHOICES, initial=initial_roles)
 
         # Set up governor list ('gl') fields
         governors = self.instance.list_governors()
         initial_individuals = " ".join(governors['actors'])
         initial_roles = [role_pair.split("_")[1] for role_pair in governors['roles']]
-        self.fields["gl_individuals"] = forms.CharField(label="Individual Governors", 
-                initial=initial_individuals, required=False)
+        self.fields["gl_individuals"] = forms.MultipleChoiceField(label="Individual Governors",
+            required=False, choices=ACTOR_CHOICES, initial=initial_individuals)  
         self.fields["gl_roles"] = forms.MultipleChoiceField(label="Governor Roles", 
-                required=False, choices=ROLE_CHOICES)
-        self.fields["gl_roles"].initial = initial_roles
+            required=False, choices=ROLE_CHOICES, initial=initial_roles)
 
-        # Get condition data for owners
+        # Get condition data for owners & governors
         # type of condition, once type is selected: configuration, plus permissions
         # sooo do we want this all part of the same form?  Or should this be AJAXy?
-
-
-
-        # Get condition data for governors
 
     def process_data(self):
 
@@ -103,7 +99,8 @@ class RoleForm(forms.Form):
             count += 1
 
         # Add an additional blank row in case user wants to add a role
-        self.fields['%s~rolename' % count] = forms.CharField(label="Role Name", required=False)
+        self.fields['%s~rolename' % count] = forms.CharField(label="Role Name", 
+            required=False)
         self.fields['%s~members' % count] = forms.MultipleChoiceField(label="Members",
             choices=ACTOR_CHOICES, required=False)  
 

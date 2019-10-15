@@ -52,7 +52,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
     def implement(self, actor, target):
         permission = PermissionsItem()
-        permission.owner = actor # Do we care about owner type here?
+        permission.owner = target.get_owner() # FIXME: should it be the target owner though?
         permission.permitted_object = target
         permission.change_type = self.permission_type        
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here

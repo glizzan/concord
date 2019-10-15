@@ -35,22 +35,7 @@ def check_conditional(action, condition_template, called_by, role=None):
     return action
 
 
-def shortcut_for_individual_ownership(action, called_by):
-    if action.target.owner_type == "ind":
-        if action.actor == action.target.owner:
-            log = "approved via individual ownership shortcut, called by %s" % called_by
-            action.approve_action(resolved_through=called_by, log=log)
-        else:
-            log = "rejected via individual ownership shortcut (target does not match actor), called by %s" % called_by
-            action.reject_action(log=log)
-        return action
-
-
 def foundational_permission_pipeline(action):
-
-    individual_result = shortcut_for_individual_ownership(action, called_by="foundational")
-    if individual_result:
-        return individual_result
    
     communityClient = CommunityClient(system=True) 
     community = communityClient.get_owner(owned_object=action.target)
@@ -105,11 +90,7 @@ def specific_permission_pipeline(action, specific_permissions):
 
 def governing_permission_pipeline(action):
 
-    individual_result = shortcut_for_individual_ownership(action, called_by="governing")
-    if individual_result:
-        return individual_result
-
-    communityClient = CommunityClient(system=True) 
+    communityClient = CommunityClient(system=True)
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
     has_authority, matched_role = communityClient.has_governing_authority(actor=action.actor)

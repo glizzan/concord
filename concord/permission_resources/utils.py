@@ -38,17 +38,11 @@ class MockMetaPermission:
     def create_self(self, owner):
         from concord.permission_resources.models import PermissionsItem
         permitted_object = self.get_permitted_object()
-        # FIXME: this is a hack to be fixed during ownership refactoring
-        if hasattr(owner, "username"):
-            owner_type = "ind"
-        elif hasattr(owner, "is_community"):
-            owner_type = "com"
-        else:
+        if not hasattr(owner, "is_community") and owner.is_community:
             raise TypeError("Owner should only be user or community")
         return PermissionsItem.objects.create(
             permitted_object = permitted_object,
             change_type = self.permission_change_type,
-            owner_type = owner_type,
             owner_content_type = ContentType.objects.get_for_model(owner),
             owner_object_id = owner.id)
 
@@ -114,7 +108,6 @@ def create_permission_outside_pipeline(permission_dict, condition_item, conditio
     permission.change_type = permission_dict["permission_type"]
     permission.configuration = permission_dict["permission_configuration"]
     permission.owner = condition_template.get_owner()
-    permission.owner_type = condition_template.owner_type
     permission.save()
 
 

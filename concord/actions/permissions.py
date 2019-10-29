@@ -56,7 +56,7 @@ def find_specific_permissions(action):
     permissionClient = PermissionResourceClient(system=True)
     permissionClient.set_target(action.target)
     specific_permissions = []
-    for permission in permissionClient.get_specific_permissions(change_type=action.change_type):
+    for permission in permissionClient.get_specific_permissions(change_type=action.change.get_change_type()):
         # Check configuration returns false only if the permission has a configuration which the action doesn't satisfy
         is_relevant = check_configuration(action, permission)
         if is_relevant:
@@ -107,7 +107,7 @@ def governing_permission_pipeline(action):
 def has_permission(action):
 
     # Check for criteria indicating we should use the foundational permission pipeline
-    if action.change_type in foundational_changes() or action.target.foundational_permission_enabled:
+    if action.change.get_change_type() in foundational_changes() or action.target.foundational_permission_enabled:
         return foundational_permission_pipeline(action)
 
     # Check for existence of specific permission, if found use specific permission pipeline

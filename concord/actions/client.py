@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 from django.contrib.auth.models import User
 
-from concord.actions.models import create_action, Action
+from concord.actions.models import Action
 from concord.actions import state_changes as sc
 
 
@@ -43,7 +43,8 @@ class BaseClient(object):
 
     def create_and_take_action(self, change):
         self.validate_target()
-        action = create_action(change=change, target=self.target, actor=self.actor)
+        action = Action.objects.create(actor=self.actor, target=self.target, 
+            change=change)
         return action.take_action()
     
     # Writing
@@ -96,7 +97,7 @@ class ActionClient(BaseClient):
         changes = sc.foundational_changes()
         foundational_actions = []
         for action in actions:
-            if action.change_type in changes:
+            if action.change.get_change_type() in changes:
                 foundational_actions.append(action)
         return foundational_actions
 

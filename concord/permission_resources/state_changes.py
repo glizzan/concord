@@ -106,11 +106,15 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
 
 
 class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
+
     description = "Add actor to permission"
+    instantiated_fields = ['permission']
 
     def __init__(self, *, actor_to_add: str, permission_pk: int):
         self.actor_to_add = actor_to_add
         self.permission_pk = permission_pk
+
+    def instantiate_fields(self):
         self.permission = self.look_up_permission()
 
     @classmethod
@@ -125,32 +129,28 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         return "added actor %s to permission %d (%s)" % (self.actor_to_add, 
             self.permission_pk, self.permission.short_change_type()) 
 
-    def get_change_data(self):
-        # TODO: make permission a custom field so we don't need to override get_change_data
-        '''
-        Given the python Change object, generates a json list of field names
-        and values.
-        '''
-        new_vars = vars(self)
-        del(new_vars)["permission"]
-        return json.dumps(new_vars)
-
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
+        self.instantiate_fields()
         self.permission.add_actors_to_permission(actors=[self.actor_to_add])
         self.permission.save()
         return self.permission
 
 
 class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
+
     description = "Remove actor from permission"
+    instantiated_fields = ['permission']
 
     def __init__(self, *, actor_to_remove: str, permission_pk: int):
         self.actor_to_remove = actor_to_remove
         self.permission_pk = permission_pk
+        self.permission = self.look_up_permission()
+
+    def instantiate_fields(self):
         self.permission = self.look_up_permission()
 
     @classmethod
@@ -165,33 +165,28 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         return "removed actor %s from permission %d (%s)" % (self.actor_to_remove, 
             self.permission_pk, self.permission.short_change_type())   
 
-    def get_change_data(self):
-        # TODO: make permission a custom field so we don't need to override get_change_data
-        '''
-        Given the python Change object, generates a json list of field names
-        and values.
-        '''
-        new_vars = vars(self)
-        del(new_vars)["permission"]
-        return json.dumps(new_vars)
-
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
+        self.instantiate_fields()
         self.permission.remove_actors_from_permission(actors=[self.actor_to_remove])
         self.permission.save()
         return self.permission
 
 
 class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
+
     description = "Add role to permission"
+    instantiated_fields = ['permission']
 
     def __init__(self, *, role_name: str, community_pk: int, permission_pk: int):
         self.role_name = role_name
         self.community_pk = community_pk
         self.permission_pk = permission_pk
+
+    def instantiate_fields(self):
         self.permission = self.look_up_permission()
 
     @classmethod
@@ -206,21 +201,12 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         return "added role %s (community %d) to permission %d (%s)" % (self.role_name, 
             self.community_pk, self.permission_pk, self.permission.short_change_type())
 
-    def get_change_data(self):
-        # TODO: make permission a custom field so we don't need to override get_change_data
-        '''
-        Given the python Change object, generates a json list of field names
-        and values.
-        '''
-        new_vars = vars(self)
-        del(new_vars)["permission"]
-        return json.dumps(new_vars)
-
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
+        self.instantiate_fields()
         self.permission.add_role_to_permission(role=self.role_name, 
             community=str(self.community_pk))
         self.permission.save()
@@ -228,12 +214,16 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
 
 
 class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
+
     description = "Remove role from permission"
+    instantiated_fields = ['permission']
 
     def __init__(self, *, role_name: str, community_pk: int, permission_pk: int):
         self.role_name = role_name
         self.community_pk = community_pk
         self.permission_pk = permission_pk
+
+    def instantiate_fields(self):
         self.permission = self.look_up_permission()
 
     @classmethod
@@ -252,18 +242,9 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         return "removed role %s (community %d) from permission %d (%s)" % (self.role_name, 
             self.community_pk, self.permission_pk, self.permission.short_change_type())  
 
-    def get_change_data(self):
-        # TODO: make permission a custom field so we don't need to override get_change_data
-        '''
-        Given the python Change object, generates a json list of field names
-        and values.
-        '''
-        new_vars = vars(self)
-        del(new_vars)["permission"]
-        return json.dumps(new_vars)
-
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
+        self.instantiate_fields()
         configuration = permission.get_configuration()
         if "role_name" in configuration:  
             if self.role_name not in configuration["role_name"]:
@@ -275,6 +256,7 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target):
+        self.instantiate_fields()
         self.permission.remove_role_from_permission(role=self.role_name,
             community=str(self.community_pk))
         self.permission.save()
@@ -282,13 +264,17 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
 
 
 class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange):
+
     description = "Change configuration of permission"
+    instantiated_fields = ['permission']
 
     def __init__(self, *, configurable_field_name: str, configurable_field_value: str, 
         permission_pk: int):
         self.configurable_field_name = configurable_field_name
         self.configurable_field_value = configurable_field_value
         self.permission_pk = permission_pk
+
+    def instantiate_fields(self):
         self.permission = self.look_up_permission()
 
     @classmethod
@@ -303,21 +289,12 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         return "changed configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
             self.configurable_field_value, self.permission_pk, self.permission.short_change_type())
 
-    def get_change_data(self):
-        # TODO: make permission a custom field so we don't need to override get_change_data
-        '''
-        Given the python Change object, generates a json list of field names
-        and values.
-        '''
-        new_vars = vars(self)
-        del(new_vars)["permission"]
-        return json.dumps(new_vars)
-
     def validate(self, actor, target):
         # TODO: put real logic here
         return True
     
     def implement(self, actor, target):
+        self.instantiate_fields()
         configuration = self.permission.get_configuration()
         # FIXME: might there be problems with formatting of configurable field value? like, how is a 
         # list of role names formatted?

@@ -221,9 +221,10 @@ class ConditionalsTest(DataTestCase):
         self.rc = ResourceClient(actor=self.users.shauna)
         self.prc = PermissionResourceClient(actor=self.users.shauna)
         self.target = self.rc.create_resource(name="Aha")
+        from concord.resources.state_changes import ChangeResourceNameStateChange
+        change = ChangeResourceNameStateChange(new_name="hah")
         self.action = Action.objects.create(actor=self.users.elena, target=self.target,
-            change_type="concord.resources.state_changes.ChangeResourceNameStateChange",
-            change_data=json.dumps({"new_name": "Hah"}))
+            change=change)
 
     def test_create_vote_conditional(self):
         default_vote = self.cc.createVoteCondition(action=self.action)

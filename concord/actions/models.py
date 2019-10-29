@@ -6,8 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.state_changes import create_change_object
-from concord.actions.customfields import ResolutionField, Resolution
+from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
 
 
 ACTION_STATUS_CHOICES = (
@@ -30,10 +29,8 @@ class Action(models.Model):
     object_id = models.PositiveIntegerField()
     target = GenericForeignKey()
 
-    # Information related to the change we want to make, possibly replace this with
-    # custom field, although that might not work with invalid draft data.
-    change_type = models.CharField(max_length=50, blank=True)
-    change_data = models.CharField(max_length=500, blank=True) 
+    # Change field
+    change = StateChangeField()
 
     # Log field, helps with debugging and possibly useful for end user
     resolution = ResolutionField(default=get_default_resolution)
@@ -48,11 +45,10 @@ class Action(models.Model):
     # Basics
 
     def __str__(self):
-        return "%s action %s by %s on %s " % (self.status, self.change_type, self.actor, 
+        return "%s action %s by %s on %s " % (self.status, self.change.get_change_type(), self.actor, 
             self.target)
 
     def get_description(self):
-        self.change = create_change_object(self.change_type, self.change_data)
         if self.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
                 return self.actor + " " + self.change.description_past_tense() + " on target " + self.target.get_name()
@@ -62,7 +58,6 @@ class Action(models.Model):
         return self.__str__()
 
     def get_targetless_description(self):
-        self.change = create_change_object(self.change_type, self.change_data)
         if self.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
                 return self.actor + " " + self.change.description_past_tense()
@@ -121,8 +116,6 @@ class Action(models.Model):
 
     def take_action(self):
         """Checks status and attempts next step given that status."""
-        # hack for now, create change from change_type and change_data
-        self.change = create_change_object(self.change_type, self.change_data)
 
         current_result = None 
 
@@ -138,12 +131,6 @@ class Action(models.Model):
         self.save()  # Save action, may not always be needed
 
         return self, current_result
-
-
-# Helper method until we can call Action directly using change field
-def create_action(change, target, actor):
-    return Action.objects.create(actor=actor, target=target, 
-        change_type=change.get_change_type(), change_data=change.get_change_data())
 
 
 # Helper method to limit owners to communities. Probably need to get this via settings or

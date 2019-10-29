@@ -272,3 +272,15 @@ class RoleListField(models.Field):
             return json.dumps(value.as_strings())
         if value in [None, 'null', '[]']:
             return '[]'
+
+
+class ChangeConfiguration(object):
+    ...
+
+
+    '''Given a change type and optional configuration, instantiates.
+    
+    When done, move check_configuration from utils to this item.'''
+
+
+

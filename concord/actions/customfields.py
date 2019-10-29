@@ -1,4 +1,11 @@
+import json
+
 from django.db import models
+
+
+#################################
+### Resolution Object & Field ###
+#################################
 
 
 class Resolution:
@@ -108,3 +115,61 @@ class ResolutionField(models.Field):
             return "draft_%_None_%_None_%_None"
         return "_%_".join([str(value.status), str(value.resolved_through), 
             str(value.role), str(value.condition)])
+
+
+#############################
+### Change Object & Field ###
+#############################
+
+
+def create_change_object(change_type, change_data):
+    """
+    Finds change object using change_type and instantiates with change_data.
+    """
+    from django.utils.module_loading import import_string
+    changeClass = import_string(change_type)
+    if type(change_data) != dict:
+        change_data = json.loads(change_data)
+    return changeClass(**change_data)
+
+
+def parse_state_change(state_change_string):
+    state_change_dict = json.loads(state_change_string)
+    return create_change_object(state_change_dict["change_type"], state_change_dict["change_data"])
+
+
+class StateChangeField(models.Field):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        return name, path, args, kwargs
+
+    def db_type(self, connection):
+        return 'statechange'  
+
+    def from_db_value(self, value, expression, connection):
+        return parse_state_change(value)
+
+    def to_python(self, value):
+
+        from action.state_changes import BaseStateChange
+        if issubclass(change_class, BaseStateChange):
+            return value
+
+        return parse_state_change(value)
+
+    def get_prep_value(self, value):
+
+        # If actually given a state change, prep:
+        from concord.actions.state_changes import BaseStateChange
+        if issubclass(value.__class__, BaseStateChange):
+            return json.dumps({
+                "change_type": value.get_change_type(),
+                "change_data": value.get_change_data() })
+
+        # If already prepped for some reason, return as is:
+        if type(value) == dict and "change_type" in value.keys() and "change_data" in value.keys():
+            return value

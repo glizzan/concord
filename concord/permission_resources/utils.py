@@ -155,8 +155,9 @@ def check_configuration(action, permission):
 
     # If configuration exists, instantiate the action's change type with its
     # change data.  
-    from concord.actions.state_changes import create_change_object
-    change_object = create_change_object(action.change_type, action.change_data)
+    from concord.actions.customfields import create_change_object
+    change_object = create_change_object(action.change.get_change_type(), 
+        action.change.get_change_data())
 
     # Then call check_configuration on the state_change, passing in the permission
     # configuration data, and return the result.

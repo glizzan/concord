@@ -9,6 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 class BaseStateChange(object):
 
     allowable_targets = []
+    instantiated_fields = []
 
     @classmethod 
     def get_change_type(cls):
@@ -24,6 +25,11 @@ class BaseStateChange(object):
             warnings.warn("You have added a check_configuration method to your state change without specifying any configurable fields.")
         return []
 
+    def instantiate_fields(self):
+        '''Helper method used by state change subclasses that have fields which require database
+        lookups.  Not called by default, to prevent unnecessary db queries.'''
+        return False
+
     def validate(self, actor, target):
         ...
 
@@ -33,9 +39,13 @@ class BaseStateChange(object):
     def get_change_data(self):
         '''
         Given the python Change object, generates a json list of field names
-        and values.
+        and values.  Does not include instantiated fields.
         '''
-        return json.dumps(vars(self))
+        new_vars = vars(self)
+        for field in self.instantiated_fields:
+            if field in new_vars:
+                del(new_vars)[field]
+        return json.dumps(new_vars)
 
 
 class ChangeOwnerStateChange(BaseStateChange):
@@ -231,7 +241,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         return target
 
 
-# TODO: create and add governing_permission_state_change here
+# TODO: must be a better approach than just listing these
 def foundational_changes():
     return [
         'concord.communities.state_changes.AddGovernorStateChange',
@@ -247,17 +257,4 @@ def foundational_changes():
         'concord.actions.state_changes.EnableGoverningPermissionStateChange',
         'concord.actions.state_changes.DisableGoverningPermissionStateChange'
     ]
-
-
-def create_change_object(change_type, change_data):
-    """
-    Finds change object using change_type and instantiates with change_data.
-    """
-    # appname, classname = change_type.split("_")
-    # changeclass = import_string(appname + "." + "state_changes." + classname)
-    from django.utils.module_loading import import_string
-    changeClass = import_string(change_type)
-    if type(change_data) != dict:
-        change_data = json.loads(change_data)
-    return changeClass(**change_data)
 

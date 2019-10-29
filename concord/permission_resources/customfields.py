@@ -4,6 +4,11 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
+################################
+### ActorList Object & Field ###
+################################
+
+
 class ActorList(object):
     '''This custom object allows us to preferentially manipulate our actors as a list of
     PKs, so we don't have to constantly query the DB.  If pks and instances are not 
@@ -147,6 +152,11 @@ class ActorListField(models.Field):
             return '[]'
 
 
+###############################
+### RoleList Object & Field ###
+###############################
+
+
 RolePair = collections.namedtuple('RolePair', 'community_pk role_name')
 
 class RoleList(object):
@@ -272,15 +282,3 @@ class RoleListField(models.Field):
             return json.dumps(value.as_strings())
         if value in [None, 'null', '[]']:
             return '[]'
-
-
-class ChangeConfiguration(object):
-    ...
-
-
-    '''Given a change type and optional configuration, instantiates.
-    
-    When done, move check_configuration from utils to this item.'''
-
-
-

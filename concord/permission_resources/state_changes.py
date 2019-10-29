@@ -56,8 +56,8 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         permission.permitted_object = target
         permission.change_type = self.permission_type        
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here
-            permission.add_actors_to_permission(actors=self.permission_actors)
-        permission.add_roles_to_permission(list_of_pair_strings=self.permission_role_pairs)
+            permission.actors.add_actors(actors=self.permission_actors)
+        permission.roles.add_roles(list_of_pair_strings=self.permission_role_pairs)
         if self.permission_configuration:
             #FIXME: probably not the place to do this formatting :/
             configuration_dict = {}
@@ -135,7 +135,7 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
     
     def implement(self, actor, target):
         self.instantiate_fields()
-        self.permission.add_actors_to_permission(actors=[self.actor_to_add])
+        self.permission.actors.add_actors(actors=[self.actor_to_add])
         self.permission.save()
         return self.permission
 
@@ -171,7 +171,7 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
     
     def implement(self, actor, target):
         self.instantiate_fields()
-        self.permission.remove_actors_from_permission(actors=[self.actor_to_remove])
+        self.permission.actors.remove_actors(actors=[self.actor_to_remove])
         self.permission.save()
         return self.permission
 

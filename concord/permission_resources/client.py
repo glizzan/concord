@@ -78,7 +78,7 @@ class PermissionResourceClient(BaseClient):
 
     def get_roles_associated_with_permission(self, *, permission_pk: int):
         permission = PermissionsItem.objects.filter(pk=permission_pk).first()
-        return permission.get_roles()
+        return permission.roles.get_roles()
 
     def get_permissions_associated_with_actor(self, actor: int) -> List[PermissionsItem]:
         permissions = self.get_permissions_on_object(object=self.target)
@@ -239,7 +239,7 @@ class PermissionResourceClient(BaseClient):
 
                 # Otherwise, update role data.
 
-                old_roles = set(permission.get_roles())
+                old_roles = set(permission.roles.get_roles())
                 new_roles = set(new_permissions[permission.change_type])
                 roles_to_add = new_roles.difference(old_roles)
                 roles_to_remove = old_roles.difference(new_roles)

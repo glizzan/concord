@@ -93,20 +93,11 @@ class PermissionsItem(PermissionedModel):
     def get_actor_names(self):
         return " ".join([user.username for user in self.actors.as_instances()])
 
-    def add_actors_to_permission(self, *, actors: list):
-        self.actors.add_actors(actors)
-    
-    def remove_actors_from_permission(self, *, actors: list):
-        self.actors.remove_actors(actors)
-
     # RoleList-related methods
-
-    def get_roles(self):
-        return self.roles.get_roles()
 
     # NOTE: Assumes roles are all from same community, which may not be true.
     def get_role_names(self):
-        role_pairs = self.get_roles()
+        role_pairs = self.roles.get_roles()
         return [role.role_name for role in role_pairs]
 
     def has_role(self, *, role: str, community: str):
@@ -117,20 +108,6 @@ class PermissionsItem(PermissionedModel):
 
     def remove_role_from_permission(self, *, role: str, community: str):
         self.roles.remove_roles(community_pk=community, role_name_list=[role])
-        
-    def add_roles_to_permission(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
-        role_name_list=None):
-        self.roles.add_roles(role_pair_list=role_pair_list, 
-            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
-            role_name_list=role_name_list)
-
-    def remove_roles_from_permission(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
-        role_name_list=None):
-        self.roles.remove_roles(role_pair_list=role_pair_list, 
-            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
-            role_name_list=role_name_list)
-
-    # TODO: add/remove roles when given list of role_pair_strings
 
     # Misc
 
@@ -146,7 +123,7 @@ class PermissionsItem(PermissionedModel):
 
         from concord.communities.client import CommunityClient
         cc = CommunityClient(system=True)
-        for pair in self.get_roles():
+        for pair in self.roles.get_roles():
             cc.set_target_community(community_pk=pair.community_pk)
             if cc.has_role_in_community(role=pair.role_name, actor_pk=actor):
                 return True, pair

@@ -258,3 +258,68 @@ def foundational_changes():
         'concord.actions.state_changes.DisableGoverningPermissionStateChange'
     ]
 
+
+# TODO: automatically generate this
+class Changes(object):
+    '''Helper object which lets developers easily access change types.'''
+
+    class Actions(object):
+
+        ChangeOwner = 'concord.actions.state_changes.ChangeOwnerStateChange'
+        EnableFoundationalPermission = 'concord.actions.state_changes.EnableFoundationalPermissionStateChange'
+        DisableFoundationalPermission = 'concord.actions.state_changes.DisableFoundationalPermissionStateChange'
+        EnableGoverningPermission = 'concord.actions.state_changes.EnableGoverningPermissionStateChange'
+        DisableGoverningPermission = 'concord.actions.state_changes.DisableGoverningPermissionStateChange'
+
+    class Communities(object):
+
+        ChangeName = 'concord.communities.state_changes.ChangeNameStateChange'
+        AddMember = 'concord.communities.state_changes.AddMemberStateChange'
+        AddMembers = 'concord.communities.state_changes.AddMembersStateChange'
+        RemoveMember = 'concord.communities.state_changes.RemoveMemberStateChange'
+        RemoveMembers = 'concord.communities.state_changes.RemoveMembersStateChange'
+        AddGovernor = 'concord.communities.state_changes.AddGovernorStateChange'
+        RemoveGovernor = 'concord.communities.state_changes.RemoveGovernorStateChange'
+        AddGovernorRole = 'concord.communities.state_changes.AddGovernorRoleStateChange'
+        RemoveGovernorRole = 'concord.communities.state_changes.RemoveGovernorRoleStateChange'
+        AddOwner = 'concord.communities.state_changes.AddOwnerStateChange'
+        RemoveOwner = 'concord.communities.state_changes.RemoveOwnerStateChange'
+        AddOwnerRole = 'concord.communities.state_changes.AddOwnerRoleStateChange'
+        RemoveOwnerRole = 'concord.communities.state_changes.RemoveOwnerRoleStateChange'
+        AddRole = 'concord.communities.state_changes.AddRoleStateChange'
+        RemoveRole = 'concord.communities.state_changes.RemoveRoleStateChange'
+        AddPeopleToRole = 'concord.communities.state_changes.AddPeopleToRoleStateChange'
+        RemovePeopleFromRole = 'concord.communities.state_changes.RemovePeopleFromRoleStateChange'
+
+    class Conditionals(object):
+
+        AddCondition = 'concord.conditionals.state_changes.AddConditionStateChange'
+        RemoveCondition = 'concord.conditionals.state_changes.RemoveConditionStateChange'
+        ChangeCondition = 'concord.conditionals.state_changes.ChangeConditionStateChange'
+        AddVote = 'concord.conditionals.state_changes.AddVoteStateChange'
+        Approve = 'concord.conditionals.state_changes.ApproveStateChange'
+        Reject = 'concord.conditionals.state_changes.RejectStateChange'
+
+    class Permissions(object):
+
+        AddPermission = 'concord.permission_resources.state_changes.AddPermissionStateChange'        
+        RemovePermission = 'concord.permission_resources.state_changes.RemovePermissionStateChange'        
+        AddActorToPermission = 'concord.permission_resources.state_changes.AddActorToPermissionStateChange'        
+        RemoveActorFromPermission = 'concord.permission_resources.state_changes.RemoveActorFromPermissionStateChange'        
+        AddRoleToPermission = 'concord.permission_resources.state_changes.AddRoleToPermissionStateChange'        
+        RemoveRoleFromPermission = 'concord.permission_resources.state_changes.RemoveRoleFromPermissionStateChange'        
+        ChangePermissionConfiguration = 'concord.permission_resources.state_changes.ChangePermissionConfigurationStateChange'        
+        
+    class Resources(object):
+        
+        ChangeResourceName = 'concord.resources.state_changes.ChangeResourceNameStateChange'        
+        AddItem = 'concord.resources.state_changes.AddItemResourceStateChange'  #Remove 'Resource'?  
+        RemoveItem = 'concord.resources.state_changes.RemoveItemResourceStateChange'  # Remove 'Resource'?        
+        
+        
+    
+
+
+
+
+

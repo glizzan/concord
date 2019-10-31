@@ -27,6 +27,8 @@ class PermissionsItem(PermissionedModel):
     """
 
     is_active = models.BooleanField(default=True)
+    inverse = models.BooleanField(default=False)  # If toggled, applies to everyone BUT those listed in actors or roles
+    # NOTE: may make sense to apply inverse to specific roles but too complex for now
 
     permitted_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     permitted_object_id = models.PositiveIntegerField()
@@ -127,21 +129,30 @@ class PermissionsItem(PermissionedModel):
 
     # Misc
 
-    def match_actor(self, actor):
+    def match_actor(self, actor_pk):
+        """Determines if actor in the permission.  If inverse is toggled, returns the oppposite -
+        such that they would NOT match if they're listed in an inverse permission."""
 
-        # FIXME: Temporary fix so long as actor sometimes is referenced by username
-        actor = actor.pk
+        in_permission, matched_role = self.actor_in_permission(actor_pk)
+        if self.inverse == True:
+            print("NOTHING SHOULD BE INVERSED!")
+            matched_role = "" if not matched_role else "NOT " + matched_role
+            return not in_permission, matched_role
+        else:
+            return in_permission, matched_role
+
+    def actor_in_permission(self, actor):
 
         actors = self.get_actors()
 
-        if actor in actors:
+        if actor.pk in actors:
             return True, None
 
         from concord.communities.client import CommunityClient
         cc = CommunityClient(system=True)
         for pair in self.roles.get_roles():
             cc.set_target_community(community_pk=pair.community_pk)
-            if cc.has_role_in_community(role=pair.role_name, actor_pk=actor):
+            if cc.has_role_in_community(role=pair.role_name, actor_pk=actor.pk):
                 return True, pair
 
         # TODO: thing the above through.  If every role is queried separately, that's a lot of 

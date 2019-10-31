@@ -2115,7 +2115,6 @@ class ResolutionFieldTest(DataTestCase):
     def test_resolution_field_for_role_for_governing_permission(self):
 
         # Steve makes a governing role
-        # action, result = self.commClient.add_role(role_name="assassins")
         action, result = self.commClient.add_governor_role(governor_role="assassins")
         action, result = self.buckyClient.change_name(new_name="Reckless Idiots")
         self.assertEquals(action.resolution.resolved_through, "governing")

@@ -87,6 +87,9 @@ class Action(models.Model):
             self.status = "sent"
         # TODO: handle invalid actions
     
+    # TODO: Approve_action and reject_action could be cleaned up, also need to store more complex info -
+    # for instance, if you match & are rejected from two things with two conditions, which roles &
+    # conditions do you save?
     def approve_action(self, resolved_through, log=None, condition=None, role=None):
         self.log = log if log else ""
         self.status = "approved"

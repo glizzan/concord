@@ -3,6 +3,7 @@ import json
 from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
 from concord.permission_resources.utils import check_permission_inputs
@@ -24,6 +25,8 @@ class PermissionsItem(PermissionedModel):
     if someone matches an actor OR a role they have the permission. actors are checked first.
 
     """
+
+    is_active = models.BooleanField(default=True)
 
     permitted_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     permitted_object_id = models.PositiveIntegerField()
@@ -82,6 +85,19 @@ class PermissionsItem(PermissionedModel):
 
     def set_configuration(self, configuration_dict):
         self.configuration = json.dumps(configuration_dict)
+
+    # Activation & deactivation
+
+    def activate_permission(self):
+        """For now, activate_permission is an internal method not accessible to the user which is 
+        called via signals when a permission is updated to add actors or roles where before there 
+        were none."""
+        ...
+
+    def deactivate_permission(self):
+        """For now, activate_permission is an internal method not accessible to the user which is 
+        called via signals when a permission is updated to remove all actors and roles."""
+        ...
     
     # ActorList-related methods
 
@@ -132,3 +148,23 @@ class PermissionsItem(PermissionedModel):
         # lookups.  You could provide the roles to each community in bulk?
 
         return False, None
+
+
+
+def delete_empty_permission(sender, instance, created, **kwargs):
+    """Toggle is_active so it is only true when there are actors or roles set on the permission."""
+
+    # Deactivate if empty
+    if instance.actors.is_empty() and instance.roles.is_empty():
+        if instance.is_active:
+            instance.is_active = False
+            instance.save(override_check=True)
+
+    # Reactivate if has data
+    if not instance.is_active:
+        if not (instance.actors.is_empty() and instance.roles.is_empty()):
+            instance.is_active = True
+            instance.save(override_check=True)            
+
+
+post_save.connect(delete_empty_permission, sender=PermissionsItem)

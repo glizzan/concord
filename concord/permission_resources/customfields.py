@@ -170,6 +170,9 @@ class RoleList(object):
         self.role_list = self.format_as_role_pair(role_pair_list=role_pair_list, 
             list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
             role_name_list=role_name_list)
+
+    def is_empty(self):
+        return False if self.role_list else True
         
     def format_as_role_pair(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
         role_name_list=None):

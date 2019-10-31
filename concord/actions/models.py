@@ -175,7 +175,7 @@ class PermissionedModel(models.Model):
         state_changes_module = importlib.import_module(relative_import, package="concord")
         return inspect.getmembers(state_changes_module) 
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, override_check=False, **kwargs):
         '''
         There are two things happening here.  
 
@@ -188,16 +188,25 @@ class PermissionedModel(models.Model):
         This is a hack.  Once we have better testing, we will enforce this via tests.
         '''
 
-        # CHECK 1: only allow null owner for communities
+        ### CHECK 1: only allow null owner for communities
         
         if not (self.owner and self.owner_content_type and self.owner_object_id):
             if not (hasattr(self, "is_community") and self.is_community):
                 raise ValueError("Owner must be specified for model of type ", type(self))
 
-        # CHECK 2: only invoke save method via descendant of BaseStateChange
+        ### CHECK 2: only invoke save method via descendant of BaseStateChange
 
-        if not self.pk:  # Don't need to check for newly created objects
+        # Allow normal save on create.
+    
+        if not self.pk:
             return super().save(*args, **kwargs)  # Call the "real" save() method.
+
+        # If override_check has been passed in by internal system, allow normal save.
+        if override_check is True:
+            return super().save(*args, **kwargs)  # Call the "real" save() method.
+
+        # Check all others for call by StateChange.
+
         import inspect
         curframe = inspect.currentframe()
         caller = inspect.getouterframes(curframe, 5)

@@ -57,9 +57,10 @@ def find_specific_permissions(action):
     permissionClient.set_target(action.target)
     specific_permissions = []
     for permission in permissionClient.get_specific_permissions(change_type=action.change.get_change_type()):
-        # Check configuration returns false only if the permission has a configuration which the action doesn't satisfy
-        is_relevant = check_configuration(action, permission)
-        if is_relevant:
+        if not permission.is_active:
+            continue       
+        satisfies_configuration_or_no_configuration = check_configuration(action, permission)
+        if satisfies_configuration_or_no_configuration:
             specific_permissions.append(permission)
     return specific_permissions
 

@@ -1,31 +1,3 @@
-"""
-When we set a condition on a permission, we need to store two types of info.  First, 
-we need to know what type of condition the permission requires.  Second, we need to store
-the status of each instantiation of a condition on a per action basis.
-
-The flow goes like this:
-
-Check_condition from action/permissions.py or from communities/models.py asks "hey is
-there a condition set on this permission?"  If no, it moves on.  If yes, it asks,
-"okay well do we already have a conditional action for this specific action?"  If yes,
-it gets the existing conditional action and checks the status.  If no, it creates the
-conditional_action, and checks the status.
-
-Breaking down the steps:
-
-- Checking for a condition set on the permission requires looking for a corresponding 
-ConditionTemplate model.
-- Checking for a conditional action instantiated for a given action requires looking
-for a corresponding ConditionalAction model.
-- Creating a conditional action requires generating a conditional action from the
-conditional template and giving it its own separate permission to restrict who can 
-change the conditional.
-
-Most of the conditional logic itself is in the conditional action models like 
-ApproveCondition and  VoteCondition, which have corresponding state changes like 
-ApproveStateChange, etc.
-"""
-
 import datetime
 import json
 import decimal

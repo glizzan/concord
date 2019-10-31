@@ -9,31 +9,10 @@ from concord.actions.models import Action  # Just needed for type hinting
 from concord.conditionals.models import ApprovalCondition, VoteCondition, ConditionTemplate
 from concord.conditionals import state_changes as sc
 
-'''
-The conditionals app is one of the more confusing core apps, and the client is fairly confusing 
-as well.  One day we'll refactor it to make it easier to understand.
 
-For now, it's important to distinguish between *condition templates* and *conditions*.  A condition 
-template keeps track of how to set conditions on actions in various contexts.  A condition template is
-theoretical: it says, "if someone does X, they'll need to pass condition Y".  A condition is practical:
-it says, "someone did X, and this is the status of Y".  
-
-For any "Condition" client, the target is the corresponding condition.  So, for example, the target
-of an ApprovalConditionClient must be an ApprovalCondition instance.  Note that the condition is 
-always linked to a specific action, but the action is not the target of the client.  You may start off
-only knowing the identity of the action, in which case you'll need to do some extra work to get the 
-corresponding condition.
-
-For any "Condition Template" client, the target is a conditional template.  Generally speaking,
-we use two kinds of condition templates.  One kind is set on individual permissions, and one kind is
-set on the Owner and Governor roles in communities.  The process for generating conditions from
-these two types of condition templates is practically the same.  There are a number of steps that
-circumvent the typical permissions process. The following steps do NOT go through the permissions 
-pipelines themselves because they are considered approved through the process by which the 
-condition template was originally set: 
-1) creating the condition
-2) setting a permission on the condition
-'''
+"""The conditionals app is one of the more confusing core apps, and the client is fairly confusing 
+as well.  One day we'll refactor it to make it easier to understand but for now, if you are 
+confused, *please* go read the documentation on conditionals!"""
 
 
 class ApprovalConditionClient(BaseClient):

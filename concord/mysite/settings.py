@@ -42,7 +42,6 @@ INSTALLED_APPS = [
     'concord.actions',
     'concord.conditionals',
     'concord.communities',
-    'concord.toyfrontend',
 ]
 
 MIDDLEWARE = [

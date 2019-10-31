@@ -1,9 +1,0 @@
-<h1>{{ object.get_name }} by <a href="{% url 'resource_list_by_owner' object.get_owner %}">
-    {{ object.get_owner }}
-</a></h1>
-
-{% for item in action_history %}
-
-    {{ item }}
-
-{% endfor %}

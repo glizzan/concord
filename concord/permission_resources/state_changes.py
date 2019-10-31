@@ -18,13 +18,14 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Add permission"
 
     def __init__(self, permission_type, permission_actors, permission_role_pairs, 
-        permission_configuration):
+        permission_configuration, inverse=False):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
         self.permission_type = permission_type
         self.permission_actors = permission_actors if permission_actors else []
         self.permission_role_pairs = permission_role_pairs if permission_role_pairs else []
         self.permission_configuration = permission_configuration
+        self.inverse = inverse
 
     @classmethod
     def get_allowable_targets(cls):
@@ -54,7 +55,8 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         permission = PermissionsItem()
         permission.owner = target.get_owner() # FIXME: should it be the target owner though?
         permission.permitted_object = target
-        permission.change_type = self.permission_type        
+        permission.change_type = self.permission_type
+        permission.inverse = self.inverse   
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here
             permission.actors.add_actors(actors=self.permission_actors)
         permission.roles.add_roles(list_of_pair_strings=self.permission_role_pairs)
@@ -300,5 +302,41 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         # list of role names formatted?
         configuration[self.configurable_field_name] = self.configurable_field_value
         self.permission.set_configuration(configuration)
+        self.permission.save()
+        return self.permission
+
+
+# FIXME:  Might just be a configurable field?
+class ChangeInverseStateChange(PermissionResourceBaseStateChange):
+
+    description = "Toggle permission's inverse field"
+    instantiated_fields = ['permission']
+
+    def __init__(self, *, change_to: bool, permission_pk: int):
+        self.change_to = change_to
+        self.permission_pk = permission_pk
+    
+    def instantiate_fields(self):
+        self.permission = self.look_up_permission()
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [PermissionsItem]   
+
+    def description_present_tense(self):
+        return "change inverse field to value %s on permission %d (%s)" % (self.change_to, 
+            self.permission_pk, self.permission.short_change_type())
+    
+    def description_past_tense(self):
+        return "changed inverse field to value %s on permission %d (%s)" % (self.change_to, 
+            self.permission_pk, self.permission.short_change_type())
+
+    def validate(self, actor, target):
+        # TODO: put real logic here
+        return True
+    
+    def implement(self, actor, target):
+        self.instantiate_fields()
+        self.permission.inverse = self.change_to
         self.permission.save()
         return self.permission

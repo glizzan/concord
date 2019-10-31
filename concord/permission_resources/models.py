@@ -135,7 +135,6 @@ class PermissionsItem(PermissionedModel):
 
         in_permission, matched_role = self.actor_in_permission(actor_pk)
         if self.inverse == True:
-            print("NOTHING SHOULD BE INVERSED!")
             matched_role = "" if not matched_role else "NOT " + matched_role
             return not in_permission, matched_role
         else:

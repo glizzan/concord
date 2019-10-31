@@ -141,6 +141,10 @@ class PermissionResourceClient(BaseClient):
             configurable_field_value=configurable_field_value, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
+    def change_inverse_field_of_permission(self, *, change_to: bool, permission_pk=int) -> Tuple[int, Any]:
+        change = sc.ChangeInverseStateChange(change_to=change_to, permission_pk=permission_pk)
+        return self.create_and_take_action(change)
+
     # Complex/multiple state changes
 
     def update_configuration(self, *, configuration_dict: dict, permission):

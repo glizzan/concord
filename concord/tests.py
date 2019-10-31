@@ -212,6 +212,95 @@ class PermissionSystemTest(DataTestCase):
             permission_actors=[self.users.willow.pk])        
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
+    def test_multiple_specific_permission(self):
+        """Tests that when multiple permissions are set, they're handled in an OR fashion."""
+
+        # Shauna creates a resource and adds a permission to the resource.
+        resource = self.rc.create_resource(name="Aha")
+        self.prc.set_target(target=resource)
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.willow.pk])
+
+        # Then she adds another permission with different actors/roles.
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.buffy.pk])
+
+        # Both of the actors specified can do the thing.
+
+        wrc = ResourceClient(actor=self.users.willow, target=resource)
+        action, item = wrc.add_item(item_name="Willow Test")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.assertEquals(item.name, "Willow Test")  
+
+        brc = ResourceClient(actor=self.users.buffy, target=resource)
+        action, item = brc.add_item(item_name="Buffy Test")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.assertEquals(item.name, "Buffy Test")
+
+    def test_multiple_specific_permission_with_conditions(self):
+        """test multiple specific permissions with conditionals"""
+        # TODO: do a version where both permissions have conditionals, or the conditionals are accepted/rejected?
+        
+        # Shauna creates a resource and adds a permission to the resource.
+        resource = self.rc.create_resource(name="Aha")
+        self.prc.set_target(target=resource)
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.willow.pk])
+
+        # Then she adds another permission with different actors/roles.
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.buffy.pk])
+
+        # Then she adds a condition to the second one
+        self.cc = PermissionConditionalClient(actor=self.users.shauna)
+        self.cc.set_target(target=permission)
+        self.cc.addCondition(condition_type="approvalcondition")
+
+        # The first (Willow) is accepted while the second (Buffy) has to wait
+
+        wrc = ResourceClient(actor=self.users.willow, target=resource)
+        action, item = wrc.add_item(item_name="Willow Test")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.assertEquals(item.name, "Willow Test")  
+
+        brc = ResourceClient(actor=self.users.buffy, target=resource)
+        action, item = brc.add_item(item_name="Buffy Test")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "waiting")
+        self.assertEquals(item, None)
+
+    def test_inverse_permission(self):
+        """Tests that when inverse toggle is flipped, permissions match appropriately."""
+
+        # Shauna creates a resource and adds a permission to the resource.
+        resource = self.rc.create_resource(name="Aha")
+        self.prc.set_target(target=resource)
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.willow.pk])
+
+        # Willow can use the permission
+        wrc = ResourceClient(actor=self.users.willow, target=resource)
+        action, item = wrc.add_item(item_name="Willow Test")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.assertEquals(item.name, "Willow Test")  
+
+        # Shauna toggles the permission
+        action, result = self.prc.change_inverse_field_of_permission(change_to=True, 
+            permission_pk=permission.pk)
+        permission.refresh_from_db()
+        self.assertEquals(permission.inverse, True)
+
+        # Willow can no longer use the permission, but anyone who is not Willow can
+
+        wrc = ResourceClient(actor=self.users.willow, target=resource)
+        action, item = wrc.add_item(item_name="Willow Test #2")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
+        self.assertEquals(item, None) 
+
+        brc = ResourceClient(actor=self.users.buffy, target=resource)
+        action, item = brc.add_item(item_name="Buffy Test")
+        self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.assertEquals(item.name, "Buffy Test")
+
 
 class ConditionalsTest(DataTestCase):
 
@@ -2372,8 +2461,8 @@ class ConfigurablePermissionTest(DataTestCase):
             self.metapermissions_data[str(count) + "~" + "individuals"] = []
             for field in permission.get_configurable_fields():
                 self.metapermissions_data['%s~configurablefield~%s' % (count, field)] = ""
-        self.metapermissions_data["4~configurablefield~role_name"] = "admins"
-        self.metapermissions_data["4~individuals"] = [self.users.okoye.pk]
+        self.metapermissions_data["5~configurablefield~role_name"] = "admins"
+        self.metapermissions_data["5~individuals"] = [self.users.okoye.pk]
 
         self.metapermission_form = MetaPermissionForm(request=self.request, instance=target_permission,
             data=self.metapermissions_data)

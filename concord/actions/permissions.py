@@ -28,7 +28,7 @@ def foundational_permission_pipeline(action):
     communityClient.set_target(target=community)
     has_authority, matched_role = communityClient.has_foundational_authority(actor=action.actor)
     if not has_authority:
-        action.reject_action(resolved_through="foundational", log="actor does not have foundational authority")
+        action.resolution.reject_action(resolved_through="foundational", log="actor does not have foundational authority")
         return action
 
     # Check for conditions
@@ -38,16 +38,16 @@ def foundational_permission_pipeline(action):
 
     # Update action
     if condition_status == "no_template":
-        action.approve_action(resolved_through="foundational", role=matched_role, 
+        action.resolution.approve_action(resolved_through="foundational", role=matched_role, 
             log="action approved via foundational pipeline with with no condition set")
     elif condition_status == "approved":
-        action.approve_action(resolved_through="foundational", role=matched_role, condition=condition_template.condition_type,
+        action.resolution.approve_action(resolved_through="foundational", role=matched_role, condition=condition_template.condition_type,
             log="action approved via foundational pipeline with condition %s" % condition_template.condition_type)
     elif condition_status == "rejected": 
-        action.reject_action(resolved_through="foundational", role=matched_role, condition=condition_template.condition_type,
+        action.resolution.reject_action(resolved_through="foundational", role=matched_role, condition=condition_template.condition_type,
             log="action passed foundational pipeline but was rejected by condition %s" % condition_template.condition_type)
     elif condition_status == "waiting":
-        action.status = "waiting"
+        action.resolution.status = "waiting"
         action.log = "action passed foundational pipeline, now waiting on condition " + condition_template.condition_type
     
     return action
@@ -80,7 +80,7 @@ def specific_permission_pipeline(action, specific_permissions):
             matching_permissions.update({permission : matched_role})
 
     if not matching_permissions:
-        action.reject_action(resolved_through="specific", log="no matching specific permissions found")
+        action.resolution.reject_action(resolved_through="specific", log="no matching specific permissions found")
         return action
 
     waiting_on_permission = False
@@ -94,10 +94,10 @@ def specific_permission_pipeline(action, specific_permissions):
         action, conditional_status = check_conditional(action, condition_template)
 
         if conditional_status == "no_template":
-            action.approve_action(resolved_through="specific", role=matched_role,
+            action.resolution.approve_action(resolved_through="specific", role=matched_role,
                 log="action approved via specific pipeline with with no condition set")
         elif conditional_status == "approved":
-            action.approve_action(resolved_through="specific", role=matched_role,
+            action.resolution.approve_action(resolved_through="specific", role=matched_role,
                 condition=condition_template.condition_type,
                 log="action approved via specific pipeline with with condition %s" % condition_template.condition_type)
         elif conditional_status == "waiting":
@@ -109,13 +109,13 @@ def specific_permission_pipeline(action, specific_permissions):
                 matched_perm, matched_role))
 
         # If permission is accepted, return, otherwise continue with loop
-        if action.status == "approved":
+        if action.resolution.status == "approved":
             return action
 
     # If after looping through matching permissions we're waiting on a permission, the whole action
     # is set to waiting, otherwise reject.
     if waiting_on_permission:
-        action.status = "waiting"
+        action.resolution.status = "waiting"
         action.log = "; ".join(temp_log)
         return action
     else:
@@ -125,7 +125,7 @@ def specific_permission_pipeline(action, specific_permissions):
             role = matched_role
         else:
             condition, role = None, None
-        action.reject_action(resolved_through="specific", condition=condition, role=role,
+        action.resolution.reject_action(resolved_through="specific", condition=condition, role=role,
             log="; ".join(temp_log))
         return action
 
@@ -137,7 +137,7 @@ def governing_permission_pipeline(action):
     communityClient.set_target(target=community)
     has_authority, matched_role = communityClient.has_governing_authority(actor=action.actor)
     if not has_authority:
-        action.reject_action(resolved_through="governing", log="actor does not have governing authority")
+        action.resolution.reject_action(resolved_through="governing", log="actor does not have governing authority")
         return action  
 
     # Check for conditions
@@ -147,16 +147,16 @@ def governing_permission_pipeline(action):
 
     # Update action
     if condition_status == "no_template":
-        action.approve_action(resolved_through="governing",  role=matched_role,
+        action.resolution.approve_action(resolved_through="governing",  role=matched_role,
             log="action approved via governing pipeline with with no condition set")
     elif condition_status == "approved":
-        action.approve_action(resolved_through="governing", role=matched_role, condition=condition_template.condition_type,
+        action.resolution.approve_action(resolved_through="governing", role=matched_role, condition=condition_template.condition_type,
             log="action approved via governing pipeline with condition %s" % condition_template.condition_type)
     elif condition_status == "rejected": 
-        action.reject_action(resolved_through="governing", role=matched_role, condition=condition_template.condition_type,
+        action.resolution.reject_action(resolved_through="governing", role=matched_role, condition=condition_template.condition_type,
             log="action passed governing pipeline but was rejected by condition %s" % condition_template.condition_type)
     elif condition_status == "waiting":
-        action.status = "waiting"
+        action.resolution.status = "waiting"
         action.log = "action passed governing pipeline, now waiting on condition " + condition_template.condition_type
     
     return action
@@ -176,7 +176,7 @@ def has_permission(action):
     if action.target.governing_permission_enabled:
         return governing_permission_pipeline(action)
 
-    action.reject_action(log="action did not meet any permission criteria")
+    action.resolution.reject_action(log="action did not meet any permission criteria")
     return action
 
 

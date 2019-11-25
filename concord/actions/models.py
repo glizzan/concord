@@ -9,15 +9,6 @@ from django.contrib.auth.models import User
 from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
 
 
-ACTION_STATUS_CHOICES = (
-    ('draft', 'Drafted'),
-    ('sent', 'Sent, awaiting approval'),
-    ('approved', 'Approved'),
-    ('rejected', 'Rejected'),
-    ('withdrawn', 'Withdrawn'),
-    ('implemented', 'Implemented'),
-)
-
 def get_default_resolution():
     return Resolution(status="draft")
 
@@ -32,24 +23,21 @@ class Action(models.Model):
     # Change field
     change = StateChangeField()
 
-    # Log field, helps with debugging and possibly useful for end user
+    # Resolution field stores status & log info as well as details of how the action has been processed
     resolution = ResolutionField(default=get_default_resolution)
-    log = models.CharField(max_length=500, blank=True)
-
+    
     # Regular old attributes
-    status = models.CharField(max_length=5, choices=ACTION_STATUS_CHOICES, 
-        default='draft')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     # Basics
 
     def __str__(self):
-        return "%s action %s by %s on %s " % (self.status, self.change.get_change_type(), self.actor, 
+        return "%s action %s by %s on %s " % (self.resolution.status, self.change.get_change_type(), self.actor, 
             self.target)
 
     def get_description(self):
-        if self.status == "implemented":
+        if self.resolution.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
                 return self.actor + " " + self.change.description_past_tense() + " on target " + self.target.get_name()
         else:
@@ -58,7 +46,7 @@ class Action(models.Model):
         return self.__str__()
 
     def get_targetless_description(self):
-        if self.status == "implemented":
+        if self.resolution.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
                 return self.actor + " " + self.change.description_past_tense()
         else:
@@ -84,37 +72,14 @@ class Action(models.Model):
         """Checks that action is valid by providing actor and target to the change
         itself, which implements its own custom logic."""
         if self.change.validate(actor=self.actor, target=self.target):
-            self.status = "sent"
+            self.resolution.status = "sent"
         # TODO: handle invalid actions
-    
-    # TODO: Approve_action and reject_action could be cleaned up, also need to store more complex info -
-    # for instance, if you match & are rejected from two things with two conditions, which roles &
-    # conditions do you save?
-    def approve_action(self, resolved_through, log=None, condition=None, role=None):
-        self.log = log if log else ""
-        self.status = "approved"
-        self.resolution.status = "approved"
-        self.resolution.is_resolved = True
-        self.resolution.is_approved = True
-        self.resolution.resolved_through = resolved_through
-        self.resolution.condition = condition
-        self.resolution.role = role
-
-    def reject_action(self, resolved_through=None, log=None, condition=None, role=None):
-        self.log = log if log else ""
-        self.status = "rejected"
-        self.resolution.status = "rejected"
-        self.resolution.is_resolved = True
-        self.resolution.is_approved = False
-        self.resolution.resolved_through = resolved_through
-        self.resolution.condition = condition
-        self.resolution.role = role
 
     def implement_action(self):
         """Lets the change object carry out its custom implementation using the
         actor and target."""
         result = self.change.implement(actor=self.actor, target=self.target)
-        self.status = "implemented"
+        self.resolution.status = "implemented"
         return result
 
     def take_action(self):
@@ -122,14 +87,16 @@ class Action(models.Model):
 
         current_result = None 
 
-        # now go through steps
-        if self.status == "draft":
+        if self.resolution.status == "draft":
             self.validate_action()
-        if self.status in ["sent", "waiting"]:
+        if self.resolution.status in ["sent", "waiting"]:
             from concord.actions.permissions import has_permission
             self = has_permission(action=self)
-        if self.status == "approved":
-            current_result = self.implement_action()
+        if self.resolution.status == "approved":
+            if self.resolution.provisional:
+                ... # TODO: add logic for how to handle provisional actions
+            else:
+                current_result = self.implement_action()
 
         self.save()  # Save action, may not always be needed
 

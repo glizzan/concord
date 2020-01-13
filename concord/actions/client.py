@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 from django.contrib.auth.models import User
 
-from concord.actions.models import Action
+from concord.actions.models import Action, ActionContainer
 from concord.actions import state_changes as sc
 
 
@@ -12,6 +12,8 @@ class BaseClient(object):
     """
     Contains behavior needed for all clients.
     """
+
+    provisional = False
 
     def __init__(self, actor=None, target=None, system=False):
         """Initialize client.  Can only initialize without an actor if running as system."""
@@ -42,11 +44,31 @@ class BaseClient(object):
         self.actor = actor
 
     def create_and_take_action(self, change):
+        
         self.validate_target()
         action = Action.objects.create(actor=self.actor, target=self.target, 
-            change=change)
-        return action.take_action()
-    
+                change=change)
+        
+        if self.provisional:
+            self.action_container.actions.add(action)
+        else:
+            return action.take_action()
+
+    def begin_provisional(self):
+        self.provisional = True
+        self.action_container = ActionContainer.objects.create() # Create new action container
+        return self.action_container
+
+    def end_provisional(self):
+        self.provisional = False
+        self.action_container = None
+
+    def process_container(self, container, provisionally=True):
+        if provisionally:
+            container.process_actions_provisionally()
+        else:
+            container.process_actions_permanently()
+
     # Writing
 
     def change_owner_of_target(self, new_owner) -> Tuple[int, Any]:
@@ -118,3 +140,5 @@ class ActionClient(BaseClient):
             if action.resolution.resolved_through == "foundational":
                 owning_actions.append(action)
         return owning_actions
+
+ 

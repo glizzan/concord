@@ -246,6 +246,16 @@ class RoleHandler(object):
     ### Write Methods ###
     #####################
 
+    # Mass add roles
+
+    def overwrite_roles(self, role_dict):
+        """This method overwites existing roles and should only be used by the system,
+        not the user."""
+        self.members = role_dict["members"]
+        self.owners = role_dict["owners"]
+        self.governors = role_dict["governors"]
+        self.custom_roles = role_dict["custom_roles"]
+
     # Custom roles
 
     def add_role(self, role_name):

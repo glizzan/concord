@@ -1,4 +1,4 @@
-import inspect, importlib
+import inspect, importlib, json
 from typing import List, Tuple
 
 from django.db import models
@@ -6,6 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
+from concord.actions.utils import can_jsonify
 from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
 
 
@@ -19,6 +20,7 @@ class Action(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     target = GenericForeignKey()
+    container = models.ForeignKey('ActionContainer', null=True, blank=True, related_name="actions", on_delete=models.CASCADE)  # Not sure this should be CASCADE
 
     # Change field
     change = StateChangeField()
@@ -92,15 +94,121 @@ class Action(models.Model):
         if self.resolution.status in ["sent", "waiting"]:
             from concord.actions.permissions import has_permission
             self = has_permission(action=self)
-        if self.resolution.status == "approved":
-            if self.resolution.provisional:
-                ... # TODO: add logic for how to handle provisional actions
-            else:
-                current_result = self.implement_action()
+        if self.resolution.status == "approved" and not self.resolution.provisional:
+            current_result = self.implement_action()
 
         self.save()  # Save action, may not always be needed
 
         return self, current_result
+
+
+CONTAINER_STATUS_CHOICES = (
+    ('draft', 'Draft'),
+    ('provisional', 'Run Provisionally'),
+    ('permanent', 'Run Permanently'),
+)
+
+class ActionContainer(models.Model):
+    '''An ActionContainer is a tool for helping generate, process, and implement a set of actions
+    as a cohesive group.  This is useful for user-facing templates as well as for system actions
+    that are closely connected to each other and which users might see as a single action, for
+    example "adding a user with role X to group Y", where role X does not exist, might seem like
+    one action to a user but would actually by three: adding the role to the group, adding the user
+    to the group, and adding the user to the role.'''
+
+    action_info = models.CharField(max_length=800, null=True, blank=True)  # Probably should be a custom field
+    status = models.CharField(max_length=11, choices=CONTAINER_STATUS_CHOICES, default='draft')
+
+    def process_actions_provisionally(self):
+        '''Sets all related actions to provisional and processes them, storing their results in
+        action_info.'''
+
+        for action in self.actions.all():
+            action.resolution.provisional = True   # Should already be True, but just in case.
+            action.take_action()
+            self.update_action_info(action)
+
+        self.status = "provisional"
+        self.save()
+
+    def process_actions_permanently(self):
+        '''Sets all related actions to Provisional=False and processes them, implementing the results.'''
+
+        self.process_actions_provisionally()
+
+        overall_status = self.determine_overall_status()
+        if overall_status == "waiting":
+            return
+
+        if overall_status == "approved":  # Only implement actions if overall status is approved
+
+            for action in self.actions.all():
+                action.resolution.provisional = False
+                action.resolution.status = 'sent'   # need to reset
+                action, result = action.take_action()
+                self.update_action_info(action)
+
+        overall_status = self.determine_overall_status()
+        self.set_final_status(overall_status)
+        self.status = 'permanent'
+        self.save()
+
+    def get_action_info(self):
+        if not self.action_info:
+            return {'action_log': {}, 'action_status': {}, 'final_container_status': ""}
+        return json.loads(self.action_info)
+    
+    def update_action_info(self, action):
+        temp_dict = self.get_action_info()
+        temp_dict['action_log'].update({ action.pk : action.resolution.log })
+        temp_dict['action_status'].update({ action.pk : action.resolution.status })
+        self.action_info = json.dumps(temp_dict)
+
+    def set_final_status(self, status):
+        temp_dict = self.get_action_info()
+        temp_dict['final_container_status'] = status
+        self.action_info = json.dumps(temp_dict)
+
+    def get_final_status(self):
+        return self.get_action_info()["final_container_status"]
+
+    def get_status_summary(self):
+
+        status_summary = {'total_count': 0, 'approved': [], 'rejected': [], 'waiting': [], 'implemented': []}
+        temp_dict = self.get_action_info()
+        
+        for key, status in temp_dict['action_status'].items():
+            if status == "approved":
+                status_summary['approved'].append(key)
+            if status == "rejected":
+                status_summary['rejected'].append(key)
+            if status == "waiting":
+                status_summary['waiting'].append(key)
+            if status == "implemented":
+                status_summary['implemented'].append(key)
+            status_summary['total_count'] += 1
+
+        return status_summary
+
+    def determine_overall_status(self):
+
+        status_summary = self.get_status_summary()
+
+        if status_summary['total_count'] == 0:
+            return "draft"
+
+        if len(status_summary["rejected"]) > 0:
+            return "rejected"
+        elif len(status_summary["waiting"]) > 0:
+            return "waiting"
+
+        if len(status_summary["implemented"]) == status_summary['total_count']:
+            return "implemented"
+
+        if len(status_summary["approved"]) == status_summary['total_count']:
+            return "approved"
+
+        raise ValueError("Can't determine overall_status from status_summary: ", status_summary)
 
 
 # Helper method to limit owners to communities. Probably need to get this via settings or
@@ -137,6 +245,31 @@ class PermissionedModel(models.Model):
         from concord.actions.client import ActionClient
         client = ActionClient(system=True, target=self)
         return client.get_action_history_given_target(target=self)
+
+
+    # Christ, need to think this through more.
+
+    def get_serializable_object_data(self):
+        """Gets all field data that is currently json-serializable."""
+        new_vars = vars(self)
+        for field in new_vars:
+            if not can_jsonify(field):
+                del(new_vars)[field]
+        return new_vars
+
+    def encode(self, template=False):
+        """The encode method prepares a Concord object to be saved as JSON, usually
+        by creating a dictionary with JSON-serializable values."""
+        serializable_data = self.get_serializable_object_data()
+        # Parent PermissionedModel class has no extra non-template fields, so no fields need
+        # to be deleted if template=True.
+        return serializable_data
+
+    @classmethod
+    @abstractmethod
+    def decode(cls, dct):
+        """Creates an unsaved instance of the class using encoded data."""
+        return cls(**dct)
 
     @classmethod
     def get_state_change_objects(cls):

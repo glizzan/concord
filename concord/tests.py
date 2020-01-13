@@ -2432,3 +2432,211 @@ class ConfigurablePermissionTest(DataTestCase):
         self.roseClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.pinoe.pk])
         roles = self.commClient.get_roles()
         self.assertCountEqual(roles["forwards"], [self.users.jmac.pk, self.users.christen.pk, self.users.tobin.pk])
+
+
+class ActionContainerTest(DataTestCase):
+
+    def setUp(self):
+
+        # Create a Community and Client
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+
+        self.container = self.commClient.begin_provisional()
+
+        # Action 1: Add some members
+        self.commClient.add_members([self.users.rose.pk, self.users.tobin.pk,
+            self.users.christen.pk, self.users.aubrey.pk])
+
+        # Action 2: Add a role
+        self.commClient.add_role(role_name="forwards")
+
+        # Action 3: Add another role
+        self.commClient.add_role(role_name="spirit players")
+
+        # Action 4: Add people to first role
+        self.commClient.add_people_to_role(role_name="forwards", 
+            people_to_add=[self.users.christen.pk, self.users.tobin.pk])
+
+        # Action 5: Add people to second role
+        self.commClient.add_people_to_role(role_name="spirit players", 
+            people_to_add=[self.users.rose.pk, self.users.aubrey.pk])
+
+        self.commClient.end_provisional()
+        self.assertEquals(len(self.container.actions.all()), 5)
+
+    def test_process_actions_provisionally(self):
+
+        # Before processing, actions have not been implemented
+        roles = self.commClient.get_custom_roles()
+        self.assertEquals(roles, {})
+        members = self.commClient.get_members()
+        self.assertEquals(members, [self.users.pinoe])
+
+        # Process provisionally
+        self.commClient.process_container(container=self.container)
+
+        # After *provisional* processing, actions have still not been implemented 
+        roles = self.commClient.get_custom_roles()
+        self.assertEquals(roles, {})
+        members = self.commClient.get_members()
+        self.assertEquals(members, [self.users.pinoe])
+
+        # Check action info & container status
+        action_info_dict = self.container.get_action_info()
+        self.assertNotEquals(action_info_dict['action_log'], {})
+        self.assertNotEquals(action_info_dict['action_status'], {})
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3', '4', '5'], 
+            'rejected': [], 'waiting': [], 'implemented': []})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "approved")
+        self.assertEquals(self.container.status, "provisional")
+
+    def test_process_actions_permanently(self):
+
+        # Process permanently
+        self.commClient.process_container(container=self.container, provisionally=False)
+        self.commClient.refresh_target()
+
+        # After *permanent* processing, actions have been implemented 
+        roles = self.commClient.get_custom_roles()
+        self.assertEquals(roles, {'forwards': [self.users.tobin.pk, self.users.christen.pk], 
+            'spirit players': [self.users.rose.pk, self.users.aubrey.pk]})
+        members = self.commClient.get_members()
+        self.assertEquals(members, [self.users.pinoe, self.users.rose, self.users.tobin,
+            self.users.christen, self.users.aubrey])
+
+        # Check action info & container status
+        action_info_dict = self.container.get_action_info()
+        self.assertNotEquals(action_info_dict['action_log'], {})
+        self.assertNotEquals(action_info_dict['action_status'], {})
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': [], 'rejected': [], 
+            'waiting': [], 'implemented': ['1', '2', '3', '4', '5']})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "implemented")
+        self.assertEquals(self.container.get_final_status(), "implemented")
+        self.assertEquals(self.container.status, "permanent")
+
+    def test_process_actions_provisionally_with_rejections(self):
+
+        # Add permission on "add people to role" so actions 3 & 4 are rejected
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_actors=[self.users.crystal.pk])
+
+        # Process provisionally
+        self.commClient.process_container(container=self.container)
+
+        # Check action info & container status
+        action_info_dict = self.container.get_action_info()
+        self.assertNotEquals(action_info_dict['action_log'], {})
+        self.assertNotEquals(action_info_dict['action_status'], {})
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 
+            'rejected': ['4', '5'], 'waiting': [], 'implemented': []})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "rejected")
+        self.assertEquals(self.container.status, "provisional")
+
+    def test_process_actions_permanently_with_rejections(self):
+
+        # Add permission on "add people to role" so actions 3 & 4 are rejected
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_actors=[self.users.crystal.pk])
+
+        # Process permanently
+        self.commClient.process_container(container=self.container, provisionally=False)
+
+        # Check action info & container status
+        action_info_dict = self.container.get_action_info()
+        self.assertNotEquals(action_info_dict['action_log'], {})
+        self.assertNotEquals(action_info_dict['action_status'], {})
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 'rejected': ['4', '5'], 
+            'waiting': [], 'implemented': []})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "rejected")
+        self.assertEquals(self.container.get_final_status(), "rejected")
+        self.assertEquals(self.container.status, "permanent")
+
+    def test_process_actions_provisionally_with_conditions(self):
+
+        # Set permission with condition
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_actors=[self.users.pinoe.pk])
+        self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
+        self.pcc.set_target(target=permission)
+        self.pcc.addCondition(condition_type="approvalcondition",
+            permission_data=json.dumps({
+                'permission_type': Changes.Conditionals.Approve, 
+                'permission_actors': [self.users.crystal.pk],
+                'permission_roles': [],
+                'permission_configuration': '{}'}))
+
+        # Process provisionally
+        self.commClient.process_container(container=self.container)
+
+        # Check action info & container status
+        action_info_dict = self.container.get_action_info()
+        self.assertNotEquals(action_info_dict['action_log'], {})
+        self.assertNotEquals(action_info_dict['action_status'], {})
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 
+            'rejected': [], 'waiting': ['4', '5'], 'implemented': []})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "waiting")
+        self.assertEquals(self.container.status, "provisional")
+
+    def test_process_actions_permanently_with_conditions(self):
+
+        # Set permission with condition
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_actors=[self.users.pinoe.pk])
+        self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
+        self.pcc.set_target(target=permission)
+        self.pcc.addCondition(condition_type="approvalcondition",
+            permission_data=json.dumps({
+                'permission_type': Changes.Conditionals.Approve, 
+                'permission_actors': [self.users.crystal.pk],
+                'permission_roles': [],
+                'permission_configuration': '{}'}))
+
+        # Can't process permanently if there's an unresolved condition (status == "waiting")
+        self.commClient.process_container(container=self.container, provisionally=False)
+
+        # Check action info & container status
+        action_info_dict = self.container.get_action_info()
+        self.assertNotEquals(action_info_dict['action_log'], {})
+        self.assertNotEquals(action_info_dict['action_status'], {})
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 
+            'rejected': [], 'waiting': ['4', '5'], 'implemented': []})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "waiting")
+        self.assertEquals(self.container.status, "provisional")
+
+        # Crystal approves the two actions
+        # FIXME: these conditional clients are cumbersome, need to fix the whole client concept
+        first_item = self.pcc.get_condition_item_given_action(action_pk=4)
+        second_item = self.pcc.get_condition_item_given_action(action_pk=5)
+        acc = ApprovalConditionClient(target=first_item, actor=self.users.crystal)
+        acc.approve()
+        acc.set_target(target=second_item)
+        acc.approve()
+
+        # now the container can be run
+        self.commClient.process_container(container=self.container, provisionally=False)
+        status_summary = self.container.get_status_summary()
+        self.assertEquals(status_summary, {'total_count': 5, 'approved': [], 
+            'rejected': [], 'waiting': [], 'implemented': ['1', '2', '3','4', '5']})
+        overall_status = self.container.determine_overall_status()
+        self.assertEquals(overall_status, "implemented")
+        self.assertEquals(self.container.status, "permanent")
+

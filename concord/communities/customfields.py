@@ -196,6 +196,10 @@ class RoleHandler(object):
         return {**self.custom_roles, 'governors': {**self.governors}, 
             'owners': {**self.owners}, 'members': self.members}
 
+    def get_roles_db_structure(self):
+        return {'custom_roles': {**self.custom_roles}, 'governors': {**self.governors}, 
+            'owners': {**self.owners}, 'members': self.members}
+
     def get_role_names(self):
         '''Gets names of all roles, including protected roles.'''
         return list(self.custom_roles.keys()) + self.protected_roles
@@ -400,6 +404,8 @@ class RoleField(models.Field):
             return value
         if value is None:
             return RoleHandler()
+        if type(value) == dict and all(k in value.keys() for k in ["members", "owners", "governors", "custom_roles"]):
+            return RoleHandler(**value)
         return parse_role_handler_data(value)
 
     def get_prep_value(self, value):

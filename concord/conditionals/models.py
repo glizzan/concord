@@ -39,19 +39,6 @@ class ConditionModel(PermissionedModel):
         return cls.__name__.lower()
     # TODO: Add method for getting permission a given condition is set on.
 
-    def encode(self, template=False):
-        default_dict = super().encode(template=template)
-        if not template:
-            default_dict.update({ "action": self.action })
-        return default_dict
-
-    def decode(cls, dct, template=False):
-        action = dct.pop("action", None)
-        class_instance = super().decode()
-        if action:
-            class_instance.action = action
-        return class_instance
-
     def get_name(self):
         return "%s (%d)" % (self.descriptive_name, self.pk)
 
@@ -80,22 +67,6 @@ class ApprovalCondition(ConditionModel):
 
     approved = models.BooleanField(null=True)  # Null by default
     self_approval_allowed = models.BooleanField(default=False)
-
-    def encode(self, template=False):
-        default_dict = super().encode(template=template)
-        if not template:
-            default_dict.update({ "approved": self.approved, "self_approval_allowed": self.self_approval_allowed })
-        return default_dict
-
-    def decode(cls, dct, template=False):
-        approved = dct.pop("approved", None)
-        self_approval_allowed = dct.pop("self_approval_allowed", None)
-        class_instance = super().decode()
-        if approved:
-            class_instance.approved = approved
-        if self_approval_allowed:
-            class_instance.self_approval_allowed = self_approval_allowed
-        return class_instance
 
     def condition_status(self):
         if self.approved == True:

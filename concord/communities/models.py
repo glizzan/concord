@@ -39,22 +39,6 @@ class BaseCommunityModel(PermissionedModel):
         Communities own themselves by default, although subtypes may differ.
         """
         return self
-
-    def encode(self, template=False):
-        default_dict = super().encode(template=template)
-        default_dict.update({ "roles": self.roles.get_roles() })
-        if not template:
-            default_dict.udpate({ "name": self.name })
-        return default_dict
-
-    def decode(cls, dct, template=False):
-        roles = dct.pop("roles")
-        name = dct.pop("name", None)
-        class_instance = super().decode()
-        class_instance.roles.overwrite_roles(roles)
-        if name:
-            class_instance.name = name
-        return class_instance
     
     def owner_list_display(self):
         """
@@ -120,19 +104,6 @@ class DefaultCommunity(BaseCommunityModel):
     """
     user_owner = models.OneToOneField(User, on_delete=models.CASCADE, 
         related_name="default_community")
-
-    def encode(self, template=False):
-        default_dict = super().encode(template=template)
-        if not template:
-            default_dict.update({ "user_owner": self.roles.user_owner.pk })
-        return default_dict
-
-    def decode(cls, dct, template=False):
-        user_owner = dct.pop("user_owner", None)
-        class_instance = super().decode()
-        if user_owner:
-            class_instance.user_owner = user_owner
-        return class_instance
         
 def create_default_community(sender, instance, created, **kwargs):
     if created:

@@ -2,6 +2,7 @@ import json, collections
 
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 
 
 ################################
@@ -115,7 +116,10 @@ class ActorList(object):
         
 
 def parse_actor_list_string(actor_list_string):
-    pk_list = json.loads(actor_list_string)
+    try:
+        pk_list = json.loads(actor_list_string)
+    except json.decoder.JSONDecodeError as error:
+        raise ValidationError("ActorListField was formatted wrongly and raised a JSONDecodeError")
     return ActorList(actor_list=pk_list)
 
 
@@ -143,6 +147,8 @@ class ActorListField(models.Field):
             return value
         if value is None:
             return ActorList()
+        if type(value) == list and all([type(x) == int for x in value]):
+            return ActorList(value)
         return parse_actor_list_string(value)
 
     def get_prep_value(self, value):
@@ -252,7 +258,11 @@ class RoleList(object):
 
 
 def parse_role_list_string(role_list_string):
-    return RoleList(list_of_pair_strings=json.loads(role_list_string))
+    try:
+        list_of_pair_strings = json.loads(role_list_string)
+    except json.decoder.JSONDecodeError as error:
+        raise ValidationError("RoleListField was formatted wrongly and raised a JSONDecodeError")
+    return RoleList(list_of_pair_strings=list_of_pair_strings)
 
 
 class RoleListField(models.Field):
@@ -278,6 +288,8 @@ class RoleListField(models.Field):
             return value
         if value is None:
             return RoleList()
+        if type(value) == list and all([type(x) == RolePair for x in value]):
+            return RoleList(value)
         return parse_role_list_string(value)
 
     def get_prep_value(self, value):

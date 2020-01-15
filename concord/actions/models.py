@@ -211,18 +211,11 @@ class ActionContainer(models.Model):
         raise ValueError("Can't determine overall_status from status_summary: ", status_summary)
 
 
-# Helper method to limit owners to communities. Probably need to get this via settings or
-# similar so third party users can add community subtypes.
-def get_community_types():
-    from concord.communities.models import Community
-    return [Community]
-
-
+# TODO: limit_choices_to caused problems, need a new way to limit owners of PermissionedModel to communities
 class PermissionedModel(models.Model):
 
     owner_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,
-        related_name="%(app_label)s_%(class)s_owned_objects", 
-        limit_choices_to=get_community_types, blank=True, null=True)
+        related_name="%(app_label)s_%(class)s_owned_objects", blank=True, null=True)
     owner_object_id = models.PositiveIntegerField(blank=True, null=True)
     owner = GenericForeignKey('owner_content_type', 'owner_object_id')
     
@@ -245,32 +238,7 @@ class PermissionedModel(models.Model):
         from concord.actions.client import ActionClient
         client = ActionClient(system=True, target=self)
         return client.get_action_history_given_target(target=self)
-
-
-    # Christ, need to think this through more.
-
-    def get_serializable_object_data(self):
-        """Gets all field data that is currently json-serializable."""
-        new_vars = vars(self)
-        for field in new_vars:
-            if not can_jsonify(field):
-                del(new_vars)[field]
-        return new_vars
-
-    def encode(self, template=False):
-        """The encode method prepares a Concord object to be saved as JSON, usually
-        by creating a dictionary with JSON-serializable values."""
-        serializable_data = self.get_serializable_object_data()
-        # Parent PermissionedModel class has no extra non-template fields, so no fields need
-        # to be deleted if template=True.
-        return serializable_data
-
-    @classmethod
-    @abstractmethod
-    def decode(cls, dct):
-        """Creates an unsaved instance of the class using encoded data."""
-        return cls(**dct)
-
+        
     @classmethod
     def get_state_change_objects(cls):
         # Get list of all objects in model's app's state_changes file 

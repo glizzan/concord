@@ -62,6 +62,12 @@ class DataTestCase(TestCase):
         self.users.aubrey = User.objects.create(username="aubreybledsoe")
         self.users.hao = User.objects.create(username="heatheroreilly")
 
+    def display_last_actions(self, number=10):
+        """Helper method which shows the last N actions to be created, useful for debugging."""
+        actions = Action.objects.all().order_by('-id')[:number]
+        for action in reversed(actions):
+            print(action)
+
 
 class ResourceModelTests(DataTestCase):
 
@@ -2677,13 +2683,39 @@ class TemplateTest(DataTestCase):
                 'permission_configuration': '{}'}))        
         # Add condition on community
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
-        action, result = self.condClient.addConditionToGovernors(
+        action, result = self.condClient.addConditionToOwners(
             condition_type="approvalcondition",
             permission_data=json.dumps({
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.pinoe.pk],
                 'permission_roles': '',
                 'permission_configuration': '{}'}))
+
+    def set_up_complex_community(self):
+        
+        self.set_up_simple_community()
+
+        # Add some owned objects
+        self.resourceClient = ResourceClient(actor=self.users.pinoe)
+        self.resource = self.resourceClient.create_resource(name="WoSo Forum")
+        self.resourceClient.set_target(target=self.resource)
+        self.resourceClient.change_owner_of_target(new_owner=self.instance)
+        self.resource2 = self.resourceClient.create_resource(name="Ticker Tape Parade Pictures")
+        self.resourceClient.set_target(target=self.resource2)
+        self.resourceClient.change_owner_of_target(new_owner=self.instance)
+
+        # Add first permission
+        role_pair = str(self.instance.pk) + "_" + "members" 
+        self.prc = PermissionResourceClient(actor=self.users.pinoe, target=self.resource2)
+        self.prc.add_permission(permission_type=Changes.Resources.AddItem, 
+            permission_role_pairs=[role_pair])
+        self.permission_level_one = self.prc.get_permissions_on_object(object=self.resource2)[0]
+
+        # Add nested permission
+        self.prc.set_target(self.permission_level_one)
+        self.prc.add_permission(permission_type=Changes.Permissions.RemoveRoleFromPermission,
+            permission_actors=[self.users.aubrey.pk])
+        self.permission_level_two = self.prc.get_permissions_on_object(object=self.permission_level_one)[0]
 
     def test_templatize_community(self):
         
@@ -2838,26 +2870,26 @@ class TemplateTest(DataTestCase):
         self.assertEquals(result.__class__, ValidationError)
         self.assertTrue("RoleListField" in result.__dict__["error_dict"]["roles"][0].message)
 
+    # def test_validate_conditional_template(self):
 
-    def test_validate_conditional_template(self):
+    #     # Set condition on an action so we can templatize it
+    #     self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
+    #     action, result = self.condClient.addConditionToGovernors(
+    #         condition_type="approvalcondition",
+    #         permission_data=json.dumps({
+    #             'permission_type': Changes.Conditionals.Approve,
+    #             'permission_actors': [self.users.pinoe.pk],
+    #             'permission_roles': '',
+    #             'permission_configuration': '{}'}))
+    #     ct = self.condClient.get_condition_template_for_governor()
+    #     template = templates.instance_to_template(ct)
+    #     template = templates.merge_related_fields_with_fields(template) 
 
-        # Set condition on an action so we can templatize it
-        self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
-        action, result = self.condClient.addConditionToGovernors(
-            condition_type="approvalcondition",
-            permission_data=json.dumps({
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.pinoe.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}))
-        ct = self.condClient.get_condition_template_for_governor()
-        template = templates.instance_to_template(ct)
-
-        # Changing condition_type field causes error
-        template["fields"]["condition_type"] = self.users
-        result = templates.validate_template(template)
-
-        # FIXME: giving a non-string to a charfield doesn't raise an error - why????
+    #     # Changing condition_type field does not cause error because it just str() the content
+    #     # Need to add field validators at model level?
+    #     template["fields"]["condition_type"] = self.users
+    #     result = templates.validate_template(template)
+    #     # self.assertEquals(result.__class__, ValidationError)
 
     def test_create_new_community_instances_from_templates(self):
 
@@ -2932,11 +2964,6 @@ class TemplateTest(DataTestCase):
         self.assertEquals(len(template_set["condition_templates"]), 2)
         self.assertEquals(len(template_set["owned_objects"]), 0)
 
-    def test_generate_template_set_complex_community(self):
-        """Tests template set generation on a complex community with owned objects and permissions
-        set on permissions."""
-        ...
-
     def test_create_from_template_set_simple_community(self):
 
         # Create simple community, generate template, and then generate new set of instances
@@ -2961,8 +2988,56 @@ class TemplateTest(DataTestCase):
         self.assertEquals(new_permission.roles[0].community_pk, new_community.pk)
         self.assertEquals(new_permission_condition.conditioned_object, new_permission.pk)
         self.assertEquals(new_community_condition.conditioned_object, new_community.pk)
+
+    def test_generate_template_set_complex_community(self):
+        """Tests template set generation on a complex community with owned objects and permissions
+        set on permissions."""
+
+        self.set_up_complex_community()
+
+        # Generate and test template set
+        template_set = templates.generate_template_set(actor=self.users.pinoe, community=self.instance,
+            optional_object_list=[self.resource, self.resource2])
+
+        import pprint
+        pprint.pprint(template_set)
+
+        self.assertEquals(template_set["community"]["fields"]["name"], self.instance.name)
+        self.assertEquals(len(template_set["permissions"]), 3)
+        self.assertEquals(len(template_set["condition_templates"]), 2)
+        self.assertEquals(len(template_set["owned_objects"]), 2)
         
+    def test_create_from_template_set_complex_community(self):
+        """Tests creation of objects from template set on a complex community with owned objects and 
+        permissions set on permissions."""
 
+        self.set_up_complex_community()
 
+        # Generate and test template set
+        template_set = templates.generate_template_set(actor=self.users.pinoe, community=self.instance,
+            optional_object_list=[self.resource, self.resource2])
+        created_instances = templates.generate_objects_from_template_set(template_set)
+
+        self.assertEquals(len(created_instances), 8)
+        
+        new_community = created_instances[0]
+        resource1 = created_instances[1]
+        resource2 = created_instances[2]
+        permission_on_community_change_name = created_instances[3]
+        permission_level_one = created_instances[4]
+        permission_level_two = created_instances[5]
+        condition_on_permission_change_name = created_instances[6]
+        condition_on_owner = created_instances[7]
+
+        # Re-test logic from simple community
+        self.assertEquals(permission_on_community_change_name.permitted_object_id, new_community.pk)
+        self.assertEquals(permission_on_community_change_name.roles[0].community_pk, new_community.pk)
+    
+        # Test owned objects and new permissions
+        self.assertEquals(resource1.owner, new_community)
+        self.assertEquals(resource2.owner, new_community)
+        self.assertEquals(permission_level_one.permitted_object_id, resource1.pk)
+        self.assertEquals(permission_level_two.permitted_object_id, permission_level_one.pk)
+        
 
         

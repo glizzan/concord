@@ -22,8 +22,7 @@ class PermissionsItem(PermissionedModel):
     actors -> individually listed people
     roles -> reference to roles specified in community
 
-    if someone matches an actor OR a role they have the permission. actors are checked first.
-
+    If someone matches an actor OR a role they have the permission. actors are checked first.
     """
 
     is_active = models.BooleanField(default=True)
@@ -42,7 +41,7 @@ class PermissionsItem(PermissionedModel):
     configuration = models.CharField(max_length=5000, default='{}')
 
     # Get model-level information
-
+    
     def get_name(self):
         return "Permission %s (for %s on %s)" % (str(self.pk), self.change_type, self.permitted_object)
 

@@ -55,7 +55,8 @@ class PermissionResourceClient(BaseClient):
 
     def get_all_permissions(self) -> PermissionsItem:
         content_type = ContentType.objects.get_for_model(self.target)
-        return PermissionsItem.objects.filter(content_type=content_type, object_id=self.target.pk)
+        return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
+            permitted_object_id=self.target.pk)
 
     # FIXME: "specific" permissions is, ironically, a non-specific variable name
     def get_specific_permissions(self, *, change_type: str) -> PermissionsItem:

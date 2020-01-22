@@ -64,6 +64,7 @@ class ConditionModel(PermissionedModel):
 class ApprovalCondition(ConditionModel):
 
     descriptive_name = "Approval Condition"
+    verb_name = "approve"
 
     approved = models.BooleanField(null=True)  # Null by default
     self_approval_allowed = models.BooleanField(default=False)
@@ -101,6 +102,7 @@ class ApprovalCondition(ConditionModel):
 class VoteCondition(ConditionModel):
 
     descriptive_name = "Vote Condition"
+    verb_name = "vote"
 
     yeas = models.IntegerField(default=0)
     nays = models.IntegerField(default=0)

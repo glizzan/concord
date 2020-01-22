@@ -64,6 +64,7 @@ def filter_permissions(*, target, state_change_objects):
 
     return settable_permissions
 
+
 def get_settable_permissions(* , target):
     """Gets a list of all permissions that may be set on the model."""
 
@@ -80,6 +81,7 @@ def get_settable_permissions(* , target):
 
     # Remove duplicates while preserving order
     return list(OrderedDict.fromkeys(settable_permissions))
+
 
 def format_as_tuples(permissions):
     formatted_permissions = []

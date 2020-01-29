@@ -1,0 +1,455 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>Autodocumentation of the Permissions (permission_resources) module &#8212; Concord 0.1 documentation</title>
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Autodocumentation of the Resources module" href="resources.html" />
+    <link rel="prev" title="Autodocumentation of the Conditionals module" href="conditionals.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="autodocumentation-of-the-permissions-permission-resources-module">
+<h1>Autodocumentation of the Permissions (permission_resources) module<a class="headerlink" href="#autodocumentation-of-the-permissions-permission-resources-module" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-concord.permission_resources.models">
+<span id="models"></span><h2>Models<a class="headerlink" href="#module-concord.permission_resources.models" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="concord.permission_resources.models.PermissionsItem">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.models.</code><code class="sig-name descname">PermissionsItem</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Permission items contain data for who may change the state of the linked object in a 
+given way.</p>
+<p>content_type, object_id, permitted object -&gt; specify what object the permission is set on
+change_type -&gt; specifies what action the permission covers</p>
+<p>actors -&gt; individually listed people
+roles -&gt; reference to roles specified in community</p>
+<p>If someone matches an actor OR a role they have the permission. actors are checked first.</p>
+<dl class="exception">
+<dt id="concord.permission_resources.models.PermissionsItem.DoesNotExist">
+<em class="property">exception </em><code class="sig-name descname">DoesNotExist</code><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem.DoesNotExist" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="exception">
+<dt id="concord.permission_resources.models.PermissionsItem.MultipleObjectsReturned">
+<em class="property">exception </em><code class="sig-name descname">MultipleObjectsReturned</code><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem.MultipleObjectsReturned" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.models.PermissionsItem.activate_permission">
+<code class="sig-name descname">activate_permission</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem.activate_permission" title="Permalink to this definition">¶</a></dt>
+<dd><p>For now, activate_permission is an internal method not accessible to the user which is 
+called via signals when a permission is updated to add actors or roles where before there 
+were none.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.models.PermissionsItem.deactivate_permission">
+<code class="sig-name descname">deactivate_permission</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem.deactivate_permission" title="Permalink to this definition">¶</a></dt>
+<dd><p>For now, activate_permission is an internal method not accessible to the user which is 
+called via signals when a permission is updated to remove all actors and roles.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.models.PermissionsItem.get_condition">
+<code class="sig-name descname">get_condition</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem.get_condition" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get condition set on permission</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.models.PermissionsItem.match_actor">
+<code class="sig-name descname">match_actor</code><span class="sig-paren">(</span><em class="sig-param">actor_pk</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.PermissionsItem.match_actor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determines if actor in the permission.  If inverse is toggled, returns the oppposite -
+such that they would NOT match if they’re listed in an inverse permission.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="concord.permission_resources.models.Template">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.models.</code><code class="sig-name descname">Template</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.Template" title="Permalink to this definition">¶</a></dt>
+<dd><p>Template models allow users to save and edit configurations of communities, owned objects,
+permissions, and conditionals.  New communities can be generated from these templates, making
+it easier for users to experiment with new governance structures.</p>
+<dl class="exception">
+<dt id="concord.permission_resources.models.Template.DoesNotExist">
+<em class="property">exception </em><code class="sig-name descname">DoesNotExist</code><a class="headerlink" href="#concord.permission_resources.models.Template.DoesNotExist" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="exception">
+<dt id="concord.permission_resources.models.Template.MultipleObjectsReturned">
+<em class="property">exception </em><code class="sig-name descname">MultipleObjectsReturned</code><a class="headerlink" href="#concord.permission_resources.models.Template.MultipleObjectsReturned" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="concord.permission_resources.models.delete_empty_permission">
+<code class="sig-prename descclassname">concord.permission_resources.models.</code><code class="sig-name descname">delete_empty_permission</code><span class="sig-paren">(</span><em class="sig-param">sender</em>, <em class="sig-param">instance</em>, <em class="sig-param">created</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.models.delete_empty_permission" title="Permalink to this definition">¶</a></dt>
+<dd><p>Toggle is_active so it is only true when there are actors or roles set on the permission.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-concord.permission_resources.state_changes">
+<span id="state-changes"></span><h2>State Changes<a class="headerlink" href="#module-concord.permission_resources.state_changes" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-concord.permission_resources.client">
+<span id="client"></span><h2>Client<a class="headerlink" href="#module-concord.permission_resources.client" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="concord.permission_resources.client.PermissionResourceClient">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.client.</code><code class="sig-name descname">PermissionResourceClient</code><span class="sig-paren">(</span><em class="sig-param">actor=None</em>, <em class="sig-param">target=None</em>, <em class="sig-param">system=False</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.client.PermissionResourceClient" title="Permalink to this definition">¶</a></dt>
+<dd><p>The “target” of a PermissionResourceClient is always the resource or community on which
+the permission resource we’re manipulating is set.  As with all Concord clients, a 
+target must be set for all methods not  explicitly grouped as target-less methods.</p>
+<dl class="method">
+<dt id="concord.permission_resources.client.PermissionResourceClient.get_settable_permissions">
+<code class="sig-name descname">get_settable_permissions</code><span class="sig-paren">(</span><em class="sig-param">return_format='tuples'</em><span class="sig-paren">)</span> &#x2192; List[Tuple[str, str]]<a class="headerlink" href="#concord.permission_resources.client.PermissionResourceClient.get_settable_permissions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets a list of permissions it is possible to set on the target, return type copied from
+target.get_settable_permissions() return type.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.client.PermissionResourceClient.update_actors_on_permission">
+<code class="sig-name descname">update_actors_on_permission</code><span class="sig-paren">(</span><em class="sig-param">*</em>, <em class="sig-param">actor_data</em>, <em class="sig-param">permission</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.client.PermissionResourceClient.update_actors_on_permission" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a list of roles, updates the given permission to match those roles.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.client.PermissionResourceClient.update_configuration">
+<code class="sig-name descname">update_configuration</code><span class="sig-paren">(</span><em class="sig-param">*</em>, <em class="sig-param">configuration_dict: dict</em>, <em class="sig-param">permission</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.client.PermissionResourceClient.update_configuration" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a dict with the new configuration for a permission, change individual fields 
+as needed.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.client.PermissionResourceClient.update_role_permissions">
+<code class="sig-name descname">update_role_permissions</code><span class="sig-paren">(</span><em class="sig-param">*</em>, <em class="sig-param">role_data</em>, <em class="sig-param">owner</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.client.PermissionResourceClient.update_role_permissions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a dict with roles and permissions on a target object which refer 
+to those roles, goes through permissions on target object and adds or removes
+references to roles to make them match the given dict.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.client.PermissionResourceClient.update_roles_on_permission">
+<code class="sig-name descname">update_roles_on_permission</code><span class="sig-paren">(</span><em class="sig-param">*</em>, <em class="sig-param">role_data</em>, <em class="sig-param">permission</em>, <em class="sig-param">owner</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.client.PermissionResourceClient.update_roles_on_permission" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a list of roles, updates the given permission to match those roles.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-concord.permission_resources.customfields">
+<span id="custom-fields"></span><h2>Custom Fields<a class="headerlink" href="#module-concord.permission_resources.customfields" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="concord.permission_resources.customfields.ActorList">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.customfields.</code><code class="sig-name descname">ActorList</code><span class="sig-paren">(</span><em class="sig-param">actor_list=None</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorList" title="Permalink to this definition">¶</a></dt>
+<dd><p>This custom object allows us to preferentially manipulate our actors as a list of
+PKs, so we don’t have to constantly query the DB.  If pks and instances are not 
+identical, the pk_list is assumed authoritative.</p>
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorList.add_actors">
+<code class="sig-name descname">add_actors</code><span class="sig-paren">(</span><em class="sig-param">actors</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorList.add_actors" title="Permalink to this definition">¶</a></dt>
+<dd><p>If actors are User instances, add to instance_list and pk_list; if pks, 
+add only to pk_list.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorList.lists_are_equivalent">
+<code class="sig-name descname">lists_are_equivalent</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorList.lists_are_equivalent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper method to check that pk_list and instance_list are equivalent.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorList.remove_actors">
+<code class="sig-name descname">remove_actors</code><span class="sig-paren">(</span><em class="sig-param">actors</em>, <em class="sig-param">strict=True</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorList.remove_actors" title="Permalink to this definition">¶</a></dt>
+<dd><p>If actors are user instances, remove from instance_list and pk_list; if
+pks, remove only from pk_list.  If strict is true, all actors to be removed
+MUST be in the pk_list.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="concord.permission_resources.customfields.ActorListField">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.customfields.</code><code class="sig-name descname">ActorListField</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorListField" title="Permalink to this definition">¶</a></dt>
+<dd><p>This custom field allows us to access a list of user objects or a list of user
+pks, depending on our needs.</p>
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorListField.db_type">
+<code class="sig-name descname">db_type</code><span class="sig-paren">(</span><em class="sig-param">connection</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorListField.db_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the database column data type for this field, for the provided
+connection.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorListField.deconstruct">
+<code class="sig-name descname">deconstruct</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorListField.deconstruct" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return enough information to recreate the field as a 4-tuple:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>The name of the field on the model, if contribute_to_class() has
+been run.</p></li>
+<li><p>The import path of the field, including the class:e.g.
+django.db.models.IntegerField This should be the most portable
+version, so less specific may be better.</p></li>
+<li><p>A list of positional arguments.</p></li>
+<li><p>A dict of keyword arguments.</p></li>
+</ul>
+</div></blockquote>
+<p>Note that the positional or keyword arguments must contain values of
+the following types (including inner values of collection types):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>None, bool, str, int, float, complex, set, frozenset, list, tuple,
+dict</p></li>
+<li><p>UUID</p></li>
+<li><p>datetime.datetime (naive), datetime.date</p></li>
+<li><p>top-level classes, top-level functions - will be referenced by their
+full import path</p></li>
+<li><p>Storage instances - these have their own deconstruct() method</p></li>
+</ul>
+</div></blockquote>
+<p>This is because the values here must be serialized into a text format
+(possibly new Python code, possibly JSON) and these are the only types
+with encoding handlers defined.</p>
+<p>There’s no need to return the exact way the field was instantiated this
+time, just ensure that the resulting field is the same - prefer keyword
+arguments over positional ones, and omit parameters with their default
+values.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorListField.get_prep_value">
+<code class="sig-name descname">get_prep_value</code><span class="sig-paren">(</span><em class="sig-param">value</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorListField.get_prep_value" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform preliminary non-db specific value checks and conversions.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.ActorListField.to_python">
+<code class="sig-name descname">to_python</code><span class="sig-paren">(</span><em class="sig-param">value</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.ActorListField.to_python" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert the input value into the expected Python data type, raising
+django.core.exceptions.ValidationError if the data can’t be converted.
+Return the converted value. Subclasses should override this.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="concord.permission_resources.customfields.RoleListField">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.customfields.</code><code class="sig-name descname">RoleListField</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.RoleListField" title="Permalink to this definition">¶</a></dt>
+<dd><p>This custom field allows us to access our list of role pairs.</p>
+<dl class="method">
+<dt id="concord.permission_resources.customfields.RoleListField.db_type">
+<code class="sig-name descname">db_type</code><span class="sig-paren">(</span><em class="sig-param">connection</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.RoleListField.db_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the database column data type for this field, for the provided
+connection.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.RoleListField.deconstruct">
+<code class="sig-name descname">deconstruct</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.RoleListField.deconstruct" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return enough information to recreate the field as a 4-tuple:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>The name of the field on the model, if contribute_to_class() has
+been run.</p></li>
+<li><p>The import path of the field, including the class:e.g.
+django.db.models.IntegerField This should be the most portable
+version, so less specific may be better.</p></li>
+<li><p>A list of positional arguments.</p></li>
+<li><p>A dict of keyword arguments.</p></li>
+</ul>
+</div></blockquote>
+<p>Note that the positional or keyword arguments must contain values of
+the following types (including inner values of collection types):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>None, bool, str, int, float, complex, set, frozenset, list, tuple,
+dict</p></li>
+<li><p>UUID</p></li>
+<li><p>datetime.datetime (naive), datetime.date</p></li>
+<li><p>top-level classes, top-level functions - will be referenced by their
+full import path</p></li>
+<li><p>Storage instances - these have their own deconstruct() method</p></li>
+</ul>
+</div></blockquote>
+<p>This is because the values here must be serialized into a text format
+(possibly new Python code, possibly JSON) and these are the only types
+with encoding handlers defined.</p>
+<p>There’s no need to return the exact way the field was instantiated this
+time, just ensure that the resulting field is the same - prefer keyword
+arguments over positional ones, and omit parameters with their default
+values.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.RoleListField.get_prep_value">
+<code class="sig-name descname">get_prep_value</code><span class="sig-paren">(</span><em class="sig-param">value</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.RoleListField.get_prep_value" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform preliminary non-db specific value checks and conversions.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.RoleListField.to_python">
+<code class="sig-name descname">to_python</code><span class="sig-paren">(</span><em class="sig-param">value</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.RoleListField.to_python" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert the input value into the expected Python data type, raising
+django.core.exceptions.ValidationError if the data can’t be converted.
+Return the converted value. Subclasses should override this.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="concord.permission_resources.customfields.RolePair">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.customfields.</code><code class="sig-name descname">RolePair</code><span class="sig-paren">(</span><em class="sig-param">community_pk</em>, <em class="sig-param">role_name</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.customfields.RolePair" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="concord.permission_resources.customfields.RolePair.community_pk">
+<em class="property">property </em><code class="sig-name descname">community_pk</code><a class="headerlink" href="#concord.permission_resources.customfields.RolePair.community_pk" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="concord.permission_resources.customfields.RolePair.role_name">
+<em class="property">property </em><code class="sig-name descname">role_name</code><a class="headerlink" href="#concord.permission_resources.customfields.RolePair.role_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-concord.permission_resources.utils">
+<span id="utilities"></span><h2>Utilities<a class="headerlink" href="#module-concord.permission_resources.utils" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="concord.permission_resources.utils.MockMetaPermission">
+<em class="property">class </em><code class="sig-prename descclassname">concord.permission_resources.utils.</code><code class="sig-name descname">MockMetaPermission</code><span class="sig-paren">(</span><em class="sig-param">permitted_object_id</em>, <em class="sig-param">permitted_object_content_type</em>, <em class="sig-param">permission_change_type</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.utils.MockMetaPermission" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sometimes metapermissions are created for permissions that do not
+themselves exist yet on a specific permitted object.  This mock 
+item exists so that the MetaPermissionsForm can treat it as though
+it’s an instance.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="concord.permission_resources.utils.check_permission_inputs">
+<code class="sig-prename descclassname">concord.permission_resources.utils.</code><code class="sig-name descname">check_permission_inputs</code><span class="sig-paren">(</span><em class="sig-param">dict_of_inputs</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.utils.check_permission_inputs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Decorator to help with type issues, example usage: 
+&#64;check_permission_inputs(dict_of_inputs={‘role_pair’: ‘role_pair’, ‘community’: ‘string_pk’})</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="concord.permission_resources.utils.create_permission_outside_pipeline">
+<code class="sig-prename descclassname">concord.permission_resources.utils.</code><code class="sig-name descname">create_permission_outside_pipeline</code><span class="sig-paren">(</span><em class="sig-param">permission_dict</em>, <em class="sig-param">condition_item</em>, <em class="sig-param">condition_template</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.utils.create_permission_outside_pipeline" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper method used internally to bypass permissions pipeline when creating 
+a permission.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="concord.permission_resources.utils.filter_permissions">
+<code class="sig-prename descclassname">concord.permission_resources.utils.</code><code class="sig-name descname">filter_permissions</code><span class="sig-paren">(</span><em class="sig-param">*</em>, <em class="sig-param">target</em>, <em class="sig-param">state_change_objects</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.utils.filter_permissions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a target and a list of state change objects potentially applicable to the 
+target, checks to see if the target’s class is in each state change object’s 
+get_allowable_targets list.  If it is, add to list using permissions display format.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="concord.permission_resources.utils.get_settable_permissions">
+<code class="sig-prename descclassname">concord.permission_resources.utils.</code><code class="sig-name descname">get_settable_permissions</code><span class="sig-paren">(</span><em class="sig-param">*</em>, <em class="sig-param">target</em><span class="sig-paren">)</span><a class="headerlink" href="#concord.permission_resources.utils.get_settable_permissions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets a list of all permissions that may be set on the model.</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">Concord</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="actions.html">Autodocumentation of the Actions module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="communities.html">Autodocumentation of the Communities module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conditionals.html">Autodocumentation of the Conditionals module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Autodocumentation of the Permissions (permission_resources) module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resources.html">Autodocumentation of the Resources module</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="conditionals.html" title="previous chapter">Autodocumentation of the Conditionals module</a></li>
+      <li>Next: <a href="resources.html" title="next chapter">Autodocumentation of the Resources module</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Shauna Gordon-McKeon.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 2.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/autodocs/permission_resources.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

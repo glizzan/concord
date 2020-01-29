@@ -1,4 +1,4 @@
-import json
+import json, random
 from collections import namedtuple, OrderedDict
 
 from django.core.exceptions import ValidationError
@@ -292,15 +292,20 @@ def generate_objects_from_template_set(template_set):
 ######################################################
 
 
+def capitalize_first_letter(text):
+    """Helper method which capitalizes first letter in a string."""
+    return text[0].upper() + text[1:]
+
+
 def list_to_text(list_to_convert):
     """Given a list of strings, return them as list in format 'apple, banana and carrot'."""
     if len(list_to_convert) == 1:
-        return list_to_convert[0]
+        return str(list_to_convert[0])
     text = ""
     last_index = len(list_to_convert)-1
     for item in list_to_convert[:last_index]:
-        text += item
-    text += " and " + list_to_convert[last_index]
+        text += str(item)
+    text += " and " + str(list_to_convert[last_index])
     return text
 
 
@@ -310,9 +315,9 @@ def roles_to_text(role_info):
     if role_info is None:
         return ""
 
-    role_string = "roles " if role_info > 1 else "role "
+    role_string = "roles " if len(role_info) > 1 else "role "
 
-    role_list = [role_info.role_name for rolepair in role_info]
+    role_list = [rolepair.role_name for rolepair in role_info]
 
     return "everyone with " + role_string + list_to_text(role_list)
 
@@ -323,7 +328,7 @@ def actors_to_text(actor_info):
     if actor_info is None:
         return ""
     
-    actor_string = "the individuals " if actor_info > 1 else "the individual "
+    actor_string = "individuals " if len(actor_info) > 1 else "individual "
 
     return actor_string + list_to_text(actor_info)
 
@@ -332,58 +337,86 @@ def roles_and_actors(role):
 
     text = ""
 
-    if role["roles"] > 0:
+    if len(role["roles"]) > 0:
         text += roles_to_text(role["roles"])
     
-    if role["roles"] > 0 and role["actors"] > 0:
+    if len(role["roles"]) > 0 and len(role["actors"]) > 0:
         text += " and "
 
-    if role["actors"] > 0:
+    if len(role["actors"]) > 0:
         text += actors_to_text(role["actors"])
 
-    if role["roles"] == 0 and role["actors"] == 0:
+    if len(role["roles"]) == 0 and len(role["actors"]) == 0:
         return "no one"
     
     return text
 
 
+def add_span_id(model_template, field_name, inner_content):
+    """Adds span id to a field.  Not currently being used."""
+    span_id = get_old_id(model_template) + "-" + field_name
+    return "<span id='" + span_id + "'>" + inner_content + "</span>"
+
+
+def community_basic_info_to_text_with_span_ids(template_set):
+    """Gets basic community info such as name, owners, governors. Not currently being used."""
+
+    name_field = add_span_id(model_template=template_set["community"], field_name="name", 
+        inner_content=template_set["community"]["fields"]["name"])
+    owners_field = add_span_id(model_template=template_set["community"], field_name="owners", 
+        inner_content=roles_and_actors(template_set["community"]["fields"]["roles"]["owners"]))
+    governors_field = add_span_id(model_template=template_set["community"], field_name="governors",
+        inner_content=roles_and_actors(template_set["community"]["fields"]["roles"]["governors"]))
+
+    return "Community %s is owned by %s and governed by %s. " % (name_field, owners_field, governors_field)
+
+
 def community_basic_info_to_text(template_set):
     """Gets basic community info such as name, owners, governors."""
-    community_fields = template_set["community"]["fields"]
-    return "Community %s is owned by %s and governed by %s. " % (community_fields["name"],
-        roles_and_actors(community_fields["roles"]["owners"]),
-        roles_and_actors(community_fields["roles"]["governors"]))
+
+    name_field = template_set["community"]["fields"]["name"]
+    owners_field = roles_and_actors(template_set["community"]["fields"]["roles"]["owners"])
+    governors_field = roles_and_actors(template_set["community"]["fields"]["roles"]["governors"])
+
+    return "Community %s is owned by %s and governed by %s. " % (name_field, owners_field, governors_field)
+
 
 
 def community_governance_info_to_text(template_set):
     """Give details of how owners/governors operate on this community."""
 
     owner_condition, governor_condition = None, None
-    for condition in template_set["condition_templates"]:
-        target = get_conditioned_object(condition)
-        if target == template_set["community"]:
-            if conditioning_choices == "community_owner":
-                owner_condition = condition
-            elif conditioning_choices == "community_governor":
-                governor_condition = condition
 
-    if template_set["community"]["foundational_permission_enabled"]:
-        text = "By default, the owners of the community must approve all actions"
+    for condition in template_set["condition_templates"]:
+
+        old_id_of_target = get_conditioned_object(condition).lower()
+        old_id_of_community = get_old_id(template_set["community"]).lower()
+
+        if old_id_of_target == old_id_of_community:
+            if condition["fields"]["conditioning_choices"] == "community_owner":
+                owner_condition = condition
+            elif condition["fields"]["conditioning_choices"] == "community_governor":
+                governor_condition = condition
+    
+    text = ""
+
+    if template_set["community"]["fields"]["foundational_permission_enabled"]:
+        text += "By default, the owners of the community must approve all actions"
     else:
-        text = "By default, the owners do not need to approve actions in the community"
+        text += "By default, the owners do not need to approve actions in the community"
 
     if owner_condition:
-        text += ", " + conditions_to_text(owner_condition) + ". "
+        text += ", " + conditions_to_text([owner_condition]) + ". "
     else:
         text += ". "
 
-    if template_set["community"]["governing_permission_enabled"]:
-        text = "Unless otherwise specified, the governors of the community can take any action"
+    if template_set["community"]["fields"]["governing_permission_enabled"]:
+        text += "Unless otherwise specified, the governors of the community can take any action"
     else:
-        text = "The governors of the community can take actions only when specified"
+        text += "The governors of the community can take actions only when specified"
 
     if governor_condition:
-        text += ", " + conditions_to_text(governor_condition) + ". "
+        text += ", " + conditions_to_text([governor_condition]) + ". "
     else:
         text += ". "
 
@@ -392,7 +425,7 @@ def community_governance_info_to_text(template_set):
 
 def community_members_to_text(template_set):
     community_fields = template_set["community"]["fields"]
-    return "The members of this community are " + list_to_text(community_fields["roles"]["members"])
+    return "The members of this community are " + list_to_text(community_fields["roles"]["members"]) + ". "
 
 
 def community_roles_to_text(template_set):
@@ -406,11 +439,13 @@ def community_roles_to_text(template_set):
     else:
         text = "There are %s custom roles in the community: " % str(len(community_fields["roles"]["custom_roles"]))
 
-    text += list_to_text(community_fields["roles"]["custom_roles"].keys()) + ". "
+    custom_role_names = list(community_fields["roles"]["custom_roles"].keys())
+    text += list_to_text(custom_role_names) + ". "
 
     for role_name, role_members in community_fields["roles"]["custom_roles"].items():
         conjoin_with = " are " if len(role_members) > 1 else " is "
-        text += actors_to_text(role_members) + conjoin_with + "'" + role_name + "'. ".
+        new_text = actors_to_text(role_members) + conjoin_with + "'" + role_name + "'. "
+        text += capitalize_first_letter(new_text)
 
     return text
 
@@ -428,18 +463,20 @@ def get_conditioned_object(condition):
 
 
 def conditions_to_text(conditions):
+    """Takes a list of conditions and turns them into text."""
+    
     from conditionals.client import PermissionConditionalClient
-    text += ", "
+    pcc = PermissionConditionalClient(actor="system")
+
     condition_strings = []
     for condition in conditions:
-        condition_object = pcc.condition_lookup_helper(condition["fields"]["condition_type"])
+        condition_object = pcc.condition_lookup_helper(lookup_string=condition["fields"]["condition_type"])
         permission_data = json.loads(condition["fields"]["permission_data"])
         actors = roles_and_actors({ "roles": permission_data["permission_roles"], 
             "actors": permission_data["permission_actors"]})
-        new_string = "on the condition that " + actors + " " condition_object.verb_name
+        new_string = "on the condition that " + actors + " " + condition_object.verb_name
         condition_strings.append(new_string)
-    text += list_to_text(condition_strings)
-    return text
+    return list_to_text(condition_strings)
 
 
 def permission_to_text(template_set, set_target=None):
@@ -449,24 +486,26 @@ def permission_to_text(template_set, set_target=None):
     text = ""
 
     for permission in template_set["permissions"]:
+
         if set_target == None or set_target == get_permitted_object(permission):
-            action = get_state_change_object_given_name(permission["change_type"]).description.lower()
+
+            action = get_state_change_object_given_name(permission["fields"]["change_type"]).description.lower()
             target = get_permitted_object(permission)
-            text += roles_and_actors(permission) + " can " + action + " on " + target
+            new_text = roles_and_actors(permission["fields"]) + " can " + action + " for " + target
+            text += capitalize_first_letter(new_text)
 
             conditions_on_this_permission = []
             for condition in template_set["condition_templates"]:
-                target = get_conditioned_object(condition)
-                if target == permission:
+                if get_conditioned_object(condition).lower() == get_old_id(permission).lower():
                     conditions_on_this_permission.append(condition)
             
             if conditions_on_this_permission:
-                text += conditions_to_text(conditions)
+                text += ", " + conditions_to_text(conditions_on_this_permission)
                 
             text += ". "
 
             # Look for nested permissions recursively.
-            text += permission_to_text(template_set, set_target=permission)
+            text += permission_to_text(template_set, set_target=get_old_id(permission))
                 
     return text
 
@@ -477,7 +516,7 @@ def owned_objects_basic_info(template_set):
     if num_objects == 0:
         return ""
 
-    object_string = " objects. " if num_objects > 1 else " object. "
+    object_string = " objects, " if num_objects > 1 else " object, "
 
     text = "The community owns " + str(num_objects) + object_string
 
@@ -485,100 +524,64 @@ def owned_objects_basic_info(template_set):
     for obj in template_set["owned_objects"]:
         obj_list.append(obj["model_type"].lower() + " " + obj["fields"]["name"])
     
-    text += list_to_text(obj_list)
+    text += list_to_text(obj_list) + ". "
 
     return text
-
-
-def owned_object_detailed_info(template_set, owned_object):
-    object_name = owned_object["fields"]["name"]
-    return permission_to_text(template_set, object_name)  # need id probably not object_name
 
 
 def generate_text_from_template_set(template_set):
 
     text = OrderedDict()
 
+    old_community_id = get_old_id(template_set["community"])
+
     text.update({ "community_basic_info" : community_basic_info_to_text(template_set) }) 
     text.update({ "community_governance_info" : community_governance_info_to_text(template_set) }) 
     text.update({ "community_members_info" : community_members_to_text(template_set) }) 
     text.update({ "community_roles_info" : community_roles_to_text(template_set) })
-    text.update({ "community_permissions_info" : permission_to_text(template_set) })
+    text.update({ "community_permissions_info" : permission_to_text(template_set, set_target=old_community_id) })
     text.update({ "owned_objects_basic_info" : owned_objects_basic_info(template_set) })
 
     for index, owned_object in enumerate(template_set["owned_objects"]):
-        text.update({ "owned_object_" + str(index) : owned_object_detailed_info(template_set, owned_object) })
+        text.update({ "owned_object_" + str(index) : permission_to_text(template_set, get_old_id(owned_object)) })
 
     return text
 
 
-class HumanReadableTemplate(object):
+def change_field_in_template(template_set, model_type, old_pk, fieldname, newfielddata):
+    """This is super limited, because we're making tons of assumptions about the data being passed in.
 
-    human_readable_text = ""
+    - a template set, likely generated from a pk corresponding to where the original template is stored 
+        as a Django model in the DB
+    - the type of the model the changed field is on (community, owned_objects, permissions, or 
+        conditiontemplates), so we can find it in the template set 
+    - the pk of the model the changed field is on, so we can find it in the template set
+    - the name of the field being changed, possibly as a span_id that needs to be reconstructed, which
+        we assume for now is NOT a related field
+    - the new field data, which will def need to be validated for format, which we're not doing here
 
-    def __init__(self, template_set):
-        self.template_set = template_set
-        self.human_readable_text = self.make_readable(template_set)
+    We'll need to refactor this soon, but it probably makes sense to do so after we've created a 
+    template model in the DB.
 
-    def make_readable(self, template_set):
-        """Creates a "plain english" paragraph/sentence with the content of the template."""
-        return generate_text_from_template_set(template_set)
+    """
 
-    def change_field(self, fieldname, newfielddata):
-        """"""
-        # change field in template
-        # validate template, if not valid return error, otherwise change human_readable_text and return True
-        pass
-
-    def validate_template(self):
-        return validate_template(self.template)
-
-
-# TODO:
-
-#   - fix set_target in permission/condition logic (not referring to exactly the same things)
-#   - get names of things currently represented by IDs (possibly create dict for use by unique ID?)
-#   - add unique id span when generating text
-
-#   - figure out how to handle condition configuration info (currently not included)
-#   - figure out how to handle permission configuration info (currently not included)
-
-#   - implement change_field
-
-#   - write tests
+    if model_type == "community":
+        template_set["community"]["fields"][fieldname] = newfielddata
+    else:
+        for item in template_set[model_type]:
+            if item["original_pk"] == old_pk:
+                item[fieldname] = newfielddata
 
 
 """
-
-The Community USWNT is owned by the individual 1 and governed by 1.    (((community template)))
-
-Unless otherwise specified, the governor(s) can do whatever they like, but the owners must be 
-granted specific permission to do anything.  Also, individual 1 must approve any changes they make.
-(((community template, condition template)))
-
-The community has members 1, 3 and 4.   (((community template)))
-
-There is 1 custom role in the community, "forwards".  Individuals 3 and 4 are "forwards".
-(((community template)))
-
-Everyone with role "forwards" and the individual 10 may change the name of the community.
-(((permission template)))
-
-The community owns two objects.  It owns resource "WoSo Forum" and resource "Ticker Tape Parade Pictures".
-(((resource template)))
-
-Any member of the community may add an item to the resource "Ticker Tape Parade Pictures", on the condition
-that they get approval from individual 4.  The individual 10 may remove the permission to add an item 
-to the resource "Ticker Tape Parade Pictures".
-(((resource template, permission template, condition template)))
-
-*******
-
-NOTE: How do we associate content with fields? The user will want to click an underlined section 
-like ___forwards___, how do we make clear when they do this, which reference to "forwards" it should be?
-
-When we hit a field, we generate a unique ID for it and insert it as a <span> into the text while also
-keeping track of it internally.
+NOTE: for documentation somewhere
 
 
+# Upon reflection, I think it's reasonable to ask people editing templates to deal more directly
+# with the data structure - this is a power user tool anyway.  We can create a user interface to do 
+# edit the Englishified templates later.
+
+# This means we do not need to insert span IDs into the template texts.  For the record, this is the
+# logic of the span_ids, implemented above in a couple of unused functions:
+#                                                modeltypeOfModel_pkOfModel-[fieldname]
 """

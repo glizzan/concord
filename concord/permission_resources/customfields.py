@@ -297,3 +297,40 @@ class RoleListField(models.Field):
             return json.dumps(value.as_strings())
         if value in [None, 'null', '[]']:
             return '[]'
+
+
+###################################
+### TemplateData Object & Field ###
+###################################
+
+"""
+... could these just be unsaved versions of actual models?
+
+sample use:  template.data.conditions.get_approval_conditions(target=community)
+
+to update a permission to change the role, you'd do:
+    template.data.permissions.change_role_on_permission(target_permission, new_role)
+
+Okay, imagine you're on the front end, you see a template set with a community with role member_admins
+that has permission to add_members, and you want to change it so that anyone with role member can add
+members.  You'd hit an API change_role_on_template_permission with data - template ID, permission ID,
+and new role.  That would call:
+template(id=template_id).change_role_on_permission(permission_id=permission_id, new_role=new_role)
+
+To edit someone else's template, you make a copy.  To edit your own template, you can edit as is.
+So in the template object, you can create the span_ids, which can be passed back and forth to the
+front end.
+
+What is the POINT of having a customfield if everything is just dicts?  But I don't necessarily see
+the point of creating instances here either.
+
+"""
+
+# class TemplateData(object):
+
+#     community = None
+#     permissions = []
+#     conditions = []
+#     owned_objects = []
+
+#     def __init__(self, community, permissions=None, conditions=None, owned_objects=None):

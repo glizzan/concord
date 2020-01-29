@@ -159,7 +159,6 @@ class PermissionsItem(PermissionedModel):
         return False, None
 
 
-
 def delete_empty_permission(sender, instance, created, **kwargs):
     """Toggle is_active so it is only true when there are actors or roles set on the permission."""
 
@@ -177,3 +176,55 @@ def delete_empty_permission(sender, instance, created, **kwargs):
 
 
 post_save.connect(delete_empty_permission, sender=PermissionsItem)
+
+
+class Template(PermissionedModel):
+    """ 
+    Template models allow users to save and edit configurations of communities, owned objects,
+    permissions, and conditionals.  New communities can be generated from these templates, making
+    it easier for users to experiment with new governance structures.
+    """
+    data = models.CharField(max_length=5000, default='{}')
+    description = models.CharField(max_length=500)
+
+    def get_template_data(self):
+        return json.loads(template_set)
+
+    def set_template_data(self, template_set):
+        self.data = json.dumps(template_set)
+
+    def generate_objects_from_template(self):
+        from concord.permission_resources.templates import generate_objects_from_template_set
+        template_set = self.get_template_data()
+        return generate_objects_from_template_set(template_set)
+
+    def generate_text_from_template(self):
+        from concord.permission_resources.templates import generate_text_from_template_set
+        template_set = self.get_template_data()
+        return generate_text_from_template_set(template_set)
+
+    # TODO: edit generate_text_from_template_set to expect span_ids
+
+    def add_field_ids(self, template_set):
+        id_index = 0
+        for name, content in template_set.items():
+            if name == "community":
+                content = [content]
+            for obj in content:
+                for field in obj["fields"]:
+                    pass
+
+
+    def create_template_data(self, actor, community, optional_object_list=None):
+        from concord.permission_resources.templates import generate_template_set
+        template_set = templates.generate_template_set(actor, community, optional_object_list)
+        template_set = self.add_field_ids(template_set)
+        self.set_template_data(template_set)
+
+    def change_field(self, field_id, new_field_data):
+        # when updating, do validation and return error if not successful?
+        pass
+
+
+
+

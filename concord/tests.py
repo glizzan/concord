@@ -19,7 +19,7 @@ from concord.permission_resources.forms import PermissionForm, MetaPermissionFor
 from concord.conditionals.forms import ConditionSelectionForm, conditionFormDict
 from concord.actions.models import Action  # NOTE: For testing action status later, do we want a client?
 from concord.actions.state_changes import Changes
-from concord.actions import templates
+from concord.permission_resources import templates
 from concord.permission_resources.models import PermissionsItem
 from concord.conditionals.models import ApprovalCondition
 
@@ -2999,9 +2999,6 @@ class TemplateTest(DataTestCase):
         template_set = templates.generate_template_set(actor=self.users.pinoe, community=self.instance,
             optional_object_list=[self.resource, self.resource2])
 
-        import pprint
-        pprint.pprint(template_set)
-
         self.assertEquals(template_set["community"]["fields"]["name"], self.instance.name)
         self.assertEquals(len(template_set["permissions"]), 3)
         self.assertEquals(len(template_set["condition_templates"]), 2)
@@ -3039,5 +3036,41 @@ class TemplateTest(DataTestCase):
         self.assertEquals(permission_level_one.permitted_object_id, resource1.pk)
         self.assertEquals(permission_level_two.permitted_object_id, permission_level_one.pk)
         
+    def test_generate_text_from_template_set_for_simple_community(self):
 
+        self.set_up_simple_community()
+
+        template_set = templates.generate_template_set(actor=self.users.pinoe, community=self.instance)
+        import pprint
+        pprint.pprint(template_set)
+        text = templates.generate_text_from_template_set(template_set)  
         
+        self.assertEquals(len(text), 6)
+        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1 and governed by individual 1. ")
+        self.assertEquals(text["community_governance_info"], 
+            "By default, the owners do not need to approve actions in the community, on the condition that individual 1 approve. Unless otherwise specified, the governors of the community can take any action. ")
+        self.assertEquals(text["community_members_info"], 'The members of this community are 13 and 4. ')
+        self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
+        self.assertEquals(text["community_permissions_info"], 
+            "Everyone with role forwards and individual 10 can change name of community for community_1, on the condition that individual 4 approve. ")
+        self.assertEquals(text["owned_objects_basic_info"], "")
+        
+    def test_generate_text_from_template_set_for_complex_community(self):
+
+        self.set_up_complex_community()
+        template_set = templates.generate_template_set(actor=self.users.pinoe, community=self.instance,
+            optional_object_list=[self.resource, self.resource2])
+        text = templates.generate_text_from_template_set(template_set)  
+
+        self.assertEquals(len(text), 8)
+        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1 and governed by individual 1. ")
+        self.assertEquals(text["community_governance_info"], 
+            "By default, the owners do not need to approve actions in the community, on the condition that individual 1 approve. Unless otherwise specified, the governors of the community can take any action. ")
+        self.assertEquals(text["community_members_info"], 'The members of this community are 13 and 4. ')
+        self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
+        self.assertEquals(text["community_permissions_info"], 
+            "Everyone with role forwards and individual 10 can change name of community for community_1, on the condition that individual 4 approve. ")
+        self.assertEquals(text["owned_objects_basic_info"], "The community owns 2 objects, resource WoSo Forum and resource Ticker Tape Parade Pictures. ") 
+        self.assertEquals(text["owned_object_1"], "Everyone with role members can add item to resource for resource_2. Individual 10 can remove role from permission for permissionsitem_2. ")
+        self.assertEquals(text["owned_object_0"], "")
+

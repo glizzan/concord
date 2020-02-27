@@ -7,6 +7,8 @@ from django.db import models
 from django.utils import timezone
 from django.urls import reverse
 from django.db.models.signals import post_save
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.models import PermissionedModel
 from concord.actions.client import ActionClient
@@ -37,7 +39,6 @@ class ConditionModel(PermissionedModel):
     @classmethod
     def get_slug(cls):
         return cls.__name__.lower()
-    # TODO: Add method for getting permission a given condition is set on.
 
     def get_name(self):
         return "%s (%d)" % (self.descriptive_name, self.pk)
@@ -233,16 +234,24 @@ class ConditionTemplate(PermissionedModel):
                      making the voting period longer or setting self-approval to True
     permission_data - this data is used to create a permissions resource for the condition,
                      otherwise the default permission is used  
-    conditioned_object - pk of the thing the condition is set on
-    conditioning_choices - currently only 'permission' or (less likely) 'community_governor', 
-                    'community_owner'
+
+    conditioned_object is either permission or community, generic relations have been added to those
+    models for ease of reference.
     """
 
     condition_type = models.CharField(max_length=400)  # Replace with choices field???
     condition_data = models.CharField(max_length=400, blank=True, null=True)
     permission_data = models.CharField(max_length=400, blank=True, null=True)
-    conditioned_object = models.IntegerField()  
-    conditioning_choices = models.CharField(max_length=18, default="permission")
+
+    conditioned_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    conditioned_object_id = models.PositiveIntegerField()
+    conditioned_object = GenericForeignKey('conditioned_object_content_type', 'conditioned_object_id')
+
+    COMMUNITY_CHOICES = (
+        ('gov', 'Governor'),
+        ('own', 'Owner'),
+    )
+    target_type = models.CharField(max_length=3, blank=True, null=True, choices=COMMUNITY_CHOICES)
 
     def __str__(self):
         return "%s Condition on %s (configuration: %s, permission: %s) " % (self.condition_type, 
@@ -266,7 +275,8 @@ class ConditionTemplate(PermissionedModel):
         return json.dumps({
                 "condition_type": self.condition_type,
                 "condition_data": condition_data,
-                "permission_data": permission_data
+                "permission_data": permission_data,
+                "target_type": self.target_type
         })
 
 

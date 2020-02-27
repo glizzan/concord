@@ -2,9 +2,6 @@ import json, warnings
 
 from django.contrib.contenttypes.models import ContentType
 
-# TODO: make these explicit abstract class and subclasses *have* to implement validate and
-# implement
-
 
 class BaseStateChange(object):
 
@@ -78,7 +75,7 @@ class ChangeOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        Put real logic here
         """
         return True
 
@@ -120,7 +117,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        Put real logic here
         """
         return True
 
@@ -156,7 +153,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        Put real logic here
         """
         return True
 
@@ -193,7 +190,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        Put real logic here
         """
         return True
 
@@ -231,7 +228,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        Put real logic here
         """
         return True
 
@@ -241,7 +238,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         return target
 
 
-# TODO: must be a better approach than just listing these
+# FIXME: must be a better approach than just listing these
 def foundational_changes():
     return [
         'concord.communities.state_changes.AddGovernorStateChange',
@@ -259,7 +256,6 @@ def foundational_changes():
     ]
 
 
-# TODO: automatically generate this
 class Changes(object):
     '''Helper object which lets developers easily access change types.'''
 

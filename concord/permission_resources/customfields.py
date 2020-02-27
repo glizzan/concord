@@ -3,6 +3,9 @@ import json, collections
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.models import ContentType
+
+from concord.permission_resources import templates
 
 
 ################################
@@ -163,106 +166,45 @@ class ActorListField(models.Field):
 ###############################
 
 
-RolePair = collections.namedtuple('RolePair', 'community_pk role_name')
-
 class RoleList(object):
 
     role_list = []
 
-    def __init__(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
-        role_name_list=None):
+    def __init__(self, role_list=None):
         '''Accepts a variety of formats, saves to role_list as a list of RolePair namedtuples.'''
-
-        self.role_list = self.format_as_role_pair(role_pair_list=role_pair_list, 
-            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
-            role_name_list=role_name_list)
+        self.role_list = role_list if role_list else []
 
     def is_empty(self):
         return False if self.role_list else True
-        
-    def format_as_role_pair(self, *, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
-        role_name_list=None):
-        """Accepts a variety of formats and returns as list of role_pairs or an empty list."""
-
-        role_list = []
-
-        if role_pair_list and not (list_of_pair_strings or community_pk or role_name_list):
-            if any(not isinstance(role_pair, RolePair) for role_pair in role_pair_list):
-                raise ValueError("All items in role_pair_list must be of type RolePair, not ", type(role_pair))
-            return role_pair_list
-
-        if list_of_pair_strings and not (role_pair_list or community_pk or role_name_list):
-            for pair_string in list_of_pair_strings:
-                pk, name = pair_string.split("_")
-                role_list.append(RolePair(community_pk=int(pk), role_name=name))
-            return role_list
-
-        if community_pk and role_name_list and not (list_of_pair_strings or role_pair_list):
-            for role_name in role_name_list:
-                role_list.append(RolePair(community_pk=int(community_pk), role_name=role_name))
-            return role_list
-
-        if not (role_pair_list or list_of_pair_strings or community_pk or role_name_list):
-            return []
-
-        raise ValueError("Invalid input to format_as_role_pair")
 
     def get_roles(self):
         return self.role_list
 
-    def as_strings(self):
-        role_strings = []
-        for role in self.role_list:
-            role_strings.append(str(role.community_pk) + "_" + role.role_name)
-        return role_strings
-
     def role_name_in_list(self, role_name):
         for role in self.role_list:
-            if role_name == role.role_name:
+            if role_name == role:
                 return True
         return False
 
-    def role_pair_in_list(self, role_pair):
-        if type(role_pair) != RolePair:
-            pk, name = role_pair.split("_")
-            role_pair = RolePair(community_pk=int(pk), role_name=name)
-        for existing_role in self.role_list:
-            if existing_role.role_name == role_pair.role_name and \
-                existing_role.community_pk == role_pair.community_pk:
-                return True
-        return False
-
-    def add_roles(self, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
-        role_name_list=None):
-
-        roles = self.format_as_role_pair(role_pair_list=role_pair_list, 
-            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
-            role_name_list=role_name_list)
-
+    def add_roles(self, role_list):
         role_set = set(self.role_list)
-        for role in roles:
+        for role in role_list:
             role_set.add(role)
         self.role_list = list(role_set)
 
-    def remove_roles(self, role_pair_list=None, list_of_pair_strings=None, community_pk=None, 
-        role_name_list=None):
-
-        roles = self.format_as_role_pair(role_pair_list=role_pair_list, 
-            list_of_pair_strings=list_of_pair_strings, community_pk=community_pk, 
-            role_name_list=role_name_list)
-
+    def remove_roles(self, role_list):
         role_set = set(self.role_list)
-        for role in roles:
+        for role in role_list:
             role_set.discard(role)
         self.role_list = list(role_set)
 
 
 def parse_role_list_string(role_list_string):
     try:
-        list_of_pair_strings = json.loads(role_list_string)
+        role_list = json.loads(role_list_string)
     except json.decoder.JSONDecodeError as error:
         raise ValidationError("RoleListField was formatted wrongly and raised a JSONDecodeError")
-    return RoleList(list_of_pair_strings=list_of_pair_strings)
+    return RoleList(role_list=role_list)
 
 
 class RoleListField(models.Field):
@@ -288,13 +230,13 @@ class RoleListField(models.Field):
             return value
         if value is None:
             return RoleList()
-        if type(value) == list and all([type(x) == RolePair for x in value]):
+        if type(value) == list and all([type(x) == str for x in value]):
             return RoleList(value)
         return parse_role_list_string(value)
 
     def get_prep_value(self, value):
         if isinstance(value, RoleList):
-            return json.dumps(value.as_strings())
+            return json.dumps(value.role_list)
         if value in [None, 'null', '[]']:
             return '[]'
 
@@ -303,34 +245,353 @@ class RoleListField(models.Field):
 ### TemplateData Object & Field ###
 ###################################
 
-"""
-... could these just be unsaved versions of actual models?
 
-sample use:  template.data.conditions.get_approval_conditions(target=community)
+class TemplateData(object):
 
-to update a permission to change the role, you'd do:
-    template.data.permissions.change_role_on_permission(target_permission, new_role)
+    def __init__(self):
+        # need to create attributes on init because declaring them as model attributes (ie 
+        # community = {} was somehow causing it to become a mutable default??)
+        self.community = {}
+        self.permissions = {}
+        self.conditions = {}
+        self.owned_objects = {}
+        self.relationship_map = {}
 
-Okay, imagine you're on the front end, you see a template set with a community with role member_admins
-that has permission to add_members, and you want to change it so that anyone with role member can add
-members.  You'd hit an API change_role_on_template_permission with data - template ID, permission ID,
-and new role.  That would call:
-template(id=template_id).change_role_on_permission(permission_id=permission_id, new_role=new_role)
+    # display helpers
 
-To edit someone else's template, you make a copy.  To edit your own template, you can edit as is.
-So in the template object, you can create the span_ids, which can be passed back and forth to the
-front end.
+    def get_community(self):
+        return list(self.community.values())[0]
 
-What is the POINT of having a customfield if everything is just dicts?  But I don't necessarily see
-the point of creating instances here either.
+    def get_permissions(self):
+        return list(self.permissions.values())
 
-"""
+    def get_conditions(self):
+        return list(self.conditions.values())
 
-# class TemplateData(object):
+    def get_owned_objects(self):
+        return list(self.owned_objects.values())
 
-#     community = None
-#     permissions = []
-#     conditions = []
-#     owned_objects = []
+    def get_all_objects(self):
+        combined_items = {**self.community, **self.permissions, **self.conditions, **self.owned_objects}
+        return list(combined_items.values())
 
-#     def __init__(self, community, permissions=None, conditions=None, owned_objects=None):
+    def get_target_of_field(self, item_id, field_name):
+        target_id = None
+        for related_field in self.relationship_map["related_fields"]:
+            if related_field["name"] == field_name and related_field["field_on"] == int(item_id):
+                target_id = str(related_field["field_target_id"])
+        if target_id:
+            combined_items = {**self.community, **self.permissions, **self.conditions, **self.owned_objects}
+            return combined_items[target_id]
+
+    def update_related_field(self, pair_map, current_object, current_object_new_id, field):
+        """Given a model (current_object) and field, update the field to point to the item listed in 
+        relationship_map or return false if no match found."""
+        for rf in self.relationship_map["related_fields"]:
+            if rf["name"] == field.name and rf["field_on"] == int(current_object_new_id):
+                target_id = str(rf["field_target_id"])
+                if pair_map[target_id]["switched"] == True:
+                    # If referenced object is ready, set field
+                    setattr(current_object, field.name, pair_map[target_id]["object"])
+                    return True, current_object
+        return False, None
+
+
+    # manipulate data
+
+    def create_template(self, community=None, permissions=None, conditions=None, owned_objects=None,
+        recursive=False):
+        """Creates TemplateData object.  Only used when actually creating the template for the
+        first time - when instantiating from database, we create an empty object and load manually.
+        Generate_relationship_map assumes real objects with database IDs."""
+        # FIXME: the fact that community is an item while the other three are lists is something we
+        # should not need the end user to know
+
+        id_count = 0
+
+        if community:
+            id_count += 1
+            self.community = { id_count : community }
+            if recursive:
+                self.get_recursive_data_for_template()
+
+        if permissions:
+            for permission in permissions:
+                id_count += 1
+                self.permissions.update({ id_count : permission })
+
+        if conditions:
+            for condition in conditions:
+                id_count += 1
+                self.conditions.update({ id_count : condition })
+            
+        if owned_objects:
+            for owned_object in owned_objects:
+                id_count += 1
+                self.owned_objects.update({ id_count: owned_object })
+
+        if community or permissions or conditions or owned_objects:
+            self.generate_relationship_map()
+
+    def get_recursive_data_for_template(self):
+        """Called when we have a community and recursive=True, gets all permissions and conditions
+        related to the community and any owned objects also passed in."""
+
+        from concord.permission_resources.client import PermissionResourceClient
+        from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
+        permissionClient = PermissionResourceClient(actor=actor)
+        commConditionalClient = CommunityConditionalClient(actor=actor)
+        permConditionalClient = PermissionConditionalClient(actor=actor)
+
+        objects_to_check = [community] + self.owned_objects
+
+        while len(objects_to_check) > 0:
+        
+            current_object = objects_to_check.pop(0) 
+
+            # Check permission
+            permissions = permissionClient.get_permissions_on_object(object=current_object)
+            if permissions:
+                self.permissions += permission
+                objects_to_check += permissions
+
+            # Check for conditionals set on it
+            if current_object.__class__.__name__ == "Community":
+                commConditionalClient.set_target(target=current_object)
+                govConditionTemplate = commConditionalClient.get_condition_template_for_governor()
+                ownerConditionTemplate = commConditionalClient.get_condition_template_for_owner()
+                for conditionTemplate in [govConditionTemplate, ownerConditionTemplate]:
+                    if conditionTemplate:
+                        self.conditions.append(conditionTemplate)
+                        objects_to_check.append(conditionTemplate)
+            elif current_object.__class__.__name__ == "PermissionsItem":
+                permConditionalClient.set_target(target=current_object)
+                conditionTemplate = permConditionalClient.get_condition_template()
+                if conditionTemplate:
+                    self.conditions.append(conditionTemplate)
+                    objects_to_check.append(conditionTemplate)
+
+    def is_saveable_related_field(self, field):
+        """This method indicates whether the given field is (a) a related field and (b) a related
+        field we want to save - for instance, we do not save generic relations or reverse relations, nor
+        do we save the individual elements of a generic foreign key (content type and ID fields it 
+        references)."""
+        if field.is_relation:
+            if field.__class__.__name__ not in ["GenericRel", "GenericRelation", "ManyToOneRel", "ManyToOneRelation"]:
+                if "ContentType" not in str(field.related_model):  # capitalization is important here
+                    return True
+        return False
+
+    def generate_relationship_map(self):
+        """
+        Generates a list of dicts with four keys: name, field_on (new ID of model field is on),
+            field_target (new ID of model field is targetting)
+
+        FIXME: how do we handle related fields pointing outside of this set?  currently we handle 
+        owner with check_ownership but that's it
+        """
+
+        # go through all_objects and genereate a old_db_id : template_id pair
+        pair_map = {}
+        all_objects = {**self.community, **self.permissions, **self.conditions, **self.owned_objects}
+        for item_key, item in all_objects.items():
+            pair_map.update({ str(item.pk) + "_" + item._meta.model.__name__ : item_key })   
+
+        # go through all_objects and map related fields
+        related_fields = []
+        for item_key, item in all_objects.items():
+            fields = item._meta.get_fields()
+            for field in fields:
+                # if the field is a related field and its value is not None, store data
+                if self.is_saveable_related_field(field) and getattr(item, field.name) is not None: 
+                    new_key = str(item.pk) + "_" + item._meta.model.__name__
+                    field_dict = { "name": field.name, "field_on": pair_map[new_key] }
+                    if hasattr(field, "get_content_type"):  # if field is generic foreign key
+                        target_model = getattr(item, field.ct_field).model_class()
+                        new_key = str(getattr(item, field.fk_field)) + "_" + target_model.__name__
+                        field_dict["field_target_id"] = pair_map[new_key]
+                        field_dict["field_target_ct"] = getattr(item, field.ct_field).pk
+                    else:
+                        new_key = str(field.value_from_object(item)) + "_" + field.related_model.__name__
+                        field_dict["field_target_id"] = pair_map[new_key]
+                    related_fields.append(field_dict)
+
+        # save related_fields as relationship map
+        self.relationship_map.update({"related_fields": related_fields})
+
+    def update_related_field(self, pair_map, current_object, current_object_new_id, field):
+        """Given a model (current_object) and field, update the field to point to the item listed in 
+        relationship_map or return false if no match found."""
+        for rf in self.relationship_map["related_fields"]:
+            if rf["name"] == field.name and rf["field_on"] == int(current_object_new_id):
+                target_id = str(rf["field_target_id"])
+                if pair_map[target_id]["switched"] == True:
+                    # If referenced object is ready, set field
+                    setattr(current_object, field.name, pair_map[target_id]["object"])
+                    return True, current_object
+        return False, None
+
+    def check_related_fields(self, pair_map, current_object_new_id, current_object, default_owner, 
+        default_community):
+        """Helper function, checks related fields on an object to see if all data is in 
+        relationship map.  If all related fields in the map, returns True & the updated object,
+        otherwise returns False & None."""
+
+        fields = current_object._meta.get_fields()
+        for field in fields:
+            if self.is_saveable_related_field(field):
+                if field.name == "owner":
+                    current_object = self.check_ownership(current_object, default_owner, default_community)
+                else:
+                    object_updated, current_object = self.update_related_field(pair_map, current_object, 
+                        current_object_new_id, field)
+                    if not object_updated:
+                        return False, None  # If something returned not updated, need to skip obj for now
+        return True, current_object
+
+    def check_ownership(self, current_object, default_owner, default_community):
+        """All objects except communities need an owner.  Templates may assign ownership but most
+        will assume the person who created them as the owner."""
+        # FIXME: may be fixable by passing this info to check_related_fields
+
+        if current_object.__class__.__name__ == "Community":
+            return current_object
+
+        if current_object.get_owner() == None:
+            if default_community:
+                current_object.owner = default_community
+            elif default_owner:
+                current_object.owner = default_owner
+            else:
+                raise Exception("Must provide default owner or default community for object", current_object)
+
+        return current_object
+
+    def create_from_template(self, default_owner=None):
+
+        # go through objects_to_create and make a map with template_id as key and None as value
+        pair_map = {}
+        objects_to_create = collections.OrderedDict({**self.community, **self.permissions, 
+            **self.conditions, **self.owned_objects})
+        for item_key, item in objects_to_create.items():
+            pair_map.update({ item_key : { "object": item, "switched": False } })
+
+        default_community = self.community.popitem()[1] if self.community else None
+
+        created_objects = []
+        # go through objects to create, adding them as the values in the template_id pair as you go
+        while len(objects_to_create) > 0:
+
+            current_object_dict = objects_to_create.popitem(last=False)
+            current_object_new_id, current_object = current_object_dict[0], current_object_dict[1]
+
+            fields_ready, current_object = self.check_related_fields(pair_map, current_object_new_id, 
+                current_object, default_owner, default_community)
+
+            if fields_ready:
+                current_object.save()
+                created_objects.append(current_object)
+                pair_map[current_object_new_id]["object"] = current_object
+                pair_map[current_object_new_id]["switched"] = True
+            else:
+                objects_to_create.update({ current_object_dict[0]: current_object_dict[1] })
+
+        return created_objects
+
+        # possibly need to refresh templatedata object so the items are not pointing at the newly
+        # created objects?  how to check this?
+
+    def generate_text(self):
+        return templates.generate_text_from_template(template_model=self)
+
+
+# Helper methods for TemplateDataField
+
+
+def parse_template_data(saved_data):
+
+    saved_data = json.loads(saved_data)
+    template_data = TemplateData()
+    
+    # load community
+    for community_key, community in saved_data["community"].items():  # should be only one!
+        template_data.community = { community_key: 
+            templates.create_unsaved_instance_given_template(community) }
+
+    # load permissions
+    for permission_key, permission in saved_data["permissions"].items():
+        template_data.permissions.update({ permission_key : 
+            templates.create_unsaved_instance_given_template(permission)})
+    
+    # load conditions
+    for condition_key, condition in saved_data["conditions"].items():
+        template_data.conditions.update({ condition_key : 
+            templates.create_unsaved_instance_given_template(condition)})
+
+    # load owned objects
+    for obj_key, obj in saved_data["owned_objects"].items():
+        template_data.owned_objects.update({ obj_key : 
+            templates.create_unsaved_instance_given_template(obj)})    
+    
+    template_data.relationship_map = saved_data["relationship_map"]
+    
+    return template_data
+
+
+def save_template_data(object_to_save):
+    """Converts templatedata field into json-serializable dict."""
+
+    save_dict = { "community": {}, "permissions": {}, "conditions": {}, "owned_objects": {},
+        "relationship_map": object_to_save.relationship_map }  
+
+    # save community
+    for community_key, community in object_to_save.community.items():  # should be only one!
+        save_dict["community"] = { community_key: templates.json_serializable_community(community) }
+
+    # save permissions
+    for permission_key, permission in object_to_save.permissions.items():
+        save_dict["permissions"].update({ permission_key : 
+            templates.json_serializable_permission(permission) })
+    
+    # save conditions
+    for condition_key, condition in object_to_save.conditions.items():
+        save_dict["conditions"].update({ condition_key : 
+            templates.json_serializable_condition(condition)})
+
+    # save owned objects
+    for obj_key, obj in object_to_save.owned_objects.items():
+        save_dict["owned_objects"].update({ obj_key : 
+            templates.json_serializable_object(obj)})
+
+    return json.dumps(save_dict)
+
+
+class TemplateDataField(models.Field):
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        return name, path, args, kwargs
+
+    def db_type(self, connection):
+        return 'templatedata'  
+
+    def from_db_value(self, value, expression, connection):
+        if value is None:
+            return TemplateData()
+        return parse_template_data(value)
+
+    def to_python(self, value):
+        if isinstance(value, TemplateData):
+            return value
+        if value is None:
+            return TemplateData()
+        return parse_template_data(value)
+
+    def get_prep_value(self, value):
+        if isinstance(value, TemplateData):
+            return save_template_data(value)
+        if value in [None, 'null', '[]']:
+            return '[]'   # This seems wrong

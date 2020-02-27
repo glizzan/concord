@@ -217,7 +217,7 @@ class RoleHandler(object):
         if role_name not in all_roles.keys():
             print("Role ", role_name, " does not exist")
         if role_name in ["owners", "governors"]:
-            return all_roles[role_name][actors]
+            return all_roles[role_name]["actors"]
         return all_roles[role_name]
 
     def get_roles_given_user(self, pk):
@@ -263,7 +263,7 @@ class RoleHandler(object):
     # Custom roles
 
     def add_role(self, role_name):
-        # TODO: we should probably check capitalization here
+        # FIXME: we should probably check capitalization here
         all_roles = self.get_roles()
         if role_name not in all_roles:
             self.custom_roles.update({role_name: []})
@@ -271,7 +271,7 @@ class RoleHandler(object):
             print("Role ", role_name, " already exists")
 
     def remove_role(self, role_name):
-        # TODO: we should probably check capitalization here
+        # FIXME: we should probably check capitalization here
         if role_name in self.protected_roles:
             raise ValueError("Can't remove role ", role_name, "; role is protected.")
         all_roles = self.get_roles()

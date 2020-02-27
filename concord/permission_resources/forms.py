@@ -43,7 +43,7 @@ class PermissionFormMixin(object):
 
     def initialize_permission_fields(self):
         '''Called in the init method of a form, adds permission field for the target instance.'''
-        # TODO: possibly allow user to pass in a custom target, not just assuming self.instance?
+        # possibly allow user to pass in a custom target, not just assuming self.instance?
 
         self.prClient = PermissionResourceClient(actor=self.request.user, 
             target=self.instance)
@@ -131,20 +131,18 @@ class PermissionFormMixin(object):
                     actors = []                
                 
                 if "roles" in form_permission and form_permission["roles"]:
-                    role_pairs = []
-                    for role in form_permission["roles"]:
-                        role_pairs.append("_".join([str(self.owner.pk), role]))
+                    roles = form_permission["roles"]
                 else:
-                    role_pairs = []
+                    roles = []
                     
-                if actors or role_pairs:
+                if actors or roles:
                     
                     permission_configuration = {}
                     for cf_key, cf_value in form_permission["configurable fields"].items():
                         permission_configuration[cf_key] = cf_value
                     
                     action, result = self.prClient.add_permission(permission_type=form_permission["name"],
-                        permission_actors=actors, permission_role_pairs=role_pairs,
+                        permission_actors=actors, permission_roles=roles,
                         permission_configuration=permission_configuration)
 
                 else:
@@ -171,7 +169,7 @@ class PermissionForm(PermissionFormMixin, forms.Form):
 
 class MetaPermissionForm(PermissionFormMixin, forms.Form):
     
-    # TODO: possibly create a default method for instantiating the PRC client which this form overrides?
+    # NOTE: possibly create a default method for instantiating the PRC client which this form overrides?
 
     def __init__(self, *args, **kwargs):
 

@@ -111,7 +111,7 @@ class BaseConditionalClient(BaseClient):
         if condition_template.permission_data is not None:
             permission_dict = json.loads(condition_template.permission_data)
             from concord.permission_resources.utils import create_permission_outside_pipeline
-            # TODO: check if this is still needed once custom permission+condition field created
+            # is this still needed once custom permission+condition field created?
             create_permission_outside_pipeline(permission_dict, condition_item, condition_template)
 
         return condition_item
@@ -147,8 +147,8 @@ class PermissionConditionalClient(BaseConditionalClient):
     # Read methods which require target to be set
 
     def get_condition_template(self) -> ConditionTemplate:
-        result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
-            conditioning_choices="permission")
+        result = self.target.condition.all()
+        # result = ConditionTemplate.objects.filter(conditioned_object=self.target)
         if result:
             return result[0]
         return
@@ -159,10 +159,9 @@ class PermissionConditionalClient(BaseConditionalClient):
     # FIXME: should be add_condition not addCondition
     def addCondition(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
-        # TODO: It would be nice to be able to pass in the ConditionTemplate 
+        # FIXME: It would be nice to be able to pass in the ConditionTemplate 
         change = sc.AddConditionStateChange(condition_type=condition_type,
-            permission_data=permission_data, condition_data=condition_data, 
-            conditioning_choices="permission")
+            permission_data=permission_data, condition_data=condition_data)
         return self.create_and_take_action(change)
 
     def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
@@ -197,19 +196,22 @@ class CommunityConditionalClient(BaseConditionalClient):
         return display_string
 
     def get_condition_template_for_owner(self) -> ConditionTemplate:
-        result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
-            conditioning_choices="community_owner")
-        return result[0] if result else None
+        for condition in self.target.condition.all():
+            if condition.target_type == "own":
+                return condition
+        return None
 
     def get_condition_info_for_owner(self):
+
         condition_template = self.get_condition_template_for_owner()
         if condition_template:
             return self.get_condition_info(condition_template)
 
     def get_condition_template_for_governor(self) -> ConditionTemplate:
-        result = ConditionTemplate.objects.filter(conditioned_object=self.target.pk,
-            conditioning_choices="community_governor")
-        return result[0] if result else None
+        for condition in self.target.condition.all():
+            if condition.target_type == "gov":
+                return condition
+        return None
 
     def get_condition_info_for_governor(self):
         condition_template = self.get_condition_template_for_governor()
@@ -222,14 +224,14 @@ class CommunityConditionalClient(BaseConditionalClient):
             condition_data: Dict = None) -> Tuple[int, Any]:
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data, 
-            conditioning_choices="community_governor")
+            target_type="gov")
         return self.create_and_take_action(change)        
 
     def addConditionToOwners(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data, 
-            conditioning_choices="community_owner")
+            target_type="own")
         return self.create_and_take_action(change) 
 
 

@@ -28,7 +28,7 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -58,7 +58,7 @@ class AddItemResourceStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         if actor and target and self.item_name:
             return True
@@ -91,7 +91,7 @@ class RemoveItemResourceStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         if actor and target and self.item_pk:
             return True

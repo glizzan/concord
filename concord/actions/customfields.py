@@ -60,7 +60,7 @@ class Resolution:
             self.resolved_through, detailed_passed_as, self.condition, self.provisional)
 
     def approve_action(self, resolved_through, log=None, condition=None, role=None):
-        self.log = log if log else ""   # TODO: append instead?
+        self.log = log if log else ""   # FIXME: append instead?
         self.status = "approved"
         self.resolved_through = resolved_through
         self.condition = condition
@@ -68,7 +68,7 @@ class Resolution:
         self.infer_values()
 
     def reject_action(self, resolved_through=None, log=None, condition=None, role=None):
-        self.log = log if log else ""    # TODO: append instead?
+        self.log = log if log else ""    # FIXME: append instead?
         self.status = "rejected"
         self.resolved_through = resolved_through
         self.condition = condition

@@ -64,8 +64,6 @@ class CommunityClient(BaseClient):
         return self.target
 
     def get_members(self) -> list:
-        # TODO: currently members are stored as pks, but we need to get them
-        # as user models.
         member_pks = self.target.roles.get_users_given_role("members")
         user_list = [User.objects.get(pk=pk) for pk in member_pks]
         return user_list
@@ -99,7 +97,7 @@ class CommunityClient(BaseClient):
 
     def has_governing_authority(self, *, actor) -> bool:  # Also returns role
         self.target.refresh_from_db()  # FIXME: seems expensive to do this every time?
-        return self.target.roles.is_governor(actor.pk) # TODO: actor should be pk
+        return self.target.roles.is_governor(actor.pk) # FIXME: actor should be pk
 
     def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:
         return self.target.roles.has_specific_role(role, actor_pk)

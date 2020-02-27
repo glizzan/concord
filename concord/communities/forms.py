@@ -106,7 +106,6 @@ class RoleForm(forms.Form):
 
     def process_roles(self):
         """Process form fields into roles"""
-        # TODO: save as namedtuples not dicts, possibly
         role_data = {}
         for key, value in self.cleaned_data.items():
             count, field_type = key.split("~")

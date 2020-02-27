@@ -17,13 +17,13 @@ class PermissionResourceBaseStateChange(BaseStateChange):
 class AddPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Add permission"
 
-    def __init__(self, permission_type, permission_actors, permission_role_pairs, 
+    def __init__(self, permission_type, permission_actors, permission_roles, 
         permission_configuration, inverse=False):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
         self.permission_type = permission_type
         self.permission_actors = permission_actors if permission_actors else []
-        self.permission_role_pairs = permission_role_pairs if permission_role_pairs else []
+        self.permission_roles = permission_roles if permission_roles else []
         self.permission_configuration = permission_configuration
         self.inverse = inverse
 
@@ -47,7 +47,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -59,7 +59,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         permission.inverse = self.inverse   
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here
             permission.actors.add_actors(actors=self.permission_actors)
-        permission.roles.add_roles(list_of_pair_strings=self.permission_role_pairs)
+        permission.roles.add_roles(role_list=self.permission_roles)
         if self.permission_configuration:
             #FIXME: probably not the place to do this formatting :/
             configuration_dict = {}
@@ -91,7 +91,7 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         if actor and target and self.item_pk:
             return True
@@ -132,7 +132,7 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
             self.permission_pk, self.permission.short_change_type()) 
 
     def validate(self, actor, target):
-        # TODO: put real logic here
+        # put real logic here
         return True
     
     def implement(self, actor, target):
@@ -168,7 +168,7 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
             self.permission_pk, self.permission.short_change_type())   
 
     def validate(self, actor, target):
-        # TODO: put real logic here
+        # put real logic here
         return True
     
     def implement(self, actor, target):
@@ -183,9 +183,8 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Add role to permission"
     instantiated_fields = ['permission']
 
-    def __init__(self, *, role_name: str, community_pk: int, permission_pk: int):
+    def __init__(self, *, role_name: str, permission_pk: int):
         self.role_name = role_name
-        self.community_pk = community_pk
         self.permission_pk = permission_pk
 
     def instantiate_fields(self):
@@ -196,21 +195,20 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         return [PermissionsItem]   
 
     def description_present_tense(self):
-        return "add role %s (community %d) to permission %d (%s)" % (self.role_name, 
-            self.community_pk, self.permission_pk, self.permission.short_change_type())  
+        return "add role %s to permission %d (%s)" % (self.role_name, 
+            self.permission_pk, self.permission.short_change_type())  
 
     def description_past_tense(self):
-        return "added role %s (community %d) to permission %d (%s)" % (self.role_name, 
-            self.community_pk, self.permission_pk, self.permission.short_change_type())
+        return "added role %s to permission %d (%s)" % (self.role_name, 
+            self.permission_pk, self.permission.short_change_type())
 
     def validate(self, actor, target):
-        # TODO: put real logic here
+        # put real logic here
         return True
     
     def implement(self, actor, target):
         self.instantiate_fields()
-        self.permission.add_role_to_permission(role=self.role_name, 
-            community=str(self.community_pk))
+        self.permission.add_role_to_permission(role=self.role_name)
         self.permission.save()
         return self.permission
 
@@ -220,9 +218,8 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Remove role from permission"
     instantiated_fields = ['permission']
 
-    def __init__(self, *, role_name: str, community_pk: int, permission_pk: int):
+    def __init__(self, *, role_name: str, permission_pk: int):
         self.role_name = role_name
-        self.community_pk = community_pk
         self.permission_pk = permission_pk
 
     def instantiate_fields(self):
@@ -237,12 +234,12 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         return ["role_name"]
 
     def description_present_tense(self):
-        return "remove role %s (community %d) from permission %d (%s)" % (self.role_name, 
-            self.community_pk, self.permission_pk, self.permission.short_change_type())  
+        return "remove role %s from permission %d (%s)" % (self.role_name, 
+            self.permission_pk, self.permission.short_change_type())  
 
     def description_past_tense(self):
-        return "removed role %s (community %d) from permission %d (%s)" % (self.role_name, 
-            self.community_pk, self.permission_pk, self.permission.short_change_type())  
+        return "removed role %s from permission %d (%s)" % (self.role_name, 
+            self.permission_pk, self.permission.short_change_type())  
 
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
@@ -254,13 +251,12 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         return True
 
     def validate(self, actor, target):
-        # TODO: put real logic here
+        # put real logic here
         return True
     
     def implement(self, actor, target):
         self.instantiate_fields()
-        self.permission.remove_role_from_permission(role=self.role_name,
-            community=str(self.community_pk))
+        self.permission.remove_role_from_permission(role=self.role_name)
         self.permission.save()
         return self.permission
 
@@ -292,7 +288,7 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
             self.configurable_field_value, self.permission_pk, self.permission.short_change_type())
 
     def validate(self, actor, target):
-        # TODO: put real logic here
+        # put real logic here
         return True
     
     def implement(self, actor, target):
@@ -332,7 +328,7 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
             self.permission_pk, self.permission.short_change_type())
 
     def validate(self, actor, target):
-        # TODO: put real logic here
+        # put real logic here
         return True
     
     def implement(self, actor, target):

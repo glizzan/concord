@@ -1,9 +1,9 @@
 from typing import Dict
-
 import json
 
-from concord.actions.state_changes import BaseStateChange
+from django.contrib.contenttypes.models import ContentType
 
+from concord.actions.state_changes import BaseStateChange
 from concord.conditionals.models import ConditionTemplate
 
 
@@ -15,11 +15,11 @@ class AddConditionStateChange(BaseStateChange):
     description = "Add condition"
 
     def __init__(self, *, condition_type: str, permission_data: Dict, condition_data: Dict, 
-        conditioning_choices: str):
+        target_type=None):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else "{}"
         self.permission_data = permission_data
-        self.conditioning_choices = conditioning_choices
+        self.target_type = target_type
 
     @classmethod
     def get_allowable_targets(cls):
@@ -28,10 +28,10 @@ class AddConditionStateChange(BaseStateChange):
         return [Community, PermissionsItem]    
 
     def description_present_tense(self):
-        return "add condition %s to %s" % (self.condition_type, self.conditioning_choices)  
+        return "add condition %s to %s" % (self.condition_type, self.target_type)  
 
     def description_past_tense(self):
-        return "added condition %s to %s" % (self.condition_type, self.conditioning_choices)
+        return "added condition %s to %s" % (self.condition_type, self.target_type)
 
     def validate(self, actor, target):
         return True
@@ -42,18 +42,16 @@ class AddConditionStateChange(BaseStateChange):
             condition_type=self.condition_type,
             condition_data=self.condition_data,
             permission_data=self.permission_data,
-            conditioned_object=target.pk,
-            conditioning_choices=self.conditioning_choices
-        )
+            conditioned_object_content_type = ContentType.objects.get_for_model(target),
+            conditioned_object_id=target.pk,
+            target_type=self.target_type)
+
 
 class RemoveConditionStateChange(BaseStateChange):
     description = "Remove condition"
 
     def __init__(self, condition_pk):
         self.condition_pk = condition_pk
-        # TODO: maybe add ability to remove condition by giving the target's ID & type?
-        # self.conditioned_object = conditioned_object
-        # self.conditioning_choices = conditioning_choices
 
     @classmethod
     def get_allowable_targets(cls):
@@ -137,8 +135,6 @@ class AddVoteStateChange(BaseStateChange):
         a) the voter hasn't voted before
         b) if the vote is abstain, abstentions are allowed
         """
-        # TODO: I feel like we could provide more helpful responses here so they
-        # know why it's invalid.
         if self.vote not in ["yea", "nay", "abstain"]:
             return False
         if target.has_voted(actor):
@@ -148,8 +144,6 @@ class AddVoteStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        # TODO: Maybe we should always re-validate before implementing in a state
-        # change?
         target.add_vote(self.vote)
         target.add_vote_record(actor)
         target.save()

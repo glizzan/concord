@@ -3,13 +3,15 @@ import json
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
+from django.contrib.contenttypes.fields import GenericRelation
+
 
 from concord.actions.models import PermissionedModel
 from concord.conditionals.client import CommunityConditionalClient
 from concord.communities.customfields import RoleHandler, RoleField
 
 
-# TODO: put this somewhere more sensible (or maybe all this stringy stuff should go in templatetags)
+# FIXME: this duplicates stuff in templates.py, maybe templates.py should find a way to reference this?
 def english_list(list_to_display):
     if len(list_to_display) <= 1:
         return "".join(list_to_display)
@@ -24,6 +26,10 @@ class BaseCommunityModel(PermissionedModel):
     '''The base community model is the abstract type for all communities.  Much of its 
     logic is contained in customfields.RoleField and customfields.RoleHandler.'''
     is_community = True
+
+    condition = GenericRelation("conditionals.ConditionTemplate", 
+        object_id_field="conditioned_object_id", content_type_field='conditioned_object_content_type',
+        related_query_name="community")
 
     name = models.CharField(max_length=200)    
     roles = RoleField(default=RoleHandler)
@@ -78,7 +84,7 @@ class BaseCommunityModel(PermissionedModel):
         governor_condition = comCondClient.get_condition_template_for_governor()
         return governor_condition if governor_condition else "unconditional"
 
-    # BUG: maybe overwrite save method to raise error if there community's rolefield
+    # FIXME: maybe overwrite save method to raise error if there community's rolefield
     # doesn't meet bare minimum valid conditions?
 
 

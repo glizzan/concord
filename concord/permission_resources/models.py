@@ -3,12 +3,12 @@ import json
 from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
-from concord.permission_resources.utils import check_permission_inputs
 from concord.permission_resources.customfields import (ActorList, ActorListField, RoleList,
-    RoleListField)
+    RoleListField, TemplateDataField, TemplateData)
 
 
 class PermissionsItem(PermissionedModel):
@@ -33,7 +33,10 @@ class PermissionsItem(PermissionedModel):
     permitted_object_id = models.PositiveIntegerField()
     permitted_object = GenericForeignKey('permitted_object_content_type', 'permitted_object_id')
 
-    # FIXME: both actors & roles are list of strings saved as json, need to be custom field
+    condition = GenericRelation("conditionals.ConditionTemplate", 
+        object_id_field="conditioned_object_id", content_type_field='conditioned_object_content_type',
+        related_query_name="permission")
+
     actors = ActorListField(default=ActorList) # Defaults to empty ActorList object  
     roles = RoleListField(default=RoleList) # Defaults to empty RoleList object
 
@@ -58,10 +61,13 @@ class PermissionsItem(PermissionedModel):
         display_string += " have permission to " + self.change_type.split(".")[-1]
         return display_string
 
+    def get_change_type(self):
+        return self.change_type.split(".")[-1]
+
     # Get misc info
 
     def get_target(self):
-        # FIXME: does this get used? what does it do?
+        # does this get used? what does it do?
         return self.resource.permitted_object
 
     def get_permitted_object(self):
@@ -112,19 +118,17 @@ class PermissionsItem(PermissionedModel):
 
     # RoleList-related methods
 
-    # NOTE: Assumes roles are all from same community, which may not be true.
     def get_role_names(self):
-        role_pairs = self.roles.get_roles()
-        return [role.role_name for role in role_pairs]
+        return self.roles.role_list
 
-    def has_role(self, *, role: str, community: str):
-        return self.roles.role_pair_in_list(role_pair=community + "_" + role)
+    def has_role(self, *, role: str):
+        return self.roles.role_name_in_list(role_name=role)
 
-    def add_role_to_permission(self, *, role: str, community: str):
-        self.roles.add_roles(community_pk=community, role_name_list=[role])
+    def add_role_to_permission(self, *, role: str):
+        self.roles.add_roles(role_list=[role])
 
-    def remove_role_from_permission(self, *, role: str, community: str):
-        self.roles.remove_roles(community_pk=community, role_name_list=[role])
+    def remove_role_from_permission(self, *, role: str):
+        self.roles.remove_roles(role_list=[role])
 
     # Misc
 
@@ -146,15 +150,14 @@ class PermissionsItem(PermissionedModel):
         if actor.pk in actors:
             return True, None
 
+        # FIXME: querying every role separately is a lot of lookups. create method to check if 
+        # in any one of a subset of roles? 
         from concord.communities.client import CommunityClient
         cc = CommunityClient(system=True)
-        for pair in self.roles.get_roles():
-            cc.set_target_community(community_pk=pair.community_pk)
-            if cc.has_role_in_community(role=pair.role_name, actor_pk=actor.pk):
-                return True, pair
-
-        # TODO: thing the above through.  If every role is queried separately, that's a lot of 
-        # lookups.  You could provide the roles to each community in bulk?
+        for role in self.roles.get_roles():
+            cc.set_target_community(community_pk=self.permitted_object.pk)
+            if cc.has_role_in_community(role=role, actor_pk=actor.pk):
+                return True, role
 
         return False, None
 
@@ -184,47 +187,5 @@ class Template(PermissionedModel):
     permissions, and conditionals.  New communities can be generated from these templates, making
     it easier for users to experiment with new governance structures.
     """
-    data = models.CharField(max_length=5000, default='{}')
+    data = TemplateDataField(null=True, default=TemplateData)
     description = models.CharField(max_length=500)
-
-    def get_template_data(self):
-        return json.loads(template_set)
-
-    def set_template_data(self, template_set):
-        self.data = json.dumps(template_set)
-
-    def generate_objects_from_template(self):
-        from concord.permission_resources.templates import generate_objects_from_template_set
-        template_set = self.get_template_data()
-        return generate_objects_from_template_set(template_set)
-
-    def generate_text_from_template(self):
-        from concord.permission_resources.templates import generate_text_from_template_set
-        template_set = self.get_template_data()
-        return generate_text_from_template_set(template_set)
-
-    # TODO: edit generate_text_from_template_set to expect span_ids
-
-    def add_field_ids(self, template_set):
-        id_index = 0
-        for name, content in template_set.items():
-            if name == "community":
-                content = [content]
-            for obj in content:
-                for field in obj["fields"]:
-                    pass
-
-
-    def create_template_data(self, actor, community, optional_object_list=None):
-        from concord.permission_resources.templates import generate_template_set
-        template_set = templates.generate_template_set(actor, community, optional_object_list)
-        template_set = self.add_field_ids(template_set)
-        self.set_template_data(template_set)
-
-    def change_field(self, field_id, new_field_data):
-        # when updating, do validation and return error if not successful?
-        pass
-
-
-
-

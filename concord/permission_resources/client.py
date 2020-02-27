@@ -6,7 +6,7 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 
 from concord.permission_resources.models import PermissionsItem
-from concord.permission_resources import utils
+from concord.permission_resources import utils, templates, models
 from concord.permission_resources import state_changes as sc
 
 
@@ -73,7 +73,7 @@ class PermissionResourceClient(BaseClient):
         permissions = self.get_permissions_on_object(object=self.target)
         matching_permissions = []
         for permission in permissions:
-            if permission.has_role(role=role_name, community=str(community.pk)):
+            if permission.has_role(role=role_name):
                 matching_permissions.append(permission)
         return matching_permissions
 
@@ -103,14 +103,39 @@ class PermissionResourceClient(BaseClient):
     def get_settable_permissions_for_user(self, *, name):
         ...
 
+    def get_template_given_id(self, *, template_id):
+        return models.Template.objects.get(pk=template_id)
+
+    # Creates
+
+    def make_template(self, *, description=None, community=None, permissions=None, conditions=None, 
+        owned_objects=None, recursive=False):
+        template_model = models.Template(description=description, owner=self.actor)
+        template_model.data.create_template(community=community, permissions=permissions, 
+            conditions=conditions, owned_objects=owned_objects, recursive=recursive)
+        template_model.save()
+
+        # HACK: is there a better way to "refresh" the model so it's no longer attached to the original
+        # django models?
+        template_model = self.get_template_given_id(template_id=template_model.pk)
+        return template_model 
+
+    def create_from_template(self, *, template_model=None, template_id=None, default_owner=None):
+        if not template_model and not template_id:
+            raise Exception("Must provide either template_model or template_id to create_from_template.")
+        if template_id:
+            template_model = self.get_template_given_id(template_id=template_id)
+        default_owner = default_owner if default_owner else self.actor
+        return template_model.data.create_from_template(default_owner=default_owner)
+
     # State changes
 
     def add_permission(self, *, permission_type: str, permission_actors: list = None, 
-            permission_role_pairs: list = None, permission_configuration: dict = None) -> Tuple[int, Any]:
-        if not permission_actors and not permission_role_pairs:
+            permission_roles: list = None, permission_configuration: dict = None) -> Tuple[int, Any]:
+        if not permission_actors and not permission_roles:
             raise Exception("Either actor or role_pair must be supplied when creating a permission")
         change = sc.AddPermissionStateChange(permission_type=permission_type, 
-            permission_actors=permission_actors, permission_role_pairs=permission_role_pairs,
+            permission_actors=permission_actors, permission_roles=permission_roles,
             permission_configuration=permission_configuration)
         return self.create_and_take_action(change)
 
@@ -126,14 +151,12 @@ class PermissionResourceClient(BaseClient):
         change = sc.RemoveActorFromPermissionStateChange(actor_to_remove=actor, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
-    def add_role_to_permission(self, *, role_name: str, community_pk: int, permission_pk: int) -> Tuple[int, Any]:
-        change = sc.AddRoleToPermissionStateChange(role_name=role_name, permission_pk=permission_pk,
-            community_pk=community_pk)
+    def add_role_to_permission(self, *, role_name: str, permission_pk: int) -> Tuple[int, Any]:
+        change = sc.AddRoleToPermissionStateChange(role_name=role_name, permission_pk=permission_pk)
         return self.create_and_take_action(change)
     
-    def remove_role_from_permission(self, *, role_name: str, community_pk: int, permission_pk: int) -> Tuple[int, Any]:
-        change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name, permission_pk=permission_pk,
-            community_pk=community_pk)
+    def remove_role_from_permission(self, *, role_name: str, permission_pk: int) -> Tuple[int, Any]:
+        change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
     def change_configuration_of_permission(self, *, configurable_field_name: str, 
@@ -176,13 +199,11 @@ class PermissionResourceClient(BaseClient):
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            action = self.add_role_to_permission(role_name=role, 
-                community_pk=owner.pk, permission_pk=permission.pk)
+            action = self.add_role_to_permission(role_name=role, permission_pk=permission.pk)
             actions.append(action)
         
         for role in roles_to_remove:
-            action = self.remove_role_from_permission(role_name=role, 
-                community_pk=owner.pk, permission_pk=permission.pk)
+            action = self.remove_role_from_permission(role_name=role, permission_pk=permission.pk)
             actions.append(action)
 
         # FIXME: why is this here??????
@@ -250,13 +271,11 @@ class PermissionResourceClient(BaseClient):
                 roles_to_remove = old_roles.difference(new_roles)
 
                 for role in roles_to_add:
-                    action = self.add_role_to_permission(role_name=role, 
-                        community_pk=owner.pk, permission_pk=permission.pk)
+                    action = self.add_role_to_permission(role_name=role, permission_pk=permission.pk)
                     actions.append(action)
                 
                 for role in roles_to_remove:
-                    action = self.remove_role_from_permission(role_name=role, 
-                        community_pk=owner.pk, permission_pk=permission.pk)
+                    action = self.remove_role_from_permission(role_name=role, permission_pk=permission.pk)
                     actions.append(action)
 
                 # delete permission from new_permissions dict, leaving only newly created permissions
@@ -264,10 +283,8 @@ class PermissionResourceClient(BaseClient):
             
         # Iterate through remaining new_permissions, these should all be permissions to create
         for permission, role_list in new_permissions.items():
-            for role_name in role_list:
-                role_pair = str(owner.pk) + "_" + role_name
-                action = self.add_permission(permission_type=permission, 
-                    permission_role_pairs=[role_pair])
-                actions.append(action)
+            action = self.add_permission(permission_type=permission, 
+                    permission_roles=role_list)
+            actions.append(action)
 
         return actions

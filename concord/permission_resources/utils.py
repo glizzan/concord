@@ -105,7 +105,7 @@ def create_permission_outside_pipeline(permission_dict, condition_item, conditio
     if "permission_actors" in permission_dict:
         permission.actors.add_actors(actors=permission_dict["permission_actors"])
     if "permission_roles" in permission_dict:
-        permission.roles.add_roles(list_of_pair_strings=permission_dict["permission_roles"])
+        permission.roles.add_roles(role_list=permission_dict["permission_roles"])
     permission.change_type = permission_dict["permission_type"]
     permission.configuration = permission_dict["permission_configuration"]
     permission.owner = condition_template.get_owner()
@@ -113,7 +113,7 @@ def create_permission_outside_pipeline(permission_dict, condition_item, conditio
 
 
 # Checks inputs of actors, roles, etc.
-# FIXME: should be able to delete this once custom fields are implemented
+# NOTE: should be able to delete this once custom fields are implemented (can we do so now?)
 def check_permission_inputs(dict_of_inputs):
     """
     Decorator to help with type issues, example usage: 

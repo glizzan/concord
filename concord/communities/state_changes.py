@@ -24,7 +24,7 @@ class ChangeNameStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         if actor and target and self.new_name:
             return True
@@ -55,7 +55,7 @@ class AddMemberStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -84,7 +84,7 @@ class AddMembersStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -113,7 +113,7 @@ class RemoveMemberStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -142,7 +142,7 @@ class AddGovernorStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -173,7 +173,7 @@ class RemoveGovernorStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -204,7 +204,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -236,7 +236,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -268,7 +268,7 @@ class AddOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -299,7 +299,7 @@ class RemoveOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -330,7 +330,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 
@@ -362,7 +362,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """
-        TODO: put real logic here
+        put real logic here
         """
         return True
 

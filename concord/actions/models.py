@@ -75,7 +75,6 @@ class Action(models.Model):
         itself, which implements its own custom logic."""
         if self.change.validate(actor=self.actor, target=self.target):
             self.resolution.status = "sent"
-        # TODO: handle invalid actions
 
     def implement_action(self):
         """Lets the change object carry out its custom implementation using the
@@ -211,7 +210,6 @@ class ActionContainer(models.Model):
         raise ValueError("Can't determine overall_status from status_summary: ", status_summary)
 
 
-# TODO: limit_choices_to caused problems, need a new way to limit owners of PermissionedModel to communities
 class PermissionedModel(models.Model):
 
     owner_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,

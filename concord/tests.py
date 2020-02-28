@@ -3043,3 +3043,36 @@ class TemplateTest(DataTestCase):
         text = template_model.data.generate_text()
         self.assertEquals(text["community_permissions_info"], 
             "Individual 7 can add people to role 'forwards' for USWNT. ")
+
+    def test_get_editable_fields(self):
+
+        self.set_up_simple_community()
+        permissions = PermissionsItem.objects.all()
+        conditions = ConditionTemplate.objects.all()
+        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+            conditions=conditions, description="Simple Community Template")
+        
+        editable_fields = self.permClient.get_editable_fields_on_template(template_model=template_model)
+
+        # test we have the correct number of fields given the above structure
+        self.assertEquals(len(editable_fields), 24)
+
+        # test we have successfully removed relationship fields and autofields
+        list_of_field_names = [field_dict["field_name"] for field_dict in editable_fields]
+        self.assertNotIn("owner", list_of_field_names)
+        self.assertNotIn("owner_object_id", list_of_field_names)
+        self.assertNotIn("owner_content_type", list_of_field_names)
+        self.assertNotIn("permitted_object_id", list_of_field_names)
+        self.assertNotIn("conditioned_object_id", list_of_field_names)
+        self.assertNotIn("id", list_of_field_names)
+
+        # test we have correct structure for rolefield, rolelist field, actorlistfield
+        editable_role_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "Community")][0]
+        editable_role_list_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "PermissionsItem")][0]
+        editable_actor_list_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "actors" and field_dict["object_model"] == "PermissionsItem")][0]
+        self.assertEquals(editable_role_field["field_value"], self.instance.roles.get_roles())
+        self.assertEquals(editable_role_list_field["field_value"], permissions[0].roles.role_list)
+        self.assertEquals(editable_actor_list_field["field_value"], permissions[0].actors.as_pks())

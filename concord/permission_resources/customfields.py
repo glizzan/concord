@@ -271,9 +271,11 @@ class TemplateData(object):
     def get_owned_objects(self):
         return list(self.owned_objects.values())
 
+    def get_combined_objects(self):
+        return {**self.community, **self.permissions, **self.conditions, **self.owned_objects}
+
     def get_all_objects(self):
-        combined_items = {**self.community, **self.permissions, **self.conditions, **self.owned_objects}
-        return list(combined_items.values())
+        return list(self.get_combined_objects().values())
 
     def get_target_of_field(self, item_id, field_name):
         target_id = None
@@ -281,21 +283,44 @@ class TemplateData(object):
             if related_field["name"] == field_name and related_field["field_on"] == int(item_id):
                 target_id = str(related_field["field_target_id"])
         if target_id:
-            combined_items = {**self.community, **self.permissions, **self.conditions, **self.owned_objects}
-            return combined_items[target_id]
+            return self.get_combined_objects()[target_id]
 
-    def update_related_field(self, pair_map, current_object, current_object_new_id, field):
-        """Given a model (current_object) and field, update the field to point to the item listed in 
-        relationship_map or return false if no match found."""
-        for rf in self.relationship_map["related_fields"]:
-            if rf["name"] == field.name and rf["field_on"] == int(current_object_new_id):
-                target_id = str(rf["field_target_id"])
-                if pair_map[target_id]["switched"] == True:
-                    # If referenced object is ready, set field
-                    setattr(current_object, field.name, pair_map[target_id]["object"])
-                    return True, current_object
-        return False, None
+    def is_editable_field(self, field):
+        """We currently allow only simple non-related fields to be edited, but eventually all fields
+        should be editable."""
+        # '"_id" in field.name' is a bit of a hack to identify positive integer fields used in gfks
+        if field.is_relation or field.auto_created or "_id" in field.name:
+            return False
+        return True
 
+    def get_editable_field_value(self, item, field):
+        # FIXME: this is not the best place for this logic :/
+        field_value = getattr(item, field.name)
+        if field.__class__.__name__ == "RoleListField":  # permission's RoleList custom field
+            return field_value.get_roles()
+        if field.__class__.__name__ == "ActorListField":  # permission's ActorList custom field
+            return field_value.as_pks()
+        if field.__class__.__name__ == "RoleField":  # community's Role custom field
+            return field_value.get_roles()  
+        return field_value
+
+    def get_editable_fields(self):
+        """       
+        Return list with dicts corresponding to each field:
+        { 'object_id': X, 'object_model': Y, 'field_name': Z, 'field_value': Q }
+        """
+        editable_fields = []
+        for item_key, item in self.get_combined_objects().items():
+            fields = item._meta.get_fields()
+            for field in fields:
+                if self.is_editable_field(field):
+                    editable_fields.append({
+                        "object_model": str(item._meta.model.__name__),
+                        "object_id": item.pk,
+                        "field_name": field.name,
+                        "field_value": self.get_editable_field_value(item, field)
+                    })
+        return editable_fields
 
     # manipulate data
 

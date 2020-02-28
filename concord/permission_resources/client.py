@@ -106,6 +106,13 @@ class PermissionResourceClient(BaseClient):
     def get_template_given_id(self, *, template_id):
         return models.Template.objects.get(pk=template_id)
 
+    def get_editable_fields_on_template(self, template_id=None, template_model=None):
+        if not template_id and not template_model:
+            raise Exception("Must provide either template model or template_id.")
+        if template_id:
+            template_model = self.get_template_given_id()
+        return template_model.data.get_editable_fields()
+
     # Creates
 
     def make_template(self, *, description=None, community=None, permissions=None, conditions=None, 

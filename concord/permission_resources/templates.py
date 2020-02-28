@@ -275,7 +275,6 @@ def community_roles_to_text(template_model):
 
 def permission_to_text(template_model, set_target=None):
     """X has/have permission to Y of Z."""
-    from actions.utils import get_state_change_object_given_name
 
     text = ""
 
@@ -283,16 +282,14 @@ def permission_to_text(template_model, set_target=None):
 
         permitted_object = template_model.get_target_of_field(permission_key, "permitted_object")
 
-        if hasattr(permitted_object, "name"):
-            permitted_object_name = permitted_object.name
-        else:
-            permitted_object_name = permitted_object.get_change_type()
-
         if set_target == None or set_target == permitted_object:
 
-            action = get_state_change_object_given_name(permission.change_type).description.lower()
-            peopledict = {"roles": permission.roles.role_list, "actors": permission.actors.as_pks()}   
-            new_text = roles_and_actors(peopledict) + " can " + action + " for " + permitted_object_name
+            who = roles_and_actors({"roles": permission.roles.role_list, 
+                "actors": permission.actors.as_pks()})
+            do_what = permission.full_description()
+            on_what = permitted_object.name if hasattr(permitted_object, "name") else permitted_object.get_change_type()
+
+            new_text = who + " can " + do_what + " for " + on_what
             text += capitalize_first_letter(new_text)
 
             conditions_on_this_permission = []

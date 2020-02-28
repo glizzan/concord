@@ -79,6 +79,15 @@ class PermissionsItem(PermissionedModel):
         pcc = PermissionConditionalClient(system=True, target=self)
         return pcc.get_condition_template()
 
+    def full_description(self):
+        """Helper method for displaying permsisions."""
+        from actions.utils import get_state_change_object_given_name
+        state_change_object = get_state_change_object_given_name(self.change_type)
+        configuration = self.get_configuration()
+        if hasattr(state_change_object, "get_uninstantiated_description"):
+            return state_change_object.get_uninstantiated_description(**configuration)
+        return state_change_object.description.lower()
+
     # Get change type and configuration info (replace with customfield?)
 
     def short_change_type(self):

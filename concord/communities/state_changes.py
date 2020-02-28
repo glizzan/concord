@@ -444,6 +444,14 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     def get_configurable_fields(self):
         return ["role_name"]
 
+    @classmethod
+    def get_uninstantiated_description(self, **configuration_kwargs):
+        """Takes in an arbitrary number of configuration kwargs and uses them to 
+        create a description.  Does not reference fields passed on init."""
+        role_name = configuration_kwargs.get("role_name", None)
+        role_name = "'" + role_name + "'" if role_name else ""
+        return "add people to role %s" % (role_name)
+
     def description_present_tense(self):
         return "add %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
 

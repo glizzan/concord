@@ -3012,3 +3012,34 @@ class TemplateTest(DataTestCase):
         self.assertEquals(text["owned_object_8"], "Everyone with role members can add item to resource for Ticker Tape Parade Pictures. Individual 10 can remove role from permission for AddItemResourceStateChange. ")
         self.assertEquals(text["owned_object_7"], "")
 
+    def test_get_text_for_configured_permissions(self):
+        """Tests text display for configured permissions."""
+
+        # 'addpeopletorole' is a configured state change, so we create a community
+        # where we can assign this permission
+
+        self.commClient.add_role(role_name="forwards")
+        self.commClient.add_role(role_name="backs")
+        self.commClient.add_members([self.users.tobin.pk, self.users.sonny.pk, self.users.rose.pk])
+        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
+        self.commClient.add_people_to_role(role_name="backs", people_to_add=[self.users.sonny.pk])
+
+        self.permClient.add_permission(
+            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_actors=[self.users.sonny.pk],
+            permission_configuration={"role_name": "forwards"})
+
+        # test this works - sonny should be able to add people to role "forwards" but not "backs"
+        self.commClient.set_actor(actor=self.users.sonny)
+        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.rose.pk])
+        self.commClient.add_people_to_role(role_name="backs", people_to_add=[self.users.rose.pk])
+        rose_roles = self.instance.roles.get_roles_given_user(pk=self.users.rose.pk)
+        self.assertEquals(rose_roles, ["forwards", "members"])
+
+        # okay, now let's test we can make a template, and that this shows up in the template
+        permissions = PermissionsItem.objects.all()
+        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+            description="Testing permission configuration")
+        text = template_model.data.generate_text()
+        self.assertEquals(text["community_permissions_info"], 
+            "Individual 7 can add people to role 'forwards' for USWNT. ")

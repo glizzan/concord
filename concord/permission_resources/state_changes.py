@@ -233,6 +233,13 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
     def get_configurable_fields(self):
         return ["role_name"]
 
+    @classmethod
+    def get_uninstantiated_description(self, **configuration_kwargs):
+        """Takes in an arbitrary number of configuration kwargs and uses them to 
+        create a description.  Does not reference fields passed on init."""
+        role_name = configuration_kwargs.get("role_name", " ")
+        return "remove role%sfrom permission" % (role_name)
+
     def description_present_tense(self):
         return "remove role %s from permission %d (%s)" % (self.role_name, 
             self.permission_pk, self.permission.short_change_type())  

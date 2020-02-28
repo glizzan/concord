@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
 from concord.resources.client import ResourceClient
-from concord.permission_resources.client import PermissionResourceClient
+from concord.permission_resources.client import PermissionResourceClient, TemplateClient
 from concord.conditionals.client import (ApprovalConditionClient, VoteConditionClient, 
     PermissionConditionalClient, CommunityConditionalClient)
 from concord.communities.client import CommunityClient
@@ -2633,6 +2633,7 @@ class TemplateTest(DataTestCase):
         self.instance = self.commClient.create_community(name="USWNT")
         self.commClient.set_target(self.instance)
         self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        self.templateClient = TemplateClient(actor=self.users.pinoe)
 
     def set_up_simple_community(self):
 
@@ -2723,7 +2724,7 @@ class TemplateTest(DataTestCase):
     def test_make_template_from_community(self):
 
         # create template from community
-        template_model = self.permClient.make_template(community=self.instance, 
+        template_model = self.templateClient.make_template(community=self.instance, 
             description="My new template")
         self.assertEqual(template_model.description, "My new template")
         self.assertEqual(template_model.data.get_community().name, "USWNT")
@@ -2737,7 +2738,7 @@ class TemplateTest(DataTestCase):
         self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk,
             self.users.christen.pk])
 
-        template_model = self.permClient.make_template(community=self.instance, 
+        template_model = self.templateClient.make_template(community=self.instance, 
             description="An even better template")
         self.assertEqual(template_model.description, "An even better template")
         self.assertEqual(template_model.data.get_community().roles.custom_roles["forwards"], [3,4])
@@ -2757,7 +2758,7 @@ class TemplateTest(DataTestCase):
         ct = self.condClient.get_condition_template_for_governor()
 
         # convert instance to template model using client
-        template_model = self.permClient.make_template(community=self.instance, conditions=[ct], 
+        template_model = self.templateClient.make_template(community=self.instance, conditions=[ct], 
             description="Pinoe must approve condition template")
         self.assertEquals(template_model.description, "Pinoe must approve condition template")
         template_of_condition = template_model.data.get_conditions()[0]
@@ -2776,7 +2777,7 @@ class TemplateTest(DataTestCase):
         permission = self.permClient.get_permissions_on_object(object=self.instance)[0]
 
         # Test template
-        template_model = self.permClient.make_template(community=self.instance, permissions=[permission],
+        template_model = self.templateClient.make_template(community=self.instance, permissions=[permission],
             description="Forwards and Aubrey can change name permission template")
         self.assertEquals(template_model.description, "Forwards and Aubrey can change name permission template")
         permission_template = template_model.data.get_permissions()[0]
@@ -2795,8 +2796,8 @@ class TemplateTest(DataTestCase):
         self.rc.change_owner_of_target(new_owner=self.instance)
 
         # Templatize resource & item
-        template_model = self.permClient.make_template(community=self.instance, owned_objects=[resource, item],
-            description="USWNT Resource & Item")  # ISSUE HERE
+        template_model = self.templateClient.make_template(community=self.instance, 
+            owned_objects=[resource, item], description="USWNT Resource & Item")
         self.assertEquals(template_model.description, "USWNT Resource & Item")
         template_resource = template_model.data.get_owned_objects()[0]
         self.assertEquals(template_resource.name, "Go USWNT!")
@@ -2806,11 +2807,12 @@ class TemplateTest(DataTestCase):
     def test_create_new_community_instances_from_templates(self):
 
         # make template from community
-        template_model = self.permClient.make_template(community=self.instance, 
+        template_model = self.templateClient.make_template(community=self.instance, 
             description="My new template")
+        self.templateClient.set_target(target=template_model)
 
         # make community from template
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        created_objects = self.templateClient.create_from_template()
         self.assertEqual(len(created_objects), 1)
         self.assertEqual(created_objects[0].__class__.__name__, "Community")
         self.assertEqual(created_objects[0].name, "USWNT")
@@ -2821,11 +2823,12 @@ class TemplateTest(DataTestCase):
         self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk])
         self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk,
             self.users.christen.pk])
-        template_model = self.permClient.make_template(community=self.instance, 
+        template_model = self.templateClient.make_template(community=self.instance, 
             description="An even better template")
+        self.templateClient.set_target(target=template_model)
         
         # make new community from new template
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        created_objects = self.templateClient.create_from_template()
         self.assertEqual(len(created_objects), 1)
         self.assertEqual(created_objects[0].__class__.__name__, "Community")
         self.assertEqual(created_objects[0].roles.custom_roles["forwards"], [3,4])
@@ -2843,11 +2846,12 @@ class TemplateTest(DataTestCase):
                 'permission_roles': '',
                 'permission_configuration': '{}'}))
         ct = self.condClient.get_condition_template_for_governor()
-        template_model = self.permClient.make_template(community=self.instance, conditions=[ct], 
+        template_model = self.templateClient.make_template(community=self.instance, conditions=[ct], 
             description="Pinoe must approve condition template")
+        self.templateClient.set_target(target=template_model)
 
         # Create condition from template
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        created_objects = self.templateClient.create_from_template()
         self.assertEquals(len(created_objects), 2)
         self.assertEquals(created_objects[1].condition_type, "approvalcondition")
         permission_data = json.loads(created_objects[1].permission_data)
@@ -2867,11 +2871,12 @@ class TemplateTest(DataTestCase):
         self.permClient.add_permission(permission_type=Changes.Communities.ChangeName, 
             permission_actors=[self.users.aubrey.pk], permission_roles=["forwards"])
         permission = self.permClient.get_permissions_on_object(object=self.instance)[0]
-        template_model = self.permClient.make_template(community=self.instance, permissions=[permission], 
+        template_model = self.templateClient.make_template(community=self.instance, permissions=[permission], 
             description="Forwards and Aubrey can change name permission template")
+        self.templateClient.set_target(target=template_model)
 
         # Create new permission from template
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        created_objects = self.templateClient.create_from_template()
         self.assertEquals(created_objects[1].permitted_object, created_objects[0])
         self.assertTrue("ChangeName" in created_objects[1].change_type)
         self.assertEquals(created_objects[1].roles.get_roles()[0], "forwards")
@@ -2890,11 +2895,12 @@ class TemplateTest(DataTestCase):
         action, item = self.rc.add_item(item_name="Equal Pay")
         self.rc.set_target(target=item)
         self.rc.change_owner_of_target(new_owner=self.instance)
-        template_model = self.permClient.make_template(community=self.instance, 
+        template_model = self.templateClient.make_template(community=self.instance, 
             owned_objects=[resource, item], description="Resource & item")
+        self.templateClient.set_target(target=template_model)
 
         # Create resource & item from template
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        created_objects = self.templateClient.create_from_template()
         self.assertEquals(created_objects[0].__class__.__name__, "Community")
         self.assertEquals(created_objects[1].name, "Go USWNT!")
         self.assertEquals(created_objects[2].name, "Equal Pay")
@@ -2908,9 +2914,10 @@ class TemplateTest(DataTestCase):
         self.set_up_simple_community()
         permissions = PermissionsItem.objects.all()
         conditions = ConditionTemplate.objects.all()
-        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        self.templateClient.set_target(target=template_model)
+        created_objects = self.templateClient.create_from_template()
         self.assertEquals(len(created_objects), 4)
         community, permission, permission_condition, community_condition = created_objects
 
@@ -2926,9 +2933,9 @@ class TemplateTest(DataTestCase):
         permissions = PermissionsItem.objects.all()
         conditions = ConditionTemplate.objects.all()
         owned_objects = list(Resource.objects.all()) + list(Item.objects.all())
-        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, owned_objects=owned_objects, description="Complex Community Template")
-        created_objects = self.permClient.create_from_template(template_model=template_model)
+        created_objects = self.templateClient.create_from_template(template_model=template_model)
         self.assertEquals(len(created_objects), 8)
         community, perm1, perm_condition, com_condition, resource1, resource2, perm2, perm3 = created_objects
         
@@ -2976,7 +2983,7 @@ class TemplateTest(DataTestCase):
         
         permissions = PermissionsItem.objects.all()
         conditions = ConditionTemplate.objects.all()
-        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         text = template_model.data.generate_text()
 
@@ -2996,7 +3003,7 @@ class TemplateTest(DataTestCase):
         permissions = PermissionsItem.objects.all()
         conditions = ConditionTemplate.objects.all()
         owned_objects = list(Resource.objects.all()) + list(Item.objects.all())
-        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, owned_objects=owned_objects, description="Complex Community Template")
         text = template_model.data.generate_text()
 
@@ -3038,7 +3045,7 @@ class TemplateTest(DataTestCase):
 
         # okay, now let's test we can make a template, and that this shows up in the template
         permissions = PermissionsItem.objects.all()
-        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             description="Testing permission configuration")
         text = template_model.data.generate_text()
         self.assertEquals(text["community_permissions_info"], 
@@ -3049,10 +3056,10 @@ class TemplateTest(DataTestCase):
         self.set_up_simple_community()
         permissions = PermissionsItem.objects.all()
         conditions = ConditionTemplate.objects.all()
-        template_model = self.permClient.make_template(community=self.instance, permissions=permissions,
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         
-        editable_fields = self.permClient.get_editable_fields_on_template(template_model=template_model)
+        editable_fields = self.templateClient.get_editable_fields_on_template(template_model=template_model)
 
         # test we have the correct number of fields given the above structure
         self.assertEquals(len(editable_fields), 24)
@@ -3076,3 +3083,46 @@ class TemplateTest(DataTestCase):
         self.assertEquals(editable_role_field["field_value"], self.instance.roles.get_roles())
         self.assertEquals(editable_role_list_field["field_value"], permissions[0].roles.role_list)
         self.assertEquals(editable_actor_list_field["field_value"], permissions[0].actors.as_pks())
+
+    def test_update_template_field(self):
+
+        # Generate a template and get editable fields
+        self.set_up_simple_community()
+        permissions = PermissionsItem.objects.all()
+        conditions = ConditionTemplate.objects.all()
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
+            conditions=conditions, description="Simple Community Template")
+        self.templateClient.set_target(target=template_model)        
+        editable_fields = self.templateClient.get_editable_fields_on_template(template_model=template_model)
+
+        # Editing a simple field using valid data successfully updates template
+        community_name_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0]       
+        result = self.templateClient.edit_template_field(
+            template_object_id=community_name_field["template_object_id"], field_name="name", 
+            new_field_data="United States Women's National Team")
+        self.templateClient.refresh_target()
+        self.assertEquals(self.templateClient.target.data.generate_text()["community_basic_info"],
+            "Community United States Women's National Team is owned by individual 1 and governed by individual 1. ")
+
+        # Editing a custom field using valid data successfully updates template
+        community_role_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "Community")][0] 
+        new_role_value = {'forwards': [3, 4], 'mids': [1, 4], 'governors': {'actors': [1], 'roles': []}, 'owners': {'actors': [1], 'roles': []}, 'members': [1, 3, 4]}    
+        result = self.templateClient.edit_template_field(
+            template_object_id=community_name_field["template_object_id"], field_name="roles", 
+            new_field_data=new_role_value)
+        self.templateClient.refresh_target()
+        self.assertEquals(self.templateClient.target.data.generate_text()["community_roles_info"],
+            "There are 2 custom roles in the community: forwards and mids. Individuals 3 and 4 are 'forwards'. Individuals 1 and 4 are 'mids'. ")
+
+        # Editing a custom field using invalid data does not update data, and returns error
+        community_role_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "Community")][0] 
+        new_role_value = 4
+        action, result = self.templateClient.edit_template_field(
+            template_object_id=community_name_field["template_object_id"], field_name="roles", 
+            new_field_data=new_role_value)
+        # print(result.error_list)
+        self.assertEquals(result.message,
+            "Data supplied (4) is incorrectly formatted for RoleHandler field")

@@ -315,8 +315,8 @@ class TemplateData(object):
             for field in fields:
                 if self.is_editable_field(field):
                     editable_fields.append({
-                        "object_model": str(item._meta.model.__name__),
-                        "object_id": item.pk,
+                        "template_object_id": item_key,  # useful for updating fields
+                        "object_model": str(item._meta.model.__name__),   # for user display
                         "field_name": field.name,
                         "field_value": self.get_editable_field_value(item, field)
                     })
@@ -528,6 +528,54 @@ class TemplateData(object):
 
     def generate_text(self):
         return templates.generate_text_from_template(template_model=self)
+
+    def reformat_data(self, field_object, new_field_data):
+        """Fixes format issues for custom fields, corresponds to get_editable_field_value
+        # FIXME: also not the best place for this logic"""
+
+        if field_object.__class__.__name__ == "RoleListField":  # permission's RoleList custom field
+            try:
+                return RoleList(role_list=new_field_data)
+            except:
+                raise ValidationError("Data supplied (%s) is incorrectly formatted for RoleList field" % new_field_data)
+        if field_object.__class__.__name__ == "ActorListField":  # permission's ActorList custom field
+            try:
+                return ActorList(actor_list=new_field_data)
+            except:
+                raise ValidationError("Data supplied (%s) is incorrectly formatted for ActorList field" % new_field_data)
+        if field_object.__class__.__name__ == "RoleField":  # community's Role custom field
+            try:
+                from concord.communities.customfields import RoleHandler
+                reformatted_data = RoleHandler().reformat_flat_roles(new_field_data)
+                return RoleHandler(**reformatted_data)
+            except:
+                raise ValidationError("Data supplied (%s) is incorrectly formatted for RoleHandler field" % new_field_data)
+        return new_field_data
+
+    def update_field(self, template_object_id, field_name, new_field_data):
+        """ Updates a field with new data, created to be called by front-ends.
+        
+        TODO: need to better understand Django model field validation and add validators such
+        that we can rely on the clea() call to handle validation here.
+        """
+
+        object_to_update = self.get_combined_objects()[template_object_id]
+
+        # reformat data if needed
+        try:
+            field_object = object_to_update._meta.get_field(field_name)
+            new_field_data = self.reformat_data(field_object, new_field_data)
+            setattr(object_to_update, field_name, new_field_data)
+        except ValidationError as VE:
+            return VE
+
+        # Validate data and save
+        try:
+            value_to_test = getattr(object_to_update, field_name)
+            result = field_object.clean(value_to_test, object_to_update)  
+            return result
+        except ValidationError as VE:
+            return VE
 
 
 # Helper methods for TemplateDataField

@@ -46,6 +46,16 @@ class RoleHandler(object):
         self.members.append(creator)
         self.owners['actors'].append(creator)
         self.governors['actors'].append(creator)
+
+    def reformat_flat_roles(self, flat_role_dict):
+        all_roles = {"custom_roles": {}}
+        for role_name, role_data in flat_role_dict.items():
+            if role_name in self.protected_roles:
+                all_roles.update({role_name: role_data})
+            else:
+                all_roles["custom_roles"].update({role_name: role_data})
+        return all_roles
+
     
     ##########################
     ### Validation Methods ###
@@ -416,11 +426,3 @@ class RoleField(models.Field):
                 'governors': value.governors,
                 'custom_roles': value.custom_roles
             })
-        # # Do we need this at all?  Commenting it out for now.
-        # if value in [None, 'null', '{}']:
-        #     return json.dumps({
-        #         'members': [],
-        #         'owners': {'actors': [], 'roles':[]},
-        #         'governors': {'actors': [], 'roles':[]},
-        #         'custom_roles': {}
-        #     })

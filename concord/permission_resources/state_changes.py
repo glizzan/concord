@@ -343,3 +343,37 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
         self.permission.inverse = self.change_to
         self.permission.save()
         return self.permission
+
+
+class EditTemplateStateChange(BaseStateChange):
+    description = "Edit Template"
+
+    def __init__(self, template_object_id, field_name, new_field_data):
+        self.template_object_id = template_object_id
+        self.field_name = field_name
+        self.new_field_data = new_field_data
+
+    @classmethod
+    def get_allowable_targets(cls):
+        from concord.permission_resources.models import TemplateModel
+        return [TemplateModel]    
+
+    def description_present_tense(self):
+        permission_string = "edit template field %s to %s" % (self.field_name, self.new_field_data)
+        return permission_string
+
+    def description_past_tense(self):
+        permission_string = "edited template field %s to %s" % (self.field_name, self.new_field_data)
+        return permission_string
+
+    def validate(self, actor, target):
+        """
+        put real logic here
+        """
+        return True
+
+    def implement(self, actor, target):
+        result = target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
+        if result.__class__.__name__ is not "ValidationError":
+            target.save()
+        return result

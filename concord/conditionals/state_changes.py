@@ -136,10 +136,13 @@ class AddVoteStateChange(BaseStateChange):
         b) if the vote is abstain, abstentions are allowed
         """
         if self.vote not in ["yea", "nay", "abstain"]:
+            self.set_validation_error("Vote type must be 'yea', 'nay' or 'abstain', not %s" % self.vote)
             return False
         if target.has_voted(actor):
+            self.set_validation_error("Actor may only vote once")
             return False
         if not target.allow_abstain and self.vote == "abstain":
+            self.set_validation_error("Actor abstained but this vote does not allow abstentions.")
             return False
         return True
 

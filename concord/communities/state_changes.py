@@ -28,6 +28,7 @@ class ChangeNameStateChange(BaseStateChange):
         """
         if actor and target and self.new_name:
             return True
+        self.set_validation_error("You must provide provide a new name")
         return False
 
     def implement(self, actor, target):

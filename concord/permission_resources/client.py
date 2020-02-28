@@ -314,3 +314,17 @@ class TemplateClient(BaseClient):
         change = sc.EditTemplateStateChange(template_object_id=template_object_id, 
             field_name=field_name, new_field_data=new_field_data)
         return self.create_and_take_action(change)
+
+    # Helper/complex methods
+
+    def update_field_and_get_new_data(self, *, template_object_id, field_name, new_field_data):
+        action, result = self.edit_template_field(template_object_id=template_object_id, 
+            field_name=field_name, new_field_data=new_field_data)
+        if action.resolution.status == "rejected":
+            return action
+        else:
+            self.refresh_target()
+            return { 
+                "template_text": self.target.data.generate_text(),
+                "editable_fields": self.get_editable_fields_on_template(template_model=self.target)
+                }

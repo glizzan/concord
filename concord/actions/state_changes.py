@@ -1,5 +1,6 @@
 import json, warnings
 
+from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.models import ContentType
 
 
@@ -26,6 +27,10 @@ class BaseStateChange(object):
         '''Helper method used by state change subclasses that have fields which require database
         lookups.  Not called by default, to prevent unnecessary db queries.'''
         return False
+
+    def set_validation_error(self, message):
+        """Helper method so all state changes don't have to import ValidationError"""
+        self.validation_error = ValidationError(message)
 
     def validate(self, actor, target):
         ...

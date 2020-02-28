@@ -95,6 +95,7 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
         """
         if actor and target and self.item_pk:
             return True
+        self.set_validation_error("Must supply item_pk")
         return False
 
     def implement(self, actor, target):
@@ -355,8 +356,8 @@ class EditTemplateStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.permission_resources.models import TemplateModel
-        return [TemplateModel]    
+        from concord.permission_resources.models import Template
+        return [Template]    
 
     def description_present_tense(self):
         permission_string = "edit template field %s to %s" % (self.field_name, self.new_field_data)
@@ -370,10 +371,12 @@ class EditTemplateStateChange(BaseStateChange):
         """
         put real logic here
         """
+        result = target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
+        if result.__class__.__name__ is "ValidationError":
+            self.set_validation_error(result.message)
+            return False
         return True
 
     def implement(self, actor, target):
-        result = target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
-        if result.__class__.__name__ is not "ValidationError":
-            target.save()
-        return result
+        target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
+        target.save()

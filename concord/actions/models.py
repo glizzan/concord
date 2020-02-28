@@ -73,8 +73,13 @@ class Action(models.Model):
     def validate_action(self):
         """Checks that action is valid by providing actor and target to the change
         itself, which implements its own custom logic."""
-        if self.change.validate(actor=self.actor, target=self.target):
+        is_valid = self.change.validate(actor=self.actor, target=self.target)
+        if is_valid:
             self.resolution.status = "sent"
+        else:
+            self.resolution.status = "rejected"
+            self.log = self.change.validation_error.message
+            delattr(self.change, "validation_error")
 
     def implement_action(self):
         """Lets the change object carry out its custom implementation using the

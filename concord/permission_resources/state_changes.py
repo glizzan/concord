@@ -255,8 +255,9 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         configuration = permission.get_configuration()
         if "role_name" in configuration:  
             if self.role_name not in configuration["role_name"]:
-                return False
-        return True
+                return False, "Can't remove role %s from permission, allowable fields are: %s" % (self.role_name,
+                    ", ".join(configuration["role_name"]))
+        return True, None
 
     def validate(self, actor, target):
         # put real logic here

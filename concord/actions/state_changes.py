@@ -17,6 +17,21 @@ class BaseStateChange(object):
     def get_allowable_targets(cls):
         return cls.allowable_targets
 
+    @classmethod
+    def get_all_possible_targets(cls):
+        '''
+        Gets all models in registered apps and returns them if they have a foundational
+        permission enabled attribute (a bit of a hack to find anything descended from
+        PermissionedModel) and if they are not abstract models.
+        '''
+        from django.apps import apps
+        models = apps.get_models()
+        possible_targets = []
+        for model in models:
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                possible_targets.append(model)  
+        return possible_targets 
+
     @classmethod 
     def get_configurable_fields(self):
         if hasattr(self, 'check_configuration'): 
@@ -59,18 +74,7 @@ class ChangeOwnerStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        '''
-        Gets all models in registered apps and returns them if they have a foundational
-        permission enabled attribute (a bit of a hack to find anything descended from
-        PermissionedModel) and if they are not abstract models.
-        '''
-        from django.apps import apps
-        models = apps.get_models()
-        allowable_targets = []
-        for model in models:
-            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
-                allowable_targets.append(model)  
-        return allowable_targets  
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "change owner of community to %s" % (self.new_owner)  
@@ -101,18 +105,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        '''
-        Gets all models in registered apps and returns them if they have a foundational
-        permission enabled attribute (a bit of a hack to find anything descended from
-        PermissionedModel) and if they are not abstract models.
-        '''
-        from django.apps import apps
-        models = apps.get_models()
-        allowable_targets = []
-        for model in models:
-            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
-                allowable_targets.append(model)  
-        return allowable_targets  
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "enable foundational permission" 
@@ -137,18 +130,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        '''
-        Gets all models in registered apps and returns them if they have a foundational
-        permission enabled attribute (a bit of a hack to find anything descended from
-        PermissionedModel) and if they are not abstract models.
-        '''
-        from django.apps import apps
-        models = apps.get_models()
-        allowable_targets = []
-        for model in models:
-            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
-                allowable_targets.append(model)  
-        return allowable_targets  
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "disable foundational permission" 
@@ -172,20 +154,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        '''
-        Gets all models in registered apps and returns them if they have a foundational
-        permission enabled attribute (a bit of a hack to find anything descended from
-        PermissionedModel) and if they are not abstract models.
-
-        # NOTE: although this is for enabling governing permissions, the same hack works
-        '''
-        from django.apps import apps
-        models = apps.get_models()
-        allowable_targets = []
-        for model in models:
-            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
-                allowable_targets.append(model)  
-        return allowable_targets  
+        return cls.get_all_possible_targets() 
 
     def description_present_tense(self):
         return "enable governing permission" 
@@ -210,20 +179,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        '''
-        Gets all models in registered apps and returns them if they have a foundational
-        permission enabled attribute (a bit of a hack to find anything descended from
-        PermissionedModel) and if they are not abstract models.
-
-        Same hack works as for DisableFoundationalPermissionStateChange.
-        '''
-        from django.apps import apps
-        models = apps.get_models()
-        allowable_targets = []
-        for model in models:
-            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
-                allowable_targets.append(model)  
-        return allowable_targets  
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "disable governing permission" 
@@ -241,6 +197,76 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         target.governing_permission_enabled = False
         target.save()
         return target
+
+
+class ViewChangelessStateChange(BaseStateChange):
+    """'ViewChangelessStateChange' is a compromise name meant to indicate that,
+    while the item inherits from BaseStateChange, it does not actually change
+    any state - merely gets the specified fields."""
+    description = "View"
+
+    def __init__(self, fields_to_include=None):
+        self.fields_to_include = fields_to_include
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return cls.get_all_possible_targets() 
+
+    @classmethod 
+    def get_configurable_fields(self):
+        return ["fields_to_include"]
+
+    def description_present_tense(self):
+        field_string = ", ".join(self.fields_to_include) if self.fields_to_include else "all fields"
+        return "view %s" % field_string  
+
+    def description_past_tense(self):
+        field_string = ", ".join(self.fields_to_include) if self.fields_to_include else "all fields"
+        return "viewed %s" % field_string  
+
+    def check_configuration(self, permission):
+        '''All configurations must pass for the configuration check to pass.'''
+        configuration = permission.get_configuration()
+        missing_fields = []
+        if "fields_to_include" in configuration:
+            for targeted_field in self.fields_to_include:
+                if targeted_field not in configuration["fields_to_include"]:
+                    missing_fields.append(targeted_field)
+        if missing_fields:
+            return False, "Cannot view fields %s " % ", ".join(missing_fields)
+        return True, None
+
+    def validate(self, actor, target):
+        """Checks if any specified fields are not on the target and, if there are any, returns False."""
+        missing_fields = []
+        if self.fields_to_include:
+            for field in self.fields_to_include:
+                if not hasattr(target, field):
+                    missing_fields.append(field)
+        if not missing_fields:
+            return True
+        self.set_validation_error("Attempting to view field(s) %s that are not on target %s" % (
+            ", ".join(missing_fields), target))
+        return False
+
+    def implement(self, actor, target):
+        """Gets data from specified fields, or from all fields, and returns as dictionary."""
+
+        # print("Fields in fields to include: ", self.fields_to_include)
+        # print("Fields on target: ", [field.name for field in target._meta.get_fields()])
+
+        data_dict = {}
+
+        target_data = target.get_serialized_field_data()
+
+        if not self.fields_to_include:
+            return target_data
+
+        limited_data = {}
+        for field in self.fields_to_include:
+            limited_data.update({ field : target_data[field] })
+
+        return limited_data
 
 
 # FIXME: must be a better approach than just listing these
@@ -271,6 +297,7 @@ class Changes(object):
         DisableFoundationalPermission = 'concord.actions.state_changes.DisableFoundationalPermissionStateChange'
         EnableGoverningPermission = 'concord.actions.state_changes.EnableGoverningPermissionStateChange'
         DisableGoverningPermission = 'concord.actions.state_changes.DisableGoverningPermissionStateChange'
+        ViewPermission = 'concord.actions.state_changes.ViewChangelessStateChange'
 
     class Communities(object):
 

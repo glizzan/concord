@@ -163,4 +163,7 @@ def check_configuration(action, permission):
 
     # Then call check_configuration on the state_change, passing in the permission
     # configuration data, and return the result.
-    return change_object.check_configuration(permission)
+    result, message = change_object.check_configuration(permission)
+    if message:
+        action.resolution.add_to_log(message)
+    return result

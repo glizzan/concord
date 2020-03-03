@@ -78,7 +78,7 @@ class Action(models.Model):
             self.resolution.status = "sent"
         else:
             self.resolution.status = "rejected"
-            self.log = self.change.validation_error.message
+            self.resolution.add_to_log(self.change.validation_error.message)
             delattr(self.change, "validation_error")
 
     def implement_action(self):
@@ -241,7 +241,40 @@ class PermissionedModel(models.Model):
         from concord.actions.client import ActionClient
         client = ActionClient(system=True, target=self)
         return client.get_action_history_given_target(target=self)
+
+    def get_serialized_field_data(self):
+        """By default, the readable attributes of a permissioned model are all fields specified on the 
+        model.  However, we cannot simply use self._meta.get_fields() since the field name is sometimes
+        different than the attribute name, for instance with related fields that are called, X but show
+        up as X_set on the model.
         
+        For now we're assuming this is going to be user-facing. Eventually we need to refactor the 
+        serialization done here, in the state_change serialization, and in the templates so it's all
+        relying on a single set of utils for consistency's sake.
+        """
+
+        # Generate list of fields
+        fields = self._meta.get_fields()
+
+        # Turn into dict
+        data_dict = {}
+        for field in fields:
+            if field.__class__.__name__ in ["ManyToOneRel", "ManyToOneRelation"]:
+                related_objects = getattr(self, field.name + "_set").all()
+                serialized_field = [ro.pk for ro in related_objects]
+            elif "content_type" in field.name:
+                continue  # skip content_type fields used for gfks
+            elif "object_id" in field.name:
+                continue  # skip id field used in gfks (FIXME: this is very brittle)
+            else:
+                serialized_field = getattr(self, field.name)
+            if hasattr(serialized_field, "foundational_permission_enabled"):
+                    serialized_field = serialized_field.get_name()
+            data_dict.update({ field.name : serialized_field })
+
+        return data_dict
+
+
     @classmethod
     def get_state_change_objects(cls):
         # Get list of all objects in model's app's state_changes file 

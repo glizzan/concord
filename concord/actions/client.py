@@ -69,6 +69,12 @@ class BaseClient(object):
         else:
             container.process_actions_permanently()
 
+    # Permissioned Reading
+
+    def get_target_data(self, fields_to_include=None):
+        change = sc.ViewChangelessStateChange(fields_to_include=fields_to_include)
+        return self.create_and_take_action(change)
+
     # Writing
 
     def change_owner_of_target(self, new_owner) -> Tuple[int, Any]:

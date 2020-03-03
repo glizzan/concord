@@ -464,8 +464,9 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         configuration = permission.get_configuration()
         if "role_name" in configuration:  
             if self.role_name not in configuration["role_name"]:
-                return False
-        return True
+                return False, "Can't add people to role %s, allowable roles are: %s" % (self.role_name,
+                    ", ".join(configuration["role_name"]))
+        return True, None
 
     def validate(self, actor, target):
         return True

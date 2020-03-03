@@ -3123,6 +3123,132 @@ class TemplateTest(DataTestCase):
         action, result = self.templateClient.edit_template_field(
             template_object_id=community_name_field["template_object_id"], field_name="roles", 
             new_field_data=new_role_value)
-        # print(result.error_list)
-        self.assertEquals(result.message,
+        self.assertEquals(action.resolution.log,
             "Data supplied (4) is incorrectly formatted for RoleHandler field")
+
+    def test_edit_field_and_get_new_data(self):
+        
+        # Generate a template and get editable fields
+        self.set_up_simple_community()
+        permissions = PermissionsItem.objects.all()
+        conditions = ConditionTemplate.objects.all()
+        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
+            conditions=conditions, description="Simple Community Template")
+        self.templateClient.set_target(target=template_model)        
+        editable_fields = self.templateClient.get_editable_fields_on_template(template_model=template_model)
+
+        # Editing a simple field using the helper method "update_field_and_get_new_data"
+        community_name_field = [field_dict for field_dict in editable_fields
+            if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0]       
+        result = self.templateClient.update_field_and_get_new_data(
+            template_object_id=community_name_field["template_object_id"], field_name="name",
+            new_field_data="United States Women's National Team")
+        self.assertEquals(result["template_text"]["community_basic_info"], 
+            "Community United States Women's National Team is owned by individual 1 and governed by individual 1. ")
+        community_name_field = [field_dict for field_dict in result["editable_fields"]
+            if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0] 
+        self.assertEquals(community_name_field["field_value"], "United States Women's National Team")
+
+
+class PermissionedReadTest(DataTestCase):
+
+    def setUp(self):
+
+        # Create a community with roles
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.commClient.add_role(role_name="forwards")
+        self.commClient.add_members([self.users.tobin.pk, self.users.rose.pk])
+        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
+
+        # Create a resource and put it in the community
+        self.rc = ResourceClient(actor=self.users.pinoe)
+        self.resource = self.rc.create_resource(name="Go USWNT!")
+        self.rc.set_target(target=self.resource)
+        self.rc.change_owner_of_target(new_owner=self.instance)
+
+        # Set the target of the permission resource client
+        self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.resource)
+
+        # create clients for users
+        self.tobinResourceClient = ResourceClient(actor=self.users.tobin, target=self.resource)
+        self.roseResourceClient = ResourceClient(actor=self.users.rose, target=self.resource)
+
+    def test_unconfigured_permission_read(self):
+        # Only people with role "forwards" can view the resource
+        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+            permission_roles=["forwards"])
+
+        # User Rose without role 'forwards' can't see object
+        action, result = self.roseResourceClient.get_target_data()
+        self.assertEquals(action.resolution.status, "rejected")
+
+        # User Tobin with role 'forwards' can see object
+        action, result = self.tobinResourceClient.get_target_data()
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(result, 
+            { 'id': 1,
+            "item": [],
+            'foundational_permission_enabled': False, 
+            'governing_permission_enabled': True, 
+            'name': 'Go USWNT!', 
+            'owner': "USWNT"})
+
+    def test_can_configure_readable_fields(self):
+        # Only people with role "forwards" can view the resource field "name" and resource "id"
+        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+            permission_roles=["forwards"], permission_configuration={"fields_to_include": ["name", "id"]})
+
+        # They try to get other fields, get error
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["owner"])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertTrue("Cannot view fields owner" in action.resolution.log)
+        
+        # They try to get the right field, success
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["name"])
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(result, {'name': 'Go USWNT!'})
+
+        # They try to get two fields at once, success
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["name", "id"])
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(result, {'name': 'Go USWNT!', "id": 1})
+
+        # They try to get one allowed field and one unallowed field, error
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["name", "owner"])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertTrue("Cannot view fields owner" in action.resolution.log)
+
+        # They try to get a nonexistent field, error
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["potato"])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertTrue("Attempting to view field(s) potato that are not on target" in action.resolution.log)
+
+    def test_multiple_readpermissions(self):
+
+        # Permission 1: user Tobin can only see field "name"
+        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+            permission_actors=[self.users.tobin.pk], 
+            permission_configuration={"fields_to_include": ["name"]})
+
+        # Permission 2: user Rose can only see field "owner"
+        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+            permission_actors=[self.users.rose.pk], 
+            permission_configuration={"fields_to_include": ["owner"]})
+
+        # Tobin can see name but not owner
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["name"])
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(result, {'name': 'Go USWNT!'})
+        action, result = self.tobinResourceClient.get_target_data(fields_to_include=["owner"])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertTrue("Cannot view fields owner" in action.resolution.log)
+
+        # Rose can see owner but not name
+        action, result = self.roseResourceClient.get_target_data(fields_to_include=["owner"])
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(result, {'owner': 'USWNT'})
+        action, result = self.roseResourceClient.get_target_data(fields_to_include=["name"])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertTrue("Cannot view fields name" in action.resolution.log)

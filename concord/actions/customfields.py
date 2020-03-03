@@ -60,7 +60,8 @@ class Resolution:
             self.resolved_through, detailed_passed_as, self.condition, self.provisional)
 
     def approve_action(self, resolved_through, log=None, condition=None, role=None):
-        self.log = log if log else ""   # FIXME: append instead?
+        if log:
+            self.add_to_log(log)
         self.status = "approved"
         self.resolved_through = resolved_through
         self.condition = condition
@@ -68,12 +69,20 @@ class Resolution:
         self.infer_values()
 
     def reject_action(self, resolved_through=None, log=None, condition=None, role=None):
-        self.log = log if log else ""    # FIXME: append instead?
+        if log:
+            self.add_to_log(log)
         self.status = "rejected"
         self.resolved_through = resolved_through
         self.condition = condition
         self.role = role
         self.infer_values()
+
+    def add_to_log(self, message):
+        # "LOG: " is here to separate messages but we can probably do this better.
+        if not self.log:
+            self.log = message
+        else:
+            self.log += "  " + message
 
 
 def parse_resolution(resolution_string):

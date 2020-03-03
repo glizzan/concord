@@ -71,7 +71,7 @@ def update_owner_condition(request, community_pk):
     # If template does not exist, create using data
     if not template:
         print("Creating new template!")
-        action, result = condClient.addConditionToOwners(
+        action, result = condClient.add_condition_to_owners(
             condition_type=data["condition_type"],  
             permission_data=data["permission_data"], 
             condition_data=data["condition_data"])

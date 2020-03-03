@@ -71,11 +71,11 @@ class BaseConditionalClient(BaseClient):
             condition_items = VoteCondition.objects.filter(action=action_pk)
         return condition_items[0] if condition_items else None
 
-    def getVoteConditionAsClient(self, *, pk: int) -> VoteConditionClient:
+    def get_vote_condition_as_client(self, *, pk: int) -> VoteConditionClient:
         vote_object = VoteCondition.objects.get(pk=pk)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
-    def getApprovalConditionAsClient(self, *, pk: int) -> ApprovalConditionClient:
+    def get_approval_condition_as_client(self, *, pk: int) -> ApprovalConditionClient:
         approval_object = ApprovalCondition.objects.get(pk=pk)
         return ApprovalConditionClient(target=approval_object, actor=self.actor)
 
@@ -123,7 +123,7 @@ class BaseConditionalClient(BaseClient):
                 action=action)
         return condition_item 
 
-    def createVoteCondition(self, *, action: Action, **kwargs) -> VoteConditionClient:
+    def create_vote_condition(self, *, action: Action, **kwargs) -> VoteConditionClient:
         vote_object = VoteCondition.objects.create(owner=action.target.get_owner(), 
             action=action.pk, **kwargs)
         return VoteConditionClient(target=vote_object, actor=self.actor)
@@ -132,7 +132,7 @@ class BaseConditionalClient(BaseClient):
 
     # Stage changes
 
-    def removeCondition(self, *, condition: Model) -> Tuple[int, Any]:
+    def remove_condition(self, *, condition: Model) -> Tuple[int, Any]:
         change = sc.RemoveConditionStateChange(condition_pk=condition.pk)
         return self.create_and_take_action(change)
 
@@ -156,8 +156,7 @@ class PermissionConditionalClient(BaseConditionalClient):
 
     # State changes
 
-    # FIXME: should be add_condition not addCondition
-    def addCondition(self, *, condition_type: str, permission_data: Dict = None, 
+    def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
         # FIXME: It would be nice to be able to pass in the ConditionTemplate 
         change = sc.AddConditionStateChange(condition_type=condition_type,
@@ -220,14 +219,14 @@ class CommunityConditionalClient(BaseConditionalClient):
 
     # State Changes
 
-    def addConditionToGovernors(self, *, condition_type: str, permission_data: Dict = None, 
+    def add_condition_to_governors(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data, 
             target_type="gov")
         return self.create_and_take_action(change)        
 
-    def addConditionToOwners(self, *, condition_type: str, permission_data: Dict = None, 
+    def add_condition_to_owners(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data, 

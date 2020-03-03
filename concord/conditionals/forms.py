@@ -98,7 +98,7 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
                 condition_data=self.get_configuration_dict(),
                 permission_data=self.get_permissions_dict())
         else:    
-            conditionalClient.addCondition(
+            conditionalClient.add_condition(
                 condition_type=self.condition_type, 
                 condition_data=self.get_configuration_dict(),
                 permission_data=self.get_permissions_dict())

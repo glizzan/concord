@@ -70,14 +70,15 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
         # FIXME: this is hacky too :(
         for field_name, field_object in self.fields.items():
             if self.condition.permission_data:
-                permission= json.loads(self.condition.permission_data)
-                if "~" in field_name:  # If it's a permission field
-                    if field_object.initial and permission["permission_type"] in field_object.initial:
-                        count = field_name.split("~")[0]
-                        self.fields["%s~individuals" % count].initial = permission["permission_actors"]
-                        self.fields["%s~roles" % count].initial = permission["permission_roles"]
-                        for cf_key, cf_value in permission["permission_configuration"].items():
-                            self.fields["%s~configurablefield~%s" % (count, cf_key)] = cf_value
+                permission = json.loads(self.condition.permission_data)
+                for permission in permission:
+                    if "~" in field_name:  # If it's a permission field
+                        if field_object.initial and permission["permission_type"] in field_object.initial:
+                            count = field_name.split("~")[0]
+                            self.fields["%s~individuals" % count].initial = permission["permission_actors"]
+                            self.fields["%s~roles" % count].initial = permission["permission_roles"]
+                            for cf_key, cf_value in permission["permission_configuration"].items():
+                                self.fields["%s~configurablefield~%s" % (count, cf_key)] = cf_value
 
     def get_settable_permissions(self):
         '''Occasionally metapermission form will be passed a mock permission object.  We need to 
@@ -137,7 +138,7 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
 
         self.process_permissions()
 
-        # FIXME: assumes a single permission, just returns the first it finds
+        permissions_to_save = []
 
         for index, permission in self.permission_data.items():
 
@@ -155,9 +156,11 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
                     for cf_key, cf_value in permission["configurable_fields"].items():
                         config_dict[cf_key] = cf_value
 
-                return json.dumps({ 'permission_type': permission['name'], 
+                permissions_to_save.append({ 'permission_type': permission['name'], 
                     'permission_actors': p_actors, 'permission_roles': p_roles,
                     'permission_configuration': config_dict})
+
+        return json.dumps(permissions_to_save)
 
     def get_configuration_dict(self):
         configuration_dict = {}

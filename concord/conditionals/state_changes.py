@@ -112,6 +112,7 @@ class ChangeConditionStateChange(BaseStateChange):
 ### Vote Condition State Changes ###
 ####################################
 
+
 class AddVoteStateChange(BaseStateChange):
     description = "Add vote"
 
@@ -157,6 +158,7 @@ class AddVoteStateChange(BaseStateChange):
 ### Approve Condition State Changes ###
 #######################################
 
+
 class ApproveStateChange(BaseStateChange):
     description = "Approve"
 
@@ -188,6 +190,7 @@ class ApproveStateChange(BaseStateChange):
         target.approve()
         target.save()
         return True
+
 
 class RejectStateChange(BaseStateChange):
     description = "Reject"

@@ -107,12 +107,13 @@ class BaseConditionalClient(BaseClient):
         condition_item = conditionModel.objects.create(action=action.pk, 
                 owner=condition_template.get_owner(), **data_dict)
 
-        # Add permission
+        # Add permission(s)
         if condition_template.permission_data is not None:
-            permission_dict = json.loads(condition_template.permission_data)
+            permissions_dict = json.loads(condition_template.permission_data)
             from concord.permission_resources.utils import create_permission_outside_pipeline
             # is this still needed once custom permission+condition field created?
-            create_permission_outside_pipeline(permission_dict, condition_item, condition_template)
+            for permission_info in permissions_dict:
+                create_permission_outside_pipeline(permission_info, condition_item, condition_template)
 
         return condition_item
 

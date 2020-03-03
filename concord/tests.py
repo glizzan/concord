@@ -404,11 +404,11 @@ class ConditionalsTest(DataTestCase):
         # approval.  She specifies that *Crystal* has to approve it.
         self.cc.set_target(target=permission)
         self.cc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve, 
                 'permission_actors': [self.users.crystal.pk],
                 'permission_roles': [],
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
 
         # When Rose tries to add an item it is stuck waiting
         self.rc.set_actor(actor=self.users.rose)
@@ -429,8 +429,59 @@ class ConditionalsTest(DataTestCase):
         self.assertEquals(Action.objects.get(pk=rose_action.pk).resolution.status, "implemented")
         self.assertEquals(resource.get_items(), ["Rose's item"])
 
-    def test_cant_self_approve(self):
-        ...
+    def test_multiple_permissions_on_condition(self):
+
+        # First we have Pinoe create a resource
+        resource = self.rc.create_resource(name="Go USWNT!")
+
+        # Then she adds a permission that says that Rose can add items.
+        self.prc.set_target(target=resource)
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.rose.pk])
+        
+        # But she places a condition on the permission that Rose has to get
+        # approval.  She specifies that *Crystal* has to approve it.  She also 
+        # specifies that Andi Sullivan can reject it.
+        self.cc.set_target(target=permission)
+        self.cc.add_condition(condition_type="approvalcondition",
+            permission_data=json.dumps([
+                {'permission_type': Changes.Conditionals.Approve, 
+                'permission_actors': [self.users.crystal.pk],
+                'permission_roles': [],
+                'permission_configuration': '{}'},
+                {'permission_type': Changes.Conditionals.Reject, 
+                'permission_actors': [self.users.sully.pk],
+                'permission_roles': [],
+                'permission_configuration': '{}'}
+                ]))
+
+        # When Rose tries to add an item, Crystal can approve it
+        self.rc.set_actor(actor=self.users.rose)
+        self.rc.set_target(target=resource)
+        rose_action_one, item = self.rc.add_item(item_name="Rose's first item")
+        conditional_action = self.cc.get_condition_item_given_action(action_pk=rose_action_one.pk)
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.crystal)
+        action, result = acc.approve()
+    
+        # When Rose tries to add an item, Andi Sullivan can reject it
+        rose_action_two, item = self.rc.add_item(item_name="Rose's second item")
+        conditional_action = self.cc.get_condition_item_given_action(action_pk=rose_action_two.pk)
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.sully)
+        action, result = acc.reject()
+
+        # We see Rose's first item but not her second has been added
+        self.assertEquals(Action.objects.get(pk=rose_action_one.pk).resolution.status, "implemented")
+        self.assertEquals(Action.objects.get(pk=rose_action_two.pk).resolution.status, "rejected")
+        self.assertEquals(resource.get_items(), ["Rose's first item"])
+
+        # Rose tries one more time - Andi can't approve and Crystal can't reject, so the action is waiting
+        rose_action_three, item = self.rc.add_item(item_name="Rose's third item")        
+        conditional_action = self.cc.get_condition_item_given_action(action_pk=rose_action_three.pk)
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.crystal)
+        action, result = acc.reject()
+        acc = ApprovalConditionClient(target=conditional_action, actor=self.users.sully)
+        action, result = acc.approve()
+        self.assertEquals(Action.objects.get(pk=rose_action_three.pk).resolution.status, "waiting")
 
 
 class ConditionalsFormTest(DataTestCase):
@@ -626,10 +677,10 @@ class ConditionalsFormTest(DataTestCase):
         approvalForm.save()
         condTemplate = self.pcc.get_condition_template()
         perm_data = json.loads(condTemplate.permission_data)
-        self.assertEquals(perm_data["permission_type"], Changes.Conditionals.Approve)
-        self.assertEquals(perm_data["permission_actors"], [self.users.rose.pk])
-        self.assertFalse(perm_data["permission_roles"])
-        self.assertFalse(perm_data["permission_configuration"])
+        self.assertEquals(perm_data[0]["permission_type"], Changes.Conditionals.Approve)
+        self.assertEquals(perm_data[0]["permission_actors"], [self.users.rose.pk])
+        self.assertFalse(perm_data[0]["permission_roles"])
+        self.assertFalse(perm_data[0]["permission_configuration"])
 
     def test_approval_condition_form_creates_working_condition(self):
         
@@ -683,7 +734,7 @@ class ConditionalsFormTest(DataTestCase):
         approvalForm.save()
         condTemplate = self.pcc.get_condition_template()
         self.assertEquals(condTemplate.condition_data, '{"self_approval_allowed": true}')
-        self.assertEquals(json.loads(condTemplate.permission_data)["permission_actors"], 
+        self.assertEquals(json.loads(condTemplate.permission_data)[0]["permission_actors"], 
             [self.users.rose.pk])
 
         # Feed into form as instance along with edited data
@@ -697,7 +748,7 @@ class ConditionalsFormTest(DataTestCase):
         # Now configuration is different
         condTemplate = self.pcc.get_condition_template()
         self.assertEquals(condTemplate.condition_data, '{"self_approval_allowed": false}')
-        self.assertEquals(json.loads(condTemplate.permission_data)["permission_actors"], 
+        self.assertEquals(json.loads(condTemplate.permission_data)[0]["permission_actors"], 
             [self.users.crystal.pk])
 
     def test_can_set_condition_on_metapermission(self):
@@ -820,11 +871,11 @@ class GoverningAuthorityTest(DataTestCase):
         # Set conditional on governor decision making.  Only Sonny can approve condition.
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.sonny.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented") # Action accepted
 
         # Check that the condition template's owner is correct
@@ -932,10 +983,10 @@ class FoundationalAuthorityTest(DataTestCase):
         # FIXME: wow this is too much configuration needed!
         action, result = self.condClient.add_condition_to_owners(
             condition_type = "votecondition",
-            permission_data = json.dumps({
+            permission_data = json.dumps([{
                 'permission_type': Changes.Conditionals.AddVote,
                 'permission_roles': ['members'],
-                'permission_configuration': '{}'}),
+                'permission_configuration': '{}'}]),
             condition_data=json.dumps({"voting_period": 0.0001 }))
 
         # Christen tries to change the name of the resource but is not successful.
@@ -2556,11 +2607,11 @@ class ActionContainerTest(DataTestCase):
         self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
         self.pcc.set_target(target=permission)
         self.pcc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve, 
                 'permission_actors': [self.users.crystal.pk],
                 'permission_roles': [],
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
 
         # Process provisionally
         self.commClient.process_container(container=self.container)
@@ -2585,11 +2636,11 @@ class ActionContainerTest(DataTestCase):
         self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
         self.pcc.set_target(target=permission)
         self.pcc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve, 
                 'permission_actors': [self.users.crystal.pk],
                 'permission_roles': [],
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
 
         # Can't process permanently if there's an unresolved condition (status == "waiting")
         self.commClient.process_container(container=self.container, provisionally=False)
@@ -2650,20 +2701,20 @@ class TemplateTest(DataTestCase):
         self.permCondClient = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
         action, result = self.permCondClient.add_condition(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.christen.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))        
+                'permission_configuration': '{}'}]))        
         # Add condition on community
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_owners(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.pinoe.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
 
     def set_up_complex_community(self):
         
@@ -2693,11 +2744,11 @@ class TemplateTest(DataTestCase):
         self.permCondClient = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
         action, result = self.permCondClient.add_condition(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.christen.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))        
+                'permission_configuration': '{}'}]))        
  
         # Add permission on resource
         self.permClient.set_target(self.resource2)
@@ -2715,11 +2766,11 @@ class TemplateTest(DataTestCase):
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_owners(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.pinoe.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
 
     def test_make_template_from_community(self):
 
@@ -2750,11 +2801,11 @@ class TemplateTest(DataTestCase):
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.pinoe.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
         ct = self.condClient.get_condition_template_for_governor()
 
         # convert instance to template model using client
@@ -2764,7 +2815,7 @@ class TemplateTest(DataTestCase):
         template_of_condition = template_model.data.get_conditions()[0]
         self.assertEquals(template_of_condition.condition_type, "approvalcondition")
         loaded_dict = json.loads(template_of_condition.permission_data)
-        self.assertEquals(loaded_dict["permission_actors"], [1])
+        self.assertEquals(loaded_dict[0]["permission_actors"], [1])
 
     def test_make_template_from_permission(self):
         """Template model version of test_templatize_permissions"""
@@ -2840,11 +2891,11 @@ class TemplateTest(DataTestCase):
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps({
+            permission_data=json.dumps([{
                 'permission_type': Changes.Conditionals.Approve,
                 'permission_actors': [self.users.pinoe.pk],
                 'permission_roles': '',
-                'permission_configuration': '{}'}))
+                'permission_configuration': '{}'}]))
         ct = self.condClient.get_condition_template_for_governor()
         template_model = self.templateClient.make_template(community=self.instance, conditions=[ct], 
             description="Pinoe must approve condition template")
@@ -2855,7 +2906,7 @@ class TemplateTest(DataTestCase):
         self.assertEquals(len(created_objects), 2)
         self.assertEquals(created_objects[1].condition_type, "approvalcondition")
         permission_data = json.loads(created_objects[1].permission_data)
-        self.assertEquals(permission_data["permission_actors"], [1])
+        self.assertEquals(permission_data[0]["permission_actors"], [1])
 
         # Original condition is set on original community, new condition set on new community
         self.assertNotEqual(ct.pk, created_objects[1].pk)
@@ -2950,14 +3001,14 @@ class TemplateTest(DataTestCase):
         self.assertEquals(perm_condition.conditioned_object, perm1)
         self.assertEquals(perm_condition.condition_type, "approvalcondition")
         permission_data = json.loads(perm_condition.permission_data)
-        self.assertEquals(permission_data["permission_actors"], [self.users.christen.pk])
-        self.assertEquals(permission_data["permission_type"], Changes.Conditionals.Approve)
+        self.assertEquals(permission_data[0]["permission_actors"], [self.users.christen.pk])
+        self.assertEquals(permission_data[0]["permission_type"], Changes.Conditionals.Approve)
         self.assertEquals(com_condition.conditioned_object, community)
         self.assertEquals(com_condition.condition_type, "approvalcondition")
         self.assertEquals(com_condition.target_type, "own")
         permission_data = json.loads(com_condition.permission_data)
-        self.assertEquals(permission_data["permission_actors"], [self.users.pinoe.pk])
-        self.assertEquals(permission_data["permission_type"], Changes.Conditionals.Approve)
+        self.assertEquals(permission_data[0]["permission_actors"], [self.users.pinoe.pk])
+        self.assertEquals(permission_data[0]["permission_type"], Changes.Conditionals.Approve)
 
         # test permissions
         self.assertEquals(perm1.permitted_object, community)

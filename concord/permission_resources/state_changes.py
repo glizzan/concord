@@ -126,11 +126,11 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         return "add actor %s to permission %d (%s)" % (self.actor_to_add, 
-            self.permission_pk, self.permission.short_change_type())  
+            self.permission_pk, self.permission.get_change_type())  
 
     def description_past_tense(self):
         return "added actor %s to permission %d (%s)" % (self.actor_to_add, 
-            self.permission_pk, self.permission.short_change_type()) 
+            self.permission_pk, self.permission.get_change_type()) 
 
     def validate(self, actor, target):
         # put real logic here
@@ -162,11 +162,11 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         return "remove actor %s from permission %d (%s) " % (self.actor_to_remove, 
-            self.permission_pk, self.permission.short_change_type())  
+            self.permission_pk, self.permission.get_change_type())  
 
     def description_past_tense(self):
         return "removed actor %s from permission %d (%s)" % (self.actor_to_remove, 
-            self.permission_pk, self.permission.short_change_type())   
+            self.permission_pk, self.permission.get_change_type())   
 
     def validate(self, actor, target):
         # put real logic here
@@ -197,11 +197,11 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         return "add role %s to permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.short_change_type())  
+            self.permission_pk, self.permission.get_change_type())  
 
     def description_past_tense(self):
         return "added role %s to permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.short_change_type())
+            self.permission_pk, self.permission.get_change_type())
 
     def validate(self, actor, target):
         # put real logic here
@@ -243,11 +243,11 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         return "remove role %s from permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.short_change_type())  
+            self.permission_pk, self.permission.get_change_type())  
 
     def description_past_tense(self):
         return "removed role %s from permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.short_change_type())  
+            self.permission_pk, self.permission.get_change_type())  
 
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
@@ -290,11 +290,11 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
 
     def description_present_tense(self):
         return "change configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
-            self.configurable_field_value, self.permission_pk, self.permission.short_change_type())
+            self.configurable_field_value, self.permission_pk, self.permission.get_change_type())
     
     def description_past_tense(self):
         return "changed configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
-            self.configurable_field_value, self.permission_pk, self.permission.short_change_type())
+            self.configurable_field_value, self.permission_pk, self.permission.get_change_type())
 
     def validate(self, actor, target):
         # put real logic here
@@ -330,11 +330,11 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         return "change inverse field to value %s on permission %d (%s)" % (self.change_to, 
-            self.permission_pk, self.permission.short_change_type())
+            self.permission_pk, self.permission.get_change_type())
     
     def description_past_tense(self):
         return "changed inverse field to value %s on permission %d (%s)" % (self.change_to, 
-            self.permission_pk, self.permission.short_change_type())
+            self.permission_pk, self.permission.get_change_type())
 
     def validate(self, actor, target):
         # put real logic here

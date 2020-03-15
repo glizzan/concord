@@ -69,7 +69,7 @@ class PermissionResourceClient(BaseClient):
         return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
             permitted_object_id=self.target.pk, change_type=change_type)
 
-    def get_permissions_associated_with_role(self, *, role_name: str, community: Model) -> List[PermissionsItem]:
+    def get_permissions_associated_with_role(self, *, role_name: str) -> List[PermissionsItem]:
         permissions = self.get_permissions_on_object(object=self.target)
         matching_permissions = []
         for permission in permissions:

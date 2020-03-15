@@ -1395,8 +1395,7 @@ class PermissionFormTest(DataTestCase):
     def test_add_role_to_permission(self):
 
         # Before changes, no permissions associated with role
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
         self.assertEqual(permissions_for_role, [])
 
         # add role to permission
@@ -1410,15 +1409,13 @@ class PermissionFormTest(DataTestCase):
         
         # Check that it works on save
         self.permission_form.save()
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(
-            role_name="spirit players", community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
         self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
 
     def test_add_roles_to_permission(self):
 
         # Before changes, no permissions associated with role
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
         self.assertEqual(permissions_for_role, [])
 
         # add role to permission
@@ -1431,11 +1428,9 @@ class PermissionFormTest(DataTestCase):
         self.assertEquals(self.permission_form.cleaned_data["6~roles"], ["midfielders", "spirit players"])
         # Check that it works on save
         self.permission_form.save()
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
         self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="midfielders",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="midfielders")
         self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
 
     def test_add_individual_to_permission(self):
@@ -1490,8 +1485,7 @@ class PermissionFormTest(DataTestCase):
     def test_add_multiple_to_multiple_permissions(self):
 
         # Before changes, no permissions associated with role
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
         self.assertEqual(permissions_for_role, [])
 
         # Before changes, no permissions associated with actor
@@ -1516,25 +1510,25 @@ class PermissionFormTest(DataTestCase):
         # Actor checks
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.aubrey.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange', 'AddRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.christen.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.pinoe.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddRoleStateChange'])
 
         # Role checks
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
-            role_name="midfielders", community=self.instance)
-        change_types = [perm.short_change_type() for perm in permissions_for_role]
+            role_name="midfielders")
+        change_types = [perm.get_change_type() for perm in permissions_for_role]
         self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange', 'AddOwnerRoleStateChange']) 
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
-            role_name="spirit players", community=self.instance)
-        change_types = [perm.short_change_type() for perm in permissions_for_role]
+            role_name="spirit players")
+        change_types = [perm.get_change_type() for perm in permissions_for_role]
         self.assertCountEqual(change_types, ['AddOwnerRoleStateChange', 'AddPeopleToRoleStateChange',
             'AddGovernorStateChange']) 
 
@@ -1546,8 +1540,8 @@ class PermissionFormTest(DataTestCase):
             request=self.request, data=self.data)
         self.permission_form.is_valid()
         self.permission_form.save()
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(
+            role_name="spirit players")
         self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
 
         # now remove it
@@ -1556,8 +1550,8 @@ class PermissionFormTest(DataTestCase):
             request=self.request, data=self.data)
         self.permission_form.is_valid()
         self.permission_form.save()
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(
+            role_name="spirit players")
         self.assertFalse(permissions_for_role) # Empty list should be falsy
 
     def test_remove_roles_from_permission(self):
@@ -1568,11 +1562,11 @@ class PermissionFormTest(DataTestCase):
             request=self.request, data=self.data)
         self.permission_form.is_valid()
         self.permission_form.save()
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(
+            role_name="spirit players")
         self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="midfielders",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(
+            role_name="midfielders")
         self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
 
         # now remove them
@@ -1581,11 +1575,11 @@ class PermissionFormTest(DataTestCase):
             request=self.request, data=self.data)
         self.permission_form.is_valid()
         self.permission_form.save()
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(
+            role_name="spirit players")
         self.assertFalse(permissions_for_role) # Empty list should be falsy
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="midfielders",
-            community=self.instance)
+        permissions_for_role = self.prClient.get_permissions_associated_with_role(
+            role_name="midfielders")
         self.assertFalse(permissions_for_role) # Empty list should
 
     def test_remove_individual_from_permission(self):
@@ -1657,11 +1651,11 @@ class PermissionFormTest(DataTestCase):
         # Actor + role checks, not complete for brevity's sake (is tested elsewhere)
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.aubrey.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange', 'AddRoleStateChange'])
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
-            role_name="spirit players", community=self.instance)
-        change_types = [perm.short_change_type() for perm in permissions_for_role]
+            role_name="spirit players")
+        change_types = [perm.get_change_type() for perm in permissions_for_role]
         self.assertCountEqual(change_types, ['AddOwnerRoleStateChange', 'AddPeopleToRoleStateChange',
             'AddGovernorStateChange']) 
 
@@ -1684,21 +1678,21 @@ class PermissionFormTest(DataTestCase):
         self.assertFalse(permissions_for_actor)  # Empty list should be falsy
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.christen.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.pinoe.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddRoleStateChange'])
 
         # Role checks
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
-            role_name="midfielders", community=self.instance)
-        change_types = [perm.short_change_type() for perm in permissions_for_role]
+            role_name="midfielders")
+        change_types = [perm.get_change_type() for perm in permissions_for_role]
         self.assertCountEqual(change_types, ['AddOwnerRoleStateChange']) 
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
-            role_name="spirit players", community=self.instance)
-        change_types = [perm.short_change_type() for perm in permissions_for_role]
+            role_name="spirit players")
+        change_types = [perm.get_change_type() for perm in permissions_for_role]
         self.assertCountEqual(change_types, ['AddGovernorStateChange']) 
 
     def test_adding_permissions_actually_works(self):
@@ -1728,7 +1722,7 @@ class PermissionFormTest(DataTestCase):
         # specific permission overriding it.
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.aubrey.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange'])
 
         aubrey_cc.add_people_to_role(role_name="midfielders", people_to_add=[self.users.sully.pk])
@@ -1838,7 +1832,7 @@ class MetaPermissionsFormTest(DataTestCase):
 
         permissions_for_actor = self.metaClient.get_permissions_associated_with_actor(
             actor=self.users.jj.pk)
-        self.assertEqual(permissions_for_actor[0].short_change_type(), 'AddActorToPermissionStateChange')
+        self.assertEqual(permissions_for_actor[0].get_change_type(), 'AddActorToPermissionStateChange')
         self.assertEqual(permissions_for_actor[0].get_permitted_object(), self.target_permission)
 
         # Now JJ can give Tobin permission to add people to roles.
@@ -1860,19 +1854,19 @@ class MetaPermissionsFormTest(DataTestCase):
 
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.tobin.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.crystal.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ['AddPeopleToRoleStateChange'])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.pinoe.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, [])
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.jj.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, [])
 
     def test_removing_metapermission_removes_access_to_permission(self):
@@ -1915,7 +1909,7 @@ class MetaPermissionsFormTest(DataTestCase):
 
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.christen.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, [])
 
     def test_adding_metapermission_to_nonexistent_permission(self):
@@ -1952,7 +1946,7 @@ class MetaPermissionsFormTest(DataTestCase):
         self.metaClient = PermissionResourceClient(actor=self.users.pinoe, target=remove_permission[0])
         perms = self.metaClient.get_permissions_on_object(object=remove_permission[0])
         self.assertEqual(len(perms), 1)
-        self.assertEqual(perms[0].short_change_type(), "AddActorToPermissionStateChange")
+        self.assertEqual(perms[0].get_change_type(), "AddActorToPermissionStateChange")
 
         # JJ can add Crystal to the permission "remove people from role".
         self.permissions_data["14~individuals"] = [self.users.crystal.pk]
@@ -1963,7 +1957,7 @@ class MetaPermissionsFormTest(DataTestCase):
 
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.crystal.pk)
-        change_types = [perm.short_change_type() for perm in permissions_for_actor]
+        change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, ["RemovePeopleFromRoleStateChange", 
             "AddPeopleToRoleStateChange"])
 

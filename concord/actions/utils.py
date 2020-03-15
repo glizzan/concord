@@ -11,14 +11,14 @@ def can_jsonify(obj):
 
 def get_state_change_object_given_name(state_change_name):
 
-    import_elements = state_change_name.split(".")
+    concord, app_name, state_changes, object_name = state_change_name.split(".")
 
-    package_name = ".".join(import_elements[:2])   # eg concord.communities
-    relative_import = ".".join(import_elements[1:3])   # eg communites.state_changes
-    state_change_object_name = import_elements[3]
+    package_to_anchor_to = ".".join([concord, app_name])
+    module_to_import = "." + state_changes  # note initial period
 
     import importlib, inspect
-    state_changes_module = importlib.import_module(relative_import, package=package_name)
-    for member_tuple in inspect.getmembers(state_changes_module):  #member_tuple is (name, value) tuple
-        if member_tuple[0] == state_change_object_name:
+    state_changes_module = importlib.import_module(module_to_import, package=package_to_anchor_to)
+    for member_tuple in inspect.getmembers(state_changes_module):  
+        #member_tuple is (name, value) tuple
+        if member_tuple[0] == object_name:
             return member_tuple[1]

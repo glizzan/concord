@@ -81,7 +81,7 @@ class PermissionsItem(PermissionedModel):
 
     def full_description(self):
         """Helper method for displaying permsisions."""
-        from actions.utils import get_state_change_object_given_name
+        from concord.actions.utils import get_state_change_object_given_name
         state_change_object = get_state_change_object_given_name(self.change_type)
         configuration = self.get_configuration()
         if hasattr(state_change_object, "get_uninstantiated_description"):
@@ -89,9 +89,6 @@ class PermissionsItem(PermissionedModel):
         return state_change_object.description.lower()
 
     # Get change type and configuration info (replace with customfield?)
-
-    def short_change_type(self):
-        return self.change_type.split(".")[-1]
 
     def match_change_type(self, change_type):
         return self.change_type == change_type

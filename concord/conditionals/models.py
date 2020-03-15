@@ -67,7 +67,7 @@ class ApprovalCondition(ConditionModel):
     descriptive_name = "Approval Condition"
     verb_name = "approve"
 
-    approved = models.BooleanField(null=True)  # Null by default
+    approved = models.BooleanField(null=True, blank=True)  # Null by default
     self_approval_allowed = models.BooleanField(default=False)
 
     def condition_status(self):
@@ -85,7 +85,7 @@ class ApprovalCondition(ConditionModel):
 
     @classmethod
     def get_configurable_fields(cls):
-        return {"self_approval_allowed": BooleanField}
+        return {"self_approval_allowed": "Boolean"}
 
     def description_for_passing_condition(self):
         return "one person needs to approve this action"
@@ -124,10 +124,10 @@ class VoteCondition(ConditionModel):
     @classmethod
     def get_configurable_fields(cls):
         return {
-            "allow_abstain": BooleanField,
-            "require_majority": BooleanField,
-            "publicize_votes": BooleanField,
-            "voting_period": FloatField
+            "allow_abstain": "Boolean",
+            "require_majority": "Boolean",
+            "publicize_votes": "Boolean",
+            "voting_period": "Float"
         }
 
     def current_results(self):

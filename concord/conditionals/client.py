@@ -71,6 +71,9 @@ class BaseConditionalClient(BaseClient):
             condition_items = VoteCondition.objects.filter(action=action_pk)
         return condition_items[0] if condition_items else None
 
+    def get_conditions_given_targets(self, *, target_pks: list):
+        return ConditionTemplate.objects.filter(permission__in=target_pks)
+
     def get_vote_condition_as_client(self, *, pk: int) -> VoteConditionClient:
         vote_object = VoteCondition.objects.get(pk=pk)
         return VoteConditionClient(target=vote_object, actor=self.actor)
@@ -159,7 +162,7 @@ class PermissionConditionalClient(BaseConditionalClient):
 
     def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
-        # FIXME: It would be nice to be able to pass in the ConditionTemplate 
+        # FIXME: It would be nice to be able to pass in the ConditionTemplate
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data)
         return self.create_and_take_action(change)

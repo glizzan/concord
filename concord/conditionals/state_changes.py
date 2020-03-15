@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.state_changes import BaseStateChange
 from concord.conditionals.models import ConditionTemplate
+from concord.conditionals.utils import validate_condition
 
 
 ###################################
@@ -34,6 +35,11 @@ class AddConditionStateChange(BaseStateChange):
         return "added condition %s to %s" % (self.condition_type, self.target_type)
 
     def validate(self, actor, target):
+        is_valid, error_log = validate_condition(self.condition_type, self.condition_data,
+            self.permission_data, self.target_type)
+        if not is_valid:
+            self.set_validation_error(message=error_log)
+            return False
         return True
 
     def implement(self, actor, target):

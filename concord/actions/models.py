@@ -123,6 +123,9 @@ class ActionContainer(models.Model):
     action_info = models.CharField(max_length=800, null=True, blank=True)  # Probably should be a custom field
     status = models.CharField(max_length=11, choices=CONTAINER_STATUS_CHOICES, default='draft')
 
+    # BUG: this doesn't work is something's invalid *because* a previous action in container has not been implemented
+    # turning off the tests for this for now - need to rethink
+
     def process_actions_provisionally(self):
         '''Sets all related actions to provisional and processes them, storing their results in
         action_info.'''

@@ -46,6 +46,7 @@ class BaseClient(object):
     def create_and_take_action(self, change):
         
         self.validate_target()
+
         action = Action.objects.create(actor=self.actor, target=self.target, 
                 change=change)
         

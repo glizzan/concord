@@ -475,6 +475,17 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return True, None
 
     def validate(self, actor, target):
+        if not target.roles.is_role(self.role_name):
+            self.set_validation_error("Role " + self.role_name + " does not exist")
+            return False
+        people_already_in_role = []
+        for person in self.people_to_add:
+            if target.roles.has_specific_role(self.role_name, person):
+                people_already_in_role.append(str(person))
+        if people_already_in_role:
+            message = "Users %s already in role %s " % (", ".join(people_already_in_role), self.role_name)
+            self.set_validation_error(message)
+            return False
         return True
 
     def implement(self, actor, target):

@@ -32,8 +32,7 @@ class ConditionModel(PermissionedModel):
     @abstractmethod
     def get_configurable_fields(cls):
         '''All conditions must supply their own version of the get_configurable_fields method, 
-        which should return a dict with field names as keys and field objects (ie BooleanField) 
-        as values.'''
+        which should return a dict with field names as keys and field objects as values.'''
         return {}
     
     @classmethod
@@ -85,7 +84,7 @@ class ApprovalCondition(ConditionModel):
 
     @classmethod
     def get_configurable_fields(cls):
-        return {"self_approval_allowed": "Boolean"}
+        return {"self_approval_allowed": getattr(cls, "self_approval_allowed")}
 
     def description_for_passing_condition(self):
         return "one person needs to approve this action"
@@ -124,10 +123,10 @@ class VoteCondition(ConditionModel):
     @classmethod
     def get_configurable_fields(cls):
         return {
-            "allow_abstain": "Boolean",
-            "require_majority": "Boolean",
-            "publicize_votes": "Boolean",
-            "voting_period": "Float"
+            "allow_abstain": getattr(cls, "allow_abstain"),
+            "require_majority": getattr(cls, "require_majority"),
+            "publicize_votes": getattr(cls, "publicize_votes"),
+            "voting_period": getattr(cls, "voting_period")
         }
 
     def current_results(self):
@@ -279,6 +278,13 @@ class ConditionTemplate(PermissionedModel):
                 "target_type": self.target_type
         })
 
-
+    def get_condition_type_class(self, lookup_string=None):
+        # lookup_string is used when doing an uninstantiated lookup
+        condition_dict = {
+            "approvalcondition": ApprovalCondition,
+            "votecondition": VoteCondition
+        }
+        condition = lookup_string if lookup_string else self.condition_type
+        return condition_dict[condition]
 
 

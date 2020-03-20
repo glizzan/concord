@@ -16,14 +16,19 @@ def validate_condition(condition_type, condition_data, permission_data, target_t
         condition_model = BaseConditionalClient(system=True).condition_lookup_helper(lookup_string=condition_type)
     except:
         is_valid = False
-        error_log += "Condition type ", condition_type, " is not a valid type. "
+        error_log += "Condition type " + condition_type + " is not a valid type. "
         return is_valid, error_log  # Not worth continuing to collect errors without a condition type
 
     # validate condition data
     try:
-        reformatted_data = json.loads(condition_data)
-        reformatted_data["action"] = 1  # fake action data to prevent a validation error
-        condition_instance = condition_model(**reformatted_data)
+        import copy
+        condition_data_to_validate = copy.deepcopy(condition_data)
+        if type(condition_data) == str:
+            condition_data = json.loads(condition_data)
+        condition_data["action"] = 66666  # FIXME: fake to prevent a validation error but may cause unique error with more data
+        # FIXME: shouldn't have to a) make a deep copy and b) fake the action field to validate :/
+        
+        condition_instance = condition_model(**condition_data)
         condition_instance.full_clean()
     except ValidationError as error:
         is_valid = False

@@ -83,11 +83,7 @@ class BaseConditionalClient(BaseClient):
         return ApprovalConditionClient(target=approval_object, actor=self.actor)
 
     def condition_lookup_helper(self, *, lookup_string: str) -> Model:
-        condition_dict = {
-            "approvalcondition": ApprovalCondition,
-            "votecondition": VoteCondition
-        }
-        return condition_dict[lookup_string]
+        return ConditionTemplate().get_condition_type_class(lookup_string=lookup_string)
 
     def get_possible_conditions(self, *, formatted_as="objects"):
         
@@ -169,6 +165,7 @@ class PermissionConditionalClient(BaseConditionalClient):
 
     def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
         condition_data: Dict = None) -> Tuple[int, Any]:
+        # FIXME: this unnecessarily requires target (a permission) to be set 
         change = sc.ChangeConditionStateChange(condition_pk=condition_pk,
             permission_data=permission_data, condition_data=condition_data)
         return self.create_and_take_action(change)

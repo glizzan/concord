@@ -302,9 +302,7 @@ class Changes(object):
     class Communities(object):
 
         ChangeName = 'concord.communities.state_changes.ChangeNameStateChange'
-        AddMember = 'concord.communities.state_changes.AddMemberStateChange'
         AddMembers = 'concord.communities.state_changes.AddMembersStateChange'
-        RemoveMember = 'concord.communities.state_changes.RemoveMemberStateChange'
         RemoveMembers = 'concord.communities.state_changes.RemoveMembersStateChange'
         AddGovernor = 'concord.communities.state_changes.AddGovernorStateChange'
         RemoveGovernor = 'concord.communities.state_changes.RemoveGovernorStateChange'

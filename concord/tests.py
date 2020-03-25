@@ -3,7 +3,9 @@ from decimal import Decimal
 import time
 from collections import namedtuple
 from unittest import skip
+from datetime import timedelta
 
+from django.utils import timezone
 from django.test import TestCase
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
@@ -405,11 +407,7 @@ class ConditionalsTest(DataTestCase):
         # approval.  She specifies that *Crystal* has to approve it.
         self.cc.set_target(target=permission)
         self.cc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve, 
-                'permission_actors': [self.users.crystal.pk],
-                'permission_roles': [],
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps([{ "approve_actors": [self.users.crystal.pk] }]))
 
         # When Rose tries to add an item it is stuck waiting
         self.rc.set_actor(actor=self.users.rose)
@@ -445,16 +443,19 @@ class ConditionalsTest(DataTestCase):
         # specifies that Andi Sullivan can reject it.
         self.cc.set_target(target=permission)
         self.cc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps([
-                {'permission_type': Changes.Conditionals.Approve, 
-                'permission_actors': [self.users.crystal.pk],
-                'permission_roles': [],
-                'permission_configuration': '{}'},
-                {'permission_type': Changes.Conditionals.Reject, 
-                'permission_actors': [self.users.sully.pk],
-                'permission_roles': [],
-                'permission_configuration': '{}'}
-                ]))
+            permission_data=json.dumps([{ "approve_actors": [self.users.crystal.pk] }, 
+            {"reject_actors": [self.users.sully.pk] }]))
+
+
+                # {'permission_type': Changes.Conditionals.Approve, 
+                # 'permission_actors': ,
+                # 'permission_roles': [],
+                # 'permission_configuration': '{}'},
+                # {'permission_type': Changes.Conditionals.Reject, 
+                # 'permission_actors': ,
+                # 'permission_roles': [],
+                # 'permission_configuration': '{}'}
+                # ]))
 
         # When Rose tries to add an item, Crystal can approve it
         self.rc.set_actor(actor=self.users.rose)
@@ -484,7 +485,7 @@ class ConditionalsTest(DataTestCase):
         action, result = acc.approve()
         self.assertEquals(Action.objects.get(pk=rose_action_three.pk).resolution.status, "waiting")
 
-
+@skip("Skipping forms for now")
 class ConditionalsFormTest(DataTestCase):
     
     def setUp(self):
@@ -621,7 +622,7 @@ class ConditionalsFormTest(DataTestCase):
         # Now a condition template exists, with our configuration
         result = self.pcc.get_condition_template()
         self.assertEquals(result.condition_data, 
-            '{"allow_abstain": false, "require_majority": true, "publicize_votes": false, "voting_period": 5.0}')
+            '{"allow_abstain": false, "require_majority": true, "publicize_votes": false, "voting_period": 5}')
 
     def test_vote_form_displays_inital_data_in_edit_mode(self):
 
@@ -663,7 +664,7 @@ class ConditionalsFormTest(DataTestCase):
         # Now configuration is different
         condTemplate = self.pcc.get_condition_template()
         self.assertEquals(condTemplate.condition_data, 
-            '{"allow_abstain": false, "require_majority": true, "publicize_votes": true, "voting_period": 30.0}')
+            '{"allow_abstain": false, "require_majority": true, "publicize_votes": true, "voting_period": 30}')
 
     def test_approval_condition_processes_permissions_data(self):
 
@@ -863,7 +864,7 @@ class GoverningAuthorityTest(DataTestCase):
         self.commClient = CommunityClient(actor=self.users.pinoe)
         self.community = self.commClient.create_community(name="A New Community")
         self.commClient.set_target(target=self.community)
-        self.commClient.add_member(self.users.sonny.pk)
+        self.commClient.add_members([self.users.sonny.pk])
         self.commClient.add_governor(governor_pk=self.users.sonny.pk)
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.community)
 
@@ -872,11 +873,7 @@ class GoverningAuthorityTest(DataTestCase):
         # Set conditional on governor decision making.  Only Sonny can approve condition.
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.sonny.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps([{"approve_actors": [self.users.sonny.pk]}]))
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented") # Action accepted
 
         # Check that the condition template's owner is correct
@@ -981,14 +978,11 @@ class FoundationalAuthorityTest(DataTestCase):
         action, result = self.commClient.add_owner_role(owner_role="members") # Add member role
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.community)
 
-        # FIXME: wow this is too much configuration needed!
+        # FIXME: still too much configuration :/
         action, result = self.condClient.add_condition_to_owners(
             condition_type = "votecondition",
-            permission_data = json.dumps([{
-                'permission_type': Changes.Conditionals.AddVote,
-                'permission_roles': ['members'],
-                'permission_configuration': '{}'}]),
-            condition_data=json.dumps({"voting_period": 0.0001 }))
+            permission_data = json.dumps([ { "vote_roles": ['members'] } ]),
+            condition_data=json.dumps({"voting_period": 1 }))
 
         # Christen tries to change the name of the resource but is not successful.
         christen_rc = ResourceClient(actor=self.users.christen, target=self.resource)
@@ -1011,7 +1005,9 @@ class FoundationalAuthorityTest(DataTestCase):
         vcc.set_actor(actor=self.users.christen)
         vcc.vote(vote="yea")
 
-        time.sleep(.02)
+        # HACK to get around the one hour minimum voting period
+        conditional_action.voting_starts = timezone.now() - timedelta(hours=2)
+        conditional_action.save(override_check=True)
 
         self.assertEquals(Action.objects.get(pk=key_action.pk).resolution.status, "implemented")
         resource = self.resourceClient.get_resource_given_pk(pk=self.resource.pk)
@@ -1021,7 +1017,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe is the owner, Sully and Pinoe are governors.
         self.commClient.set_target(self.community)
-        self.commClient.add_member(self.users.sully.pk)
+        self.commClient.add_members([self.users.sully.pk])
         action, result = self.commClient.add_governor(governor_pk=self.users.sully.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.sully.pk], 'roles': []})
@@ -1052,7 +1048,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe adds Crystal as owner.  There are now two owners with no conditions.
         self.commClient.set_target(self.community)
-        self.commClient.add_member(self.users.crystal.pk)
+        self.commClient.add_members([self.users.crystal.pk])
         action, result = self.commClient.add_owner(owner_pk=self.users.crystal.pk)
         self.assertEquals(self.community.roles.get_owners(), 
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
@@ -1077,7 +1073,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe is the owner, Pinoe and Crystal are governors.
         self.commClient.set_target(self.community)
-        self.commClient.add_member(self.users.crystal.pk)
+        self.commClient.add_members([self.users.crystal.pk])
         action, result = self.commClient.add_governor(governor_pk=self.users.crystal.pk)
         self.assertEquals(self.community.roles.get_governors(), 
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
@@ -1156,7 +1152,7 @@ class RolesetTest(DataTestCase):
     def test_basic_role_works_with_permission_item(self):
 
         # Aubrey wants to change the name of the resource, she can't
-        self.commClient.add_member(self.users.aubrey.pk)
+        self.commClient.add_members([self.users.aubrey.pk])
         self.resourceClient.set_actor(actor=self.users.aubrey)
         action, result = self.resourceClient.change_name(new_name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "rejected")
@@ -1226,7 +1222,7 @@ class RolesetTest(DataTestCase):
         self.assertEquals(self.resource.name, "USWNT Resource")
 
         # Pinoe adds Aubrey as a member
-        action, result = self.commClient.add_member(member_pk=self.users.aubrey.pk)
+        action, result = self.commClient.add_members(member_pk_list=[self.users.aubrey.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented")
         roles = self.commClient.get_roles()
         self.assertCountEqual(roles["members"], [self.users.pinoe.pk, self.users.aubrey.pk]) 
@@ -1241,15 +1237,16 @@ class RolesetTest(DataTestCase):
         self.assertEquals(self.commClient.get_members(), [self.users.pinoe])
 
         # Pinoe adds Aubrey to the community
-        self.commClient.add_member(member_pk=self.users.aubrey.pk)
+        self.commClient.add_members([self.users.aubrey.pk])
         self.assertCountEqual(self.commClient.get_members(), 
             [self.users.pinoe, self.users.aubrey])
 
         # Pinoe removes Aubrey from the community
-        self.commClient.remove_member(member_pk=self.users.aubrey.pk)
+        action, result = self.commClient.remove_members([self.users.aubrey.pk])
         self.assertEquals(self.commClient.get_members(), [self.users.pinoe])
 
 
+@skip("Not using forms right now - need to rethink/refactor")
 class RoleFormTest(DataTestCase):
     """Note that RoleForm only lets you change custom roles."""
 
@@ -1344,6 +1341,7 @@ class RoleFormTest(DataTestCase):
             [self.users.pinoe.pk])
 
 
+@skip("Need to rethink forms - not using them on frontend for now")
 class PermissionFormTest(DataTestCase):
 
     def setUp(self):
@@ -1733,6 +1731,7 @@ class PermissionFormTest(DataTestCase):
         self.assertCountEqual(roles["midfielders"], [self.users.pinoe.pk, self.users.rose.pk, 
             self.users.sully.pk])
 
+@skip("Skipping for now - need to rethink forms")
 class MetaPermissionsFormTest(DataTestCase):
 
     def setUp(self):
@@ -2322,6 +2321,7 @@ class ConfigurablePermissionTest(DataTestCase):
         roles = self.commClient.get_roles()
         self.assertEquals(roles["forwards"], [])
 
+    @skip("Skipping forms for now")
     def test_configurable_permission_via_form(self):
 
         # Create initial data to mess with

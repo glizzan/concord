@@ -2,6 +2,7 @@ import datetime
 import json
 import decimal
 from abc import abstractmethod
+from collections import namedtuple
 
 from django.db import models
 from django.utils import timezone
@@ -9,10 +10,12 @@ from django.urls import reverse
 from django.db.models.signals import post_save
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
 from concord.actions.models import PermissionedModel
 from concord.actions.client import ActionClient
 from concord.permission_resources.client import PermissionResourceClient
+from concord.actions.state_changes import Changes
 
 
 ##################################
@@ -60,6 +63,11 @@ class ConditionModel(PermissionedModel):
             display_permissions.append(permission.display_string())
         return display_permissions
 
+    @classmethod
+    def get_form_dict_for_field(cls, field):
+        return { 'name': field.field.name, 'type': field.field.__class__.__name__, 
+            'required': "required" if field.field.blank else "", 'value': field.field.default }
+
 
 class ApprovalCondition(ConditionModel):
 
@@ -84,7 +92,26 @@ class ApprovalCondition(ConditionModel):
 
     @classmethod
     def get_configurable_fields(cls):
-        return {"self_approval_allowed": getattr(cls, "self_approval_allowed")}
+        return {          
+            "self_approval_allowed": cls.get_form_dict_for_field(getattr(cls, "self_approval_allowed")),
+            "approve_roles" : { "name": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
+                "value": None, "field_name": "approve_roles" },
+            "approve_actors" : { "name": "People who can approve", "type": "PermissionActorField", "required": False, 
+                "value": None, "field_name": "approve_actors" },
+            "reject_roles" : { "name": "Roles who can reject", "type": "PermissionRoleField", "required": False, 
+                "value": None, "field_name": "reject_roles" },
+            "reject_actors": { "name": "People who can reject", "type": "PermissionActorField", "required": False, 
+                "value": None, "field_name": "reject_actors" }
+        }
+
+    def get_data_from_permission_field(self, field_name):
+        perm_dict = {
+            "approve_roles": Changes.Conditionals.Approve,
+            "approve_actors": Changes.Conditionals.Approve,
+            "reject_roles": Changes.Conditionals.Reject,
+            "reject_actors": Changes.Conditionals.Reject
+        }
+        return perm_dict[field_name], field_name.split("_")[1]
 
     def description_for_passing_condition(self):
         return "one person needs to approve this action"
@@ -117,17 +144,28 @@ class VoteCondition(ConditionModel):
     voted = models.CharField(max_length=500, default="[]")
 
     # voting period in hours, default is 168 hours aka one week
-    voting_starts = models.DateTimeField(auto_now_add=True)
-    voting_period = models.FloatField(default=168)
+    voting_starts = models.DateTimeField(default=timezone.now)
+    voting_period = models.IntegerField(default=168)
 
     @classmethod
     def get_configurable_fields(cls):
         return {
-            "allow_abstain": getattr(cls, "allow_abstain"),
-            "require_majority": getattr(cls, "require_majority"),
-            "publicize_votes": getattr(cls, "publicize_votes"),
-            "voting_period": getattr(cls, "voting_period")
+            "allow_abstain": cls.get_form_dict_for_field(getattr(cls, "allow_abstain")),
+            "require_majority": cls.get_form_dict_for_field(getattr(cls, "require_majority")),
+            "publicize_votes": cls.get_form_dict_for_field(getattr(cls, "publicize_votes")),
+            "voting_period": cls.get_form_dict_for_field(getattr(cls, "voting_period")),
+            "vote_roles" : { "name": "Roles who can vote", "type": "PermissionRoleField", 
+                "required": False, "value": None, "field_name": "vote_roles" },
+            "vote_actors": { "name": "People who can vote", "type": "PermissionActorField", 
+                "required": False, "value": None, "field_name": "vote_actors" },
         }
+
+    def get_data_from_permission_field(self, field_name):
+        perm_dict = {
+            "vote_roles": Changes.Conditionals.AddVote,
+            "vote_actors": Changes.Conditionals.AddVote
+        }
+        return perm_dict[field_name], field_name.split("_")[1]
 
     def current_results(self):
         results = { "yeas": self.yeas, "nays": self.nays }
@@ -155,8 +193,8 @@ class VoteCondition(ConditionModel):
         self.voted = json.dumps(voted)
 
     def voting_time_remaining(self):
-        microseconds_passed = (timezone.now() - self.voting_starts).microseconds
-        hours_passed = microseconds_passed / 360000000
+        seconds_passed = (timezone.now() - self.voting_starts).total_seconds()
+        hours_passed = seconds_passed / 360
         return self.voting_period - hours_passed
 
     def voting_deadline(self):
@@ -187,11 +225,29 @@ class VoteCondition(ConditionModel):
             return self.current_standing()
         return "waiting"
 
+    def get_voting_period_in_units(self):
+        weeks = int(self.voting_period / 168)
+        time_remaining = self.voting_period - (weeks*168)
+        days = int(time_remaining / 24)
+        hours = time_remaining - (days*24)
+        return weeks, days, hours
+
+    def describe_voting_period(self):
+        weeks, days, hours = self.get_voting_period_in_units()
+        time_pieces = []
+        if weeks > 0:
+            time_pieces.append("%d weeks" % weeks if weeks > 1 else "1 week")
+        if days > 0:
+            time_pieces.append("%d days" % days if days > 1 else "1 day")
+        if hours > 0:
+            time_pieces.append("%d hours" % hours if hours > 1 else "1 hour")
+        return ", ".join(time_pieces)
+
     def description_for_passing_condition(self):
-        string = "a group of people must vote by %s" % self.voting_deadline().strftime("%Y-%m-%d at %H:%M:%S")
+        # string = "a group of people must vote by %s" % self.voting_deadline().strftime("%Y-%m-%d at %H:%M:%S")
         if self.require_majority:
-            string += "(a majority of voters is required)"
-        return string
+            return "a majority of people vote for it within %s" % self.describe_voting_period()
+        return "a plurality of people vote for it within %s" % self.describe_voting_period()
 
     def description_status(self):
 
@@ -287,4 +343,67 @@ class ConditionTemplate(PermissionedModel):
         condition = lookup_string if lookup_string else self.condition_type
         return condition_dict[condition]
 
+    def get_condition_description(self):
+        condition_model = self.get_condition_type_class()
+        condition_instance = condition_model(json.loads(self.condition_data))
+        return condition_instance.description_for_passing_condition()
 
+    def get_permission_data_options(self):
+        return self.get_condition_type_class().get_condition_permissions()
+
+    def get_permission_data(self):
+        return json.loads(self.permission_data)
+
+    def set_permission_data(self, permission_data):
+        self.permission_data = json.dumps(permission_data)
+        pass
+
+    def validate_permission_data_formatting(self, data_dict):
+        if not (hasattr(data_dict, "roles") or hasattr(data_dict, "actors")):
+            return False
+        if hasattr(data_dict, "roles"):
+            if type(data_dict["roles"]) != list:
+                return False
+        if hasattr(data_dict, "actors"):
+            if type(data_dict["roles"]) != list:
+                return False
+        return True
+
+    def has_actor_or_role(self, data_dict):
+        if self.validate_permission_data_formatting(data_dict):
+            if hasattr(data_dict, "roles") and len(data_dict["roles"]) > 0:
+                return True
+            if hasattr(data_dict, "actors") and len(data_dict["actors"]) > 0:
+                return True
+        return False
+
+    def validate_permission_data(self, permission_data):
+        """Permission data should be a dict with the following format:
+        { "ApprovalStateChange": { "roles": [], "actors": [] }, "RejectStateChange: { "roles": [], "actors": [] } } """
+
+        for change_type, change_info in self.get_permission_data_options.items():
+            if change_info['required']:
+                if change_type not in permission_data:
+                    raise ValidationError("Permission " + change_type + " is required but was not supplied.")
+                if not self.has_actor_or_role(permission_data[change_type]):
+                    raise ValidationError("Permission " + change_type + " is required, so at least one actor or role must be specified.")
+            else:
+                if not self.validate_permission_data_formatting(permission_data[change_type]):
+                    raise ValidationError("Permission " + change_type + " is incorrectly formatted.")
+
+    def get_configurable_fields_with_data(self):
+
+        condition_data = json.loads(self.condition_data)
+        permission_data = json.loads(self.permission_data) if self.permission_data else {}
+        
+        condition = self.get_condition_type_class()
+        fields = condition.get_configurable_fields()
+        for field_name, field in fields.items():
+            if field["type"] in ["PermissionRoleField", "PermissionActorField"]:
+                if field["field_name"] in permission_data:
+                    field["value"] = permission_data[field["field_name"]]
+            else:
+                if field_name in condition_data:
+                    field["value"] = condition_data[field_name]
+
+        return fields

@@ -8,6 +8,7 @@ from concord.actions.models import Action  # Just needed for type hinting
 
 from concord.conditionals.models import ApprovalCondition, VoteCondition, ConditionTemplate
 from concord.conditionals import state_changes as sc
+from concord.conditionals import utils
 
 
 """The conditionals app is one of the more confusing core apps, and the client is fairly confusing 
@@ -106,6 +107,7 @@ class BaseConditionalClient(BaseClient):
         condition_item = conditionModel.objects.create(action=action.pk, 
                 owner=condition_template.get_owner(), **data_dict)
 
+        # FIXME: CPREFACTOR
         # Add permission(s)
         if condition_template.permission_data is not None:
             permissions_dict = json.loads(condition_template.permission_data)
@@ -128,7 +130,15 @@ class BaseConditionalClient(BaseClient):
             action=action.pk, **kwargs)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
-    # Read methods which require target to be set
+    # FIXME: It would be nice to be able to pass in the ConditionTemplate, and/or to be able to pass in
+    # condition kwargs directly
+    def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
+            condition_data: Dict = None, target_type: str = None):
+        condition_data = utils.reformat_condition_data(condition_data)
+        permission_data = utils.reformat_permission_data(permission_data)
+        change = sc.AddConditionStateChange(condition_type=condition_type,
+            permission_data=permission_data, condition_data=condition_data, target_type=target_type)
+        return self.create_and_take_action(change)
 
     # Stage changes
 
@@ -153,15 +163,6 @@ class PermissionConditionalClient(BaseConditionalClient):
             return result[0]
         return
         # FIXME: should probably return empty list, but that breaks a bunch of tests, so need to refactor
-
-    # State changes
-
-    def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
-            condition_data: Dict = None) -> Tuple[int, Any]:
-        # FIXME: It would be nice to be able to pass in the ConditionTemplate
-        change = sc.AddConditionStateChange(condition_type=condition_type,
-            permission_data=permission_data, condition_data=condition_data)
-        return self.create_and_take_action(change)
 
     def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
         condition_data: Dict = None) -> Tuple[int, Any]:
@@ -222,17 +223,13 @@ class CommunityConditionalClient(BaseConditionalClient):
 
     def add_condition_to_governors(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
-        change = sc.AddConditionStateChange(condition_type=condition_type,
-            permission_data=permission_data, condition_data=condition_data, 
-            target_type="gov")
-        return self.create_and_take_action(change)        
+            return self.add_condition(condition_type=condition_type, condition_data=condition_data,
+                permission_data=permission_data, target_type="gov")
 
     def add_condition_to_owners(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:
-        change = sc.AddConditionStateChange(condition_type=condition_type,
-            permission_data=permission_data, condition_data=condition_data, 
-            target_type="own")
-        return self.create_and_take_action(change) 
+            return self.add_condition(condition_type=condition_type, condition_data=condition_data,
+                permission_data=permission_data, target_type="own")
 
 
 

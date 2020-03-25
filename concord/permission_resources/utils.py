@@ -101,13 +101,14 @@ def create_permission_outside_pipeline(permission_dict, condition_item, conditio
     '''Helper method used internally to bypass permissions pipeline when creating 
     a permission.'''
     from concord.permission_resources.models import PermissionsItem
-    permission = PermissionsItem(permitted_object=condition_item)            
-    if "permission_actors" in permission_dict:
-        permission.actors.add_actors(actors=permission_dict["permission_actors"])
-    if "permission_roles" in permission_dict:
-        permission.roles.add_roles(role_list=permission_dict["permission_roles"])
-    permission.change_type = permission_dict["permission_type"]
-    permission.configuration = permission_dict["permission_configuration"]
+    permission = PermissionsItem(permitted_object=condition_item)
+    for field_name, field_value in permission_dict.items():
+        change_type, perm_type = condition_item.get_data_from_permission_field(field_name)
+        permission.change_type = change_type
+        if perm_type == "roles":
+            permission.roles.add_roles(role_list=field_value)
+        if perm_type == "actors":
+            permission.actors.add_actors(actors=field_value)
     permission.owner = condition_template.get_owner()
     permission.save()
 

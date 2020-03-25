@@ -37,35 +37,6 @@ class ChangeNameStateChange(BaseStateChange):
         return target
 
 
-class AddMemberStateChange(BaseStateChange):
-    description = "Add member to community"
-
-    def __init__(self, member_pk):
-        self.member_pk = member_pk
-
-    @classmethod
-    def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
-
-    def description_present_tense(self):
-        return "add %s as member in" % (self.member_pk)  
-
-    def description_past_tense(self):
-        return "added %s as member in" % (self.member_pk)  
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
-
-    def implement(self, actor, target):
-        target.roles.add_member(self.member_pk) 
-        target.save()
-        return target
-
-
 class AddMembersStateChange(BaseStateChange):
     description = "Add members to community"
 
@@ -95,11 +66,11 @@ class AddMembersStateChange(BaseStateChange):
         return target
 
 
-class RemoveMemberStateChange(BaseStateChange):
-    description = "Remove mmember from community"
+class RemoveMembersStateChange(BaseStateChange):
+    description = "Remove members from community"
 
-    def __init__(self, member_pk):
-        self.member_pk = member_pk
+    def __init__(self, member_pk_list):
+        self.member_pk_list = member_pk_list
 
     @classmethod
     def get_allowable_targets(cls):
@@ -107,19 +78,33 @@ class RemoveMemberStateChange(BaseStateChange):
         return [Community]
 
     def description_present_tense(self):
-        return "remove %s as member in" % (self.member_pk)  
+        return "remove %s members from " % (", ".join(self.member_pk_list))  
 
     def description_past_tense(self):
-        return "removed %s as member in" % (self.member_pk)  
+        return "removed %s members from " % (", ".join(self.member_pk_list))  
 
     def validate(self, actor, target):
-        """
-        put real logic here
-        """
+        governor_list, owner_list = [], []
+        for pk in self.member_pk_list:
+            is_governor, result = target.roles.is_governor(pk)
+            if is_governor:
+                governor_list.append(str(pk))
+            is_owner, result = target.roles.is_owner(pk)
+            if is_owner:
+                owner_list.append(str(pk))
+        if governor_list or owner_list:
+            message = "Cannot remove members as some are owners or governors. Owners: %s, Governors: %s " % (
+                ", ".join(owner_list), ", ".join(governor_list))
+            self.set_validation_error(message)
+            return False
         return True
 
     def implement(self, actor, target):
-        target.roles.remove_member(self.member_pk) 
+        # Remove members from custom roles
+        for role_name, role_members in target.roles.get_custom_roles():
+            target.roles.remove_people_from_role(role_name, self.member_pk_list)
+        # Now remove them from members      
+        target.roles.remove_members(self.member_pk_list) 
         target.save()
         return target
 

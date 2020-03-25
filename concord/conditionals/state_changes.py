@@ -35,6 +35,7 @@ class AddConditionStateChange(BaseStateChange):
         return "added condition %s to %s" % (self.condition_type, self.target_type)
 
     def validate(self, actor, target):
+        # FIXME: CPREFACTOR
         is_valid, error_log = validate_condition(self.condition_type, self.condition_data,
             self.permission_data, self.target_type)
         if not is_valid:
@@ -43,6 +44,11 @@ class AddConditionStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
+        # FIXME: CPREFACTOR <-- need to add permission_data differently, maybe thru method call
+        if type(self.condition_data) is not str:
+            self.condition_data = json.dumps(self.condition_data)
+        if type(self.permission_data) is not str:
+            self.permission_data = json.dumps(self.permission_data)
         return ConditionTemplate.objects.create(
             owner = target.get_owner(), 
             condition_type=self.condition_type,
@@ -81,6 +87,7 @@ class RemoveConditionStateChange(BaseStateChange):
         return True
 
 
+# FIXME: CPREFACTOR
 class ChangeConditionStateChange(BaseStateChange):
     description = "Change condition"
 

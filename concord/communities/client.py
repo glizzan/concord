@@ -107,16 +107,12 @@ class CommunityClient(BaseClient):
     def make_self_owned(self):
         pass
 
-    def add_member(self, member_pk: int) -> Tuple[int, Any]:
-        change = sc.AddMemberStateChange(member_pk=member_pk)
-        return self.create_and_take_action(change)
-
     def add_members(self, member_pk_list: list) -> Tuple[int, Any]:
         change = sc.AddMembersStateChange(member_pk_list=member_pk_list)
         return self.create_and_take_action(change)
 
-    def remove_member(self, member_pk: int) -> Tuple[int, Any]:
-        change = sc.RemoveMemberStateChange(member_pk=member_pk)
+    def remove_members(self, member_pk_list: list) -> Tuple[int, Any]:
+        change = sc.RemoveMembersStateChange(member_pk_list=member_pk_list)
         return self.create_and_take_action(change)
 
     def add_governor(self, *, governor_pk: int) -> Tuple[int, Any]:

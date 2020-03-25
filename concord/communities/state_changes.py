@@ -101,7 +101,7 @@ class RemoveMembersStateChange(BaseStateChange):
 
     def implement(self, actor, target):
         # Remove members from custom roles
-        for role_name, role_members in target.roles.get_custom_roles():
+        for role_name, role_members in target.roles.get_custom_roles().items():
             target.roles.remove_people_from_role(role_name, self.member_pk_list)
         # Now remove them from members      
         target.roles.remove_members(self.member_pk_list) 

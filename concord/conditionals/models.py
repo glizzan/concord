@@ -93,14 +93,15 @@ class ApprovalCondition(ConditionModel):
     @classmethod
     def get_configurable_fields(cls):
         return {          
-            "self_approval_allowed": cls.get_form_dict_for_field(getattr(cls, "self_approval_allowed")),
-            "approve_roles" : { "name": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
+            "self_approval_allowed": { "display": "Can individuals approve their own actions?",
+                **cls.get_form_dict_for_field(getattr(cls, "self_approval_allowed"))},
+            "approve_roles" : { "display": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
                 "value": None, "field_name": "approve_roles" },
-            "approve_actors" : { "name": "People who can approve", "type": "PermissionActorField", "required": False, 
+            "approve_actors" : { "display": "People who can approve", "type": "PermissionActorField", "required": False, 
                 "value": None, "field_name": "approve_actors" },
-            "reject_roles" : { "name": "Roles who can reject", "type": "PermissionRoleField", "required": False, 
+            "reject_roles" : { "display": "Roles who can reject", "type": "PermissionRoleField", "required": False, 
                 "value": None, "field_name": "reject_roles" },
-            "reject_actors": { "name": "People who can reject", "type": "PermissionActorField", "required": False, 
+            "reject_actors": { "display": "People who can reject", "type": "PermissionActorField", "required": False, 
                 "value": None, "field_name": "reject_actors" }
         }
 
@@ -150,13 +151,17 @@ class VoteCondition(ConditionModel):
     @classmethod
     def get_configurable_fields(cls):
         return {
-            "allow_abstain": cls.get_form_dict_for_field(getattr(cls, "allow_abstain")),
-            "require_majority": cls.get_form_dict_for_field(getattr(cls, "require_majority")),
-            "publicize_votes": cls.get_form_dict_for_field(getattr(cls, "publicize_votes")),
-            "voting_period": cls.get_form_dict_for_field(getattr(cls, "voting_period")),
-            "vote_roles" : { "name": "Roles who can vote", "type": "PermissionRoleField", 
+            "allow_abstain": { "display": "Let people abstain from voting?",
+                **cls.get_form_dict_for_field(getattr(cls, "allow_abstain")) },
+            "require_majority": { "display": "Require a majority rather than a plurality to pass?",
+                **cls.get_form_dict_for_field(getattr(cls, "require_majority")) },
+            "publicize_votes": { "display": "Publicize peoples' votes?",
+                **cls.get_form_dict_for_field(getattr(cls, "publicize_votes")) },
+            "voting_period":  { "display": "How long should the vote go on, in hours?",
+                ** cls.get_form_dict_for_field(getattr(cls, "voting_period")) },
+            "vote_roles" : { "display": "Roles who can vote", "type": "PermissionRoleField", 
                 "required": False, "value": None, "field_name": "vote_roles" },
-            "vote_actors": { "name": "People who can vote", "type": "PermissionActorField", 
+            "vote_actors": { "display": "People who can vote", "type": "PermissionActorField", 
                 "required": False, "value": None, "field_name": "vote_actors" },
         }
 
@@ -395,9 +400,12 @@ class ConditionTemplate(PermissionedModel):
 
         condition_data = json.loads(self.condition_data)
         permission_data = json.loads(self.permission_data) if self.permission_data else {}
+
+        field_list = []        
         
         condition = self.get_condition_type_class()
         fields = condition.get_configurable_fields()
+
         for field_name, field in fields.items():
             if field["type"] in ["PermissionRoleField", "PermissionActorField"]:
                 if field["field_name"] in permission_data:
@@ -405,5 +413,6 @@ class ConditionTemplate(PermissionedModel):
             else:
                 if field_name in condition_data:
                     field["value"] = condition_data[field_name]
+            field_list.append(field)
 
-        return fields
+        return field_list

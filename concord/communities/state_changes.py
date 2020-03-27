@@ -1,5 +1,22 @@
 from concord.actions.state_changes import BaseStateChange
+from django.conf import settings
+from django.apps import apps
 
+
+def get_community_models():
+    """This helper method lets us indicate alternative community models as allowable targets for community actions."""
+
+    # first get default model
+    from concord.communities.models import Community
+    community_models = [Community]
+
+    # then get custom models added by third parties
+    if hasattr(settings, "ALTERNATIVE_COMMUNITY_MODELS"):
+        for model in settings.ALTERNATIVE_COMMUNITY_MODELS:
+            model_instance = apps.get_model(model["app_name"], model["model_name"])
+            community_models.append(model_instance)
+    return community_models
+    
 
 ###############################
 ### Community State Changes ###
@@ -13,8 +30,7 @@ class ChangeNameStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]    
+        return get_community_models()
 
     def description_present_tense(self):
         return "change name of community to %s" % (self.new_name)  
@@ -45,8 +61,7 @@ class AddMembersStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "add %s as members in" % (", ".join(self.member_pk_list))  
@@ -74,8 +89,7 @@ class RemoveMembersStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove %s members from " % (", ".join(self.member_pk_list))  
@@ -117,8 +131,7 @@ class AddGovernorStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "add %s as governor in" % (self.governor_pk)  
@@ -148,8 +161,7 @@ class RemoveGovernorStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove %s as governor in" % (self.governor_pk)  
@@ -179,8 +191,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "add role %s as governor in" % (self.role_name)  
@@ -211,8 +222,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove role %s as governor in" % (self.role_name)  
@@ -243,8 +253,7 @@ class AddOwnerStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "add %s as owner in" % (self.owner_pk)  
@@ -274,8 +283,7 @@ class RemoveOwnerStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove %s as owner in" % (self.owner_pk)  
@@ -305,8 +313,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "add role %s as owner in" % (self.role_name)  
@@ -337,8 +344,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove role %s as owner in" % (self.role_name)  
@@ -369,8 +375,7 @@ class AddRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "add role %s to" % (self.role_name)  
@@ -402,8 +407,7 @@ class RemoveRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove role %s from" % (self.role_name)  
@@ -429,8 +433,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     @classmethod 
     def get_configurable_fields(self):
@@ -488,8 +491,7 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
-        return [Community]
+        return get_community_models()
 
     def description_present_tense(self):
         return "remove %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  

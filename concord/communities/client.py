@@ -24,6 +24,15 @@ class CommunityClient(BaseClient):
     explicitly grouped as target-less methods.
     """
 
+    community_model = Community
+
+    def __init__(self, *args, **kwargs):
+        """Accepts standard client arguments (actor, target) but also the optional override_community_model.
+        If supplied, replaces Community with the custom community model."""
+        if "override_community_model" in kwargs:
+            self.community_model = kwargs.pop("override_community_model")
+        super().__init__(*args, **kwargs)
+
     # Target-less methods (don't require a target to be set ahead of time)
 
     def set_target_community(self, *, community_name: str = None, community_pk: str = None):
@@ -39,9 +48,9 @@ class CommunityClient(BaseClient):
         returns Community object corresponding to community_pk.
         '''
         if community_pk:
-            return Community.objects.get(pk=community_pk)
+            return self.community_model.objects.get(pk=community_pk)
         if community_name:
-            return Community.objects.get(name=community_name)
+            return self.community_model.objects.get(name=community_name)
         raise Exception("Get community require community name or community pk")
 
     def get_communities(self):
@@ -55,7 +64,7 @@ class CommunityClient(BaseClient):
     def create_community(self, *, name: str) -> Community:
         roles = RoleHandler()
         roles.initialize_with_creator(creator=self.actor.pk)
-        community = Community.objects.create(name=name, roles=roles)
+        community = self.community_model.objects.create(name=name, roles=roles)
         return community
 
     # Read methods which require target to be set

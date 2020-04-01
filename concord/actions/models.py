@@ -280,7 +280,7 @@ class PermissionedModel(models.Model):
     @classmethod
     def get_state_changes_for_model(cls):
         """Returns a list of state_changes that can be applied to this model."""
-        return get_state_change_objects_for_model(model_name=cls.__name__, app_name=cls._meta.app_label)
+        return get_state_change_objects_for_model(model_class=cls, app_name=cls._meta.app_label)
 
     def save(self, *args, override_check=False, **kwargs):
         '''

@@ -33,10 +33,15 @@ class ConditionModel(PermissionedModel):
 
     @classmethod
     @abstractmethod
-    def get_configurable_fields(cls):
-        '''All conditions must supply their own version of the get_configurable_fields method, 
+    def configurable_fields(cls):
+        '''All conditions must supply their own version of the configurable_fields method, 
         which should return a dict with field names as keys and field objects as values.'''
         return {}
+
+    @classmethod
+    def get_configurable_fields(cls):
+        """Returns field values as list instead of dict"""
+        return [ value for key, value in cls.configurable_fields().items() ]
     
     @classmethod
     def get_slug(cls):
@@ -91,7 +96,7 @@ class ApprovalCondition(ConditionModel):
         self.approved = False
 
     @classmethod
-    def get_configurable_fields(cls):
+    def configurable_fields(cls):
         return {          
             "self_approval_allowed": { "display": "Can individuals approve their own actions?",
                 **cls.get_form_dict_for_field(getattr(cls, "self_approval_allowed"))},
@@ -149,7 +154,7 @@ class VoteCondition(ConditionModel):
     voting_period = models.IntegerField(default=168)
 
     @classmethod
-    def get_configurable_fields(cls):
+    def configurable_fields(cls):
         return {
             "allow_abstain": { "display": "Let people abstain from voting?",
                 **cls.get_form_dict_for_field(getattr(cls, "allow_abstain")) },
@@ -404,7 +409,7 @@ class ConditionTemplate(PermissionedModel):
         field_list = []        
         
         condition = self.get_condition_type_class()
-        fields = condition.get_configurable_fields()
+        fields = condition.configurable_fields()  # Retrieves formatted as dicts, not list
 
         for field_name, field in fields.items():
             if field["type"] in ["PermissionRoleField", "PermissionActorField"]:

@@ -64,10 +64,10 @@ class AddMembersStateChange(BaseStateChange):
         return get_community_models()
 
     def description_present_tense(self):
-        return "add %s as members in" % (", ".join(self.member_pk_list))  
+        return "add %s as members in" % self.stringify_list(self.member_pk_list) 
 
     def description_past_tense(self):
-        return "added %s as members in" % (", ".join(self.member_pk_list))  
+        return "added %s as members in" % self.stringify_list(self.member_pk_list) 
 
     def validate(self, actor, target):
         """
@@ -92,10 +92,10 @@ class RemoveMembersStateChange(BaseStateChange):
         return get_community_models()
 
     def description_present_tense(self):
-        return "remove %s members from " % (", ".join(self.member_pk_list))  
+        return "remove %s members from " % self.stringify_list(self.member_pk_list)   
 
     def description_past_tense(self):
-        return "removed %s members from " % (", ".join(self.member_pk_list))  
+        return "removed %s members from " % self.stringify_list(self.member_pk_list)   
 
     def validate(self, actor, target):
         governor_list, owner_list = [], []
@@ -448,10 +448,10 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return "add people to role %s" % (role_name)
 
     def description_present_tense(self):
-        return "add %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
+        return "add %s to role %s in" % (self.stringify_list(self.people_to_add), self.role_name)  
 
     def description_past_tense(self):
-        return "added %s to role %s in" % (", ".join(self.people_to_add), self.role_name)  
+        return "added %s to role %s in" % (self.stringify_list(self.people_to_add), self.role_name)  
 
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
@@ -471,7 +471,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
             if target.roles.has_specific_role(self.role_name, person):
                 people_already_in_role.append(str(person))
         if people_already_in_role:
-            message = "Users %s already in role %s " % (", ".join(people_already_in_role), self.role_name)
+            message = "Users %s already in role %s " % (self.stringify_list(people_already_in_role), self.role_name)
             self.set_validation_error(message)
             return False
         return True
@@ -494,10 +494,10 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return get_community_models()
 
     def description_present_tense(self):
-        return "remove %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  
+        return "remove %s from role %s in" % (self.stringify_list(self.people_to_remove), self.role_name)  
 
     def description_past_tense(self):
-        return "removed %s from role %s in" % (", ".join(self.people_to_remove), self.role_name)  
+        return "removed %s from role %s in" % (self.stringify_list(self.people_to_remove), self.role_name)  
 
     def validate(self, actor, target):
         return True

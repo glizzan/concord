@@ -38,6 +38,23 @@ class BaseStateChange(object):
             warnings.warn("You have added a check_configuration method to your state change without specifying any configurable fields.")
         return []
 
+    @classmethod
+    def model_is_target(cls, model_name):
+        """Tests whether a given model, passed in as a string, is in allowable target."""
+        target_names = [model.__name__ for model in cls.get_all_possible_targets()]
+        return True if model_name in target_names else False
+
+    def stringify_list(self, objlist):
+        """Helper method for use in displaying change info.  Probably belongs elsewhere."""
+        if len(objlist) > 1:
+            objlist, last_item = objlist[:-1], objlist[-1]
+        else:
+            objlist, last_item = objlist, None
+        display_string = ", ".join([str(item) for item in objlist])
+        if last_item:
+            display_string += " and " + str(last_item)
+        return display_string
+
     def instantiate_fields(self):
         '''Helper method used by state change subclasses that have fields which require database
         lookups.  Not called by default, to prevent unnecessary db queries.'''

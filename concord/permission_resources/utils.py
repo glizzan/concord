@@ -47,37 +47,14 @@ class MockMetaPermission:
             owner_object_id = owner.id)
 
 
-def filter_permissions(*, target, state_change_objects):
-    """Given a target and a list of state change objects potentially applicable to the 
-    target, checks to see if the target's class is in each state change object's 
-    get_allowable_targets list.  If it is, add to list using permissions display format."""
-
-    settable_permissions = []
-
-    target_class = target if inspect.isclass(target) else target.__class__
-
-    for state_change_object_tuple in state_change_objects:
-        state_change_object = state_change_object_tuple[1]
-        if hasattr(state_change_object, "get_allowable_targets"):
-            if target_class in state_change_object.get_allowable_targets():
-                settable_permissions.append(state_change_object)
-
-    return settable_permissions
-
-
 def get_settable_permissions(* , target):
     """Gets a list of all permissions that may be set on the model."""
 
-    state_change_objects = target.get_state_change_objects()
-    settable_permissions = filter_permissions(target=target, 
-        state_change_objects=state_change_objects)
-
+    settable_permissions = target.get_state_changes_for_model()
+    
     for parent in target.__class__.__bases__:
-
-        if hasattr(parent, "get_state_change_objects"):
-            parent_state_change_objects = parent.get_state_change_objects()
-            permissions = filter_permissions(target=parent, state_change_objects=parent_state_change_objects)
-            settable_permissions += permissions
+        if hasattr(parent, "get_state_changes_for_model"):
+            settable_permissions += parent.get_state_changes_for_model()
 
     # Remove duplicates while preserving order
     return list(OrderedDict.fromkeys(settable_permissions))

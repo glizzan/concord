@@ -6,7 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import can_jsonify
+from concord.actions.utils import can_jsonify, get_state_change_objects_for_model
 from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
 
 
@@ -41,19 +41,19 @@ class Action(models.Model):
     def get_description(self):
         if self.resolution.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
-                return self.actor + " " + self.change.description_past_tense() + " on target " + self.target.get_name()
+                return self.actor.username + " " + self.change.description_past_tense() + " on target " + self.target.get_name()
         else:
             if hasattr(self.change, "description_present_tense"):
-                return self.actor + " asked to " + self.change.description_present_tense() + " on target " + self.target.get_name()
+                return self.actor.username + " asked to " + self.change.description_present_tense() + " on target " + self.target.get_name()
         return self.__str__()
 
     def get_targetless_description(self):
         if self.resolution.status == "implemented":
             if hasattr(self.change,"description_past_tense"):
-                return self.actor + " " + self.change.description_past_tense()
+                return self.actor.username + " " + self.change.description_past_tense()
         else:
             if hasattr(self.change, "description_present_tense"):
-                return self.actor + " asked to " + self.change.description_present_tense()
+                return self.actor.username + " asked to " + self.change.description_present_tense()
         return self.__str__() 
 
     def get_condition(self):
@@ -277,13 +277,10 @@ class PermissionedModel(models.Model):
 
         return data_dict
 
-
     @classmethod
-    def get_state_change_objects(cls):
-        # Get list of all objects in model's app's state_changes file 
-        relative_import = "." + cls._meta.app_label + ".state_changes"
-        state_changes_module = importlib.import_module(relative_import, package="concord")
-        return inspect.getmembers(state_changes_module) 
+    def get_state_changes_for_model(cls):
+        """Returns a list of state_changes that can be applied to this model."""
+        return get_state_change_objects_for_model(model_name=cls.__name__, app_name=cls._meta.app_label)
 
     def save(self, *args, override_check=False, **kwargs):
         '''

@@ -46,5 +46,6 @@ def get_state_change_objects_for_model(model_name, app_name):
     for member_tuple in state_changes:  #member_tuple is (name, value) tuple 
         if hasattr(member_tuple[1], "model_is_target"):
             if member_tuple[1].model_is_target(model_name):
-                matching_state_changes.append(member_tuple[1])
+                if member_tuple[0] != "BaseStateChange":
+                    matching_state_changes.append(member_tuple[1])
     return matching_state_changes

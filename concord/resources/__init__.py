@@ -1,1 +1,1 @@
-default_app_config = 'resources.apps.ResourcesConfig'
+default_app_config = 'concord.resources.apps.ResourcesConfig'

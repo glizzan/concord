@@ -1,1 +1,1 @@
-default_app_config = 'actions.apps.ActionsConfig'
+default_app_config = 'concord.actions.apps.ActionsConfig'

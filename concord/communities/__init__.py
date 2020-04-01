@@ -1,1 +1,1 @@
-default_app_config = 'communities.apps.CommunitiesConfig'
+default_app_config = 'concord.communities.apps.CommunitiesConfig'

@@ -1,1 +1,1 @@
-default_app_config = 'conditionals.apps.ConditionalsConfig'
+default_app_config = 'concord.conditionals.apps.ConditionalsConfig'

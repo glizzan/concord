@@ -1,1 +1,1 @@
-default_app_config = 'permission_resources.apps.PermissionResourcesConfig'
+default_app_config = 'concord.permission_resources.apps.PermissionResourcesConfig'

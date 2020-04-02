@@ -43,7 +43,7 @@ def reformat_permission_data(permission_data):
     [{'name': 'Roles who can vote', 'type': 'PermissionRoleField', 'required': False, 'value': 'romans'}, 
     {'name': 'People who can vote', 'type': 'PermissionActorField', 'required': False, 'value': None}]
 
-    Needs to be stored as:
+    Needs to be stored as a single dict with key-value pairs:
     Changes.Conditionals.AddVote + "_actors" : value
     """
 

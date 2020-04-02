@@ -26,12 +26,10 @@ class CommunityClient(BaseClient):
 
     community_model = Community
 
-    def __init__(self, *args, **kwargs):
-        """Accepts standard client arguments (actor, target) but also the optional override_community_model.
-        If supplied, replaces Community with the custom community model."""
-        if "override_community_model" in kwargs:
-            self.community_model = kwargs.pop("override_community_model")
-        super().__init__(*args, **kwargs)
+    def set_target(self, target):
+        super().set_target(target)
+        # FIXME: insert a check that the community model here is valid
+        self.community_model = self.target.__class__
 
     # Target-less methods (don't require a target to be set ahead of time)
 

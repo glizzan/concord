@@ -407,7 +407,7 @@ class ConditionalsTest(DataTestCase):
         # approval.  She specifies that *Crystal* has to approve it.
         self.cc.set_target(target=permission)
         self.cc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps([{ "approve_actors": [self.users.crystal.pk] }]))
+            permission_data=json.dumps({ "approve_actors": [self.users.crystal.pk] }))
 
         # When Rose tries to add an item it is stuck waiting
         self.rc.set_actor(actor=self.users.rose)
@@ -443,19 +443,8 @@ class ConditionalsTest(DataTestCase):
         # specifies that Andi Sullivan can reject it.
         self.cc.set_target(target=permission)
         self.cc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps([{ "approve_actors": [self.users.crystal.pk] }, 
-            {"reject_actors": [self.users.sully.pk] }]))
-
-
-                # {'permission_type': Changes.Conditionals.Approve, 
-                # 'permission_actors': ,
-                # 'permission_roles': [],
-                # 'permission_configuration': '{}'},
-                # {'permission_type': Changes.Conditionals.Reject, 
-                # 'permission_actors': ,
-                # 'permission_roles': [],
-                # 'permission_configuration': '{}'}
-                # ]))
+            permission_data=json.dumps({ "approve_actors": [self.users.crystal.pk] , 
+            "reject_actors": [self.users.sully.pk] }))
 
         # When Rose tries to add an item, Crystal can approve it
         self.rc.set_actor(actor=self.users.rose)
@@ -873,7 +862,7 @@ class GoverningAuthorityTest(DataTestCase):
         # Set conditional on governor decision making.  Only Sonny can approve condition.
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{"approve_actors": [self.users.sonny.pk]}]))
+            permission_data=json.dumps({"approve_actors": [self.users.sonny.pk]}))
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented") # Action accepted
 
         # Check that the condition template's owner is correct
@@ -981,7 +970,7 @@ class FoundationalAuthorityTest(DataTestCase):
         # FIXME: still too much configuration :/
         action, result = self.condClient.add_condition_to_owners(
             condition_type = "votecondition",
-            permission_data = json.dumps([ { "vote_roles": ['members'] } ]),
+            permission_data = json.dumps({ "vote_roles": ['members'] }),
             condition_data=json.dumps({"voting_period": 1 }))
 
         # Christen tries to change the name of the resource but is not successful.
@@ -1111,6 +1100,7 @@ class RolesetTest(DataTestCase):
         self.resourceClient = ResourceClient(actor=self.users.pinoe)
         self.resource = self.resourceClient.create_resource(name="USWNT Resource")
         self.resourceClient.set_target(self.resource)
+        self.resourceClient.change_owner_of_target(new_owner=self.community)
         self.permClient = PermissionResourceClient(actor=self.users.pinoe)
 
     # Test custom roles
@@ -2604,11 +2594,7 @@ class ActionContainerTest(DataTestCase):
         self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
         self.pcc.set_target(target=permission)
         self.pcc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve, 
-                'permission_actors': [self.users.crystal.pk],
-                'permission_roles': [],
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps({ "approve_actors": [self.users.crystal.pk] }) )
 
         # Process provisionally
         self.commClient.process_container(container=self.container)
@@ -2633,11 +2619,7 @@ class ActionContainerTest(DataTestCase):
         self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
         self.pcc.set_target(target=permission)
         self.pcc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve, 
-                'permission_actors': [self.users.crystal.pk],
-                'permission_roles': [],
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps({ "approve_actors" : [self.users.crystal.pk] }) )
 
         # Can't process permanently if there's an unresolved condition (status == "waiting")
         self.commClient.process_container(container=self.container, provisionally=False)
@@ -2698,20 +2680,13 @@ class TemplateTest(DataTestCase):
         self.permCondClient = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
         action, result = self.permCondClient.add_condition(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.christen.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))        
+            permission_data=json.dumps({ "approve_actors" : [self.users.christen.pk] }) )
+      
         # Add condition on community
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_owners(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.pinoe.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps({ "approve_actors": [self.users.pinoe.pk] }) )
 
     def set_up_complex_community(self):
         
@@ -2741,11 +2716,7 @@ class TemplateTest(DataTestCase):
         self.permCondClient = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
         action, result = self.permCondClient.add_condition(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.christen.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))        
+            permission_data=json.dumps({ "approve_actors" : [self.users.christen.pk] }) ) 
  
         # Add permission on resource
         self.permClient.set_target(self.resource2)
@@ -2763,11 +2734,7 @@ class TemplateTest(DataTestCase):
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_owners(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.pinoe.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) )
 
     def test_make_template_from_community(self):
 
@@ -2798,11 +2765,7 @@ class TemplateTest(DataTestCase):
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.pinoe.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps({ "approve_actors": [self.users.pinoe.pk] }) )
         ct = self.condClient.get_condition_template_for_governor()
 
         # convert instance to template model using client
@@ -2812,7 +2775,7 @@ class TemplateTest(DataTestCase):
         template_of_condition = template_model.data.get_conditions()[0]
         self.assertEquals(template_of_condition.condition_type, "approvalcondition")
         loaded_dict = json.loads(template_of_condition.permission_data)
-        self.assertEquals(loaded_dict[0]["permission_actors"], [1])
+        self.assertEquals(loaded_dict["approve_actors"], [1])
 
     def test_make_template_from_permission(self):
         """Template model version of test_templatize_permissions"""
@@ -2888,11 +2851,7 @@ class TemplateTest(DataTestCase):
         self.condClient = CommunityConditionalClient(actor=self.users.pinoe, target=self.instance)
         action, result = self.condClient.add_condition_to_governors(
             condition_type="approvalcondition",
-            permission_data=json.dumps([{
-                'permission_type': Changes.Conditionals.Approve,
-                'permission_actors': [self.users.pinoe.pk],
-                'permission_roles': '',
-                'permission_configuration': '{}'}]))
+            permission_data=json.dumps({ "approve_actors": [self.users.pinoe.pk] }) )
         ct = self.condClient.get_condition_template_for_governor()
         template_model = self.templateClient.make_template(community=self.instance, conditions=[ct], 
             description="Pinoe must approve condition template")
@@ -2903,7 +2862,7 @@ class TemplateTest(DataTestCase):
         self.assertEquals(len(created_objects), 2)
         self.assertEquals(created_objects[1].condition_type, "approvalcondition")
         permission_data = json.loads(created_objects[1].permission_data)
-        self.assertEquals(permission_data[0]["permission_actors"], [1])
+        self.assertEquals(permission_data["approve_actors"], [1])
 
         # Original condition is set on original community, new condition set on new community
         self.assertNotEqual(ct.pk, created_objects[1].pk)
@@ -2998,14 +2957,12 @@ class TemplateTest(DataTestCase):
         self.assertEquals(perm_condition.conditioned_object, perm1)
         self.assertEquals(perm_condition.condition_type, "approvalcondition")
         permission_data = json.loads(perm_condition.permission_data)
-        self.assertEquals(permission_data[0]["permission_actors"], [self.users.christen.pk])
-        self.assertEquals(permission_data[0]["permission_type"], Changes.Conditionals.Approve)
+        self.assertEquals(permission_data["approve_actors"], [self.users.christen.pk])
         self.assertEquals(com_condition.conditioned_object, community)
         self.assertEquals(com_condition.condition_type, "approvalcondition")
         self.assertEquals(com_condition.target_type, "own")
         permission_data = json.loads(com_condition.permission_data)
-        self.assertEquals(permission_data[0]["permission_actors"], [self.users.pinoe.pk])
-        self.assertEquals(permission_data[0]["permission_type"], Changes.Conditionals.Approve)
+        self.assertEquals(permission_data["approve_actors"], [self.users.pinoe.pk])
 
         # test permissions
         self.assertEquals(perm1.permitted_object, community)
@@ -3038,11 +2995,11 @@ class TemplateTest(DataTestCase):
         self.assertEquals(len(text), 6)
         self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1 and governed by individual 1. ")
         self.assertEquals(text["community_governance_info"], 
-            "By default, the owners do not need to approve actions in the community, on the condition that individual 1 approve. Unless otherwise specified, the governors of the community can take any action. ")
+            "By default, the owners do not need to approve actions in the community, on the condition that one person in list of individuals (1) needs to approve. Unless otherwise specified, the governors of the community can take any action. ")
         self.assertEquals(text["community_members_info"], 'The members of this community are 13 and 4. ')
         self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
         self.assertEquals(text["community_permissions_info"], 
-            "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that individual 4 approve. ")
+            "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that one person in list of individuals (4) needs to approve. ")
         self.assertEquals(text["owned_objects_basic_info"], "")
         
     def test_generate_text_from_template_of_complex_community(self):
@@ -3058,11 +3015,11 @@ class TemplateTest(DataTestCase):
         self.assertEquals(len(text), 8)
         self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1 and governed by individual 1. ")
         self.assertEquals(text["community_governance_info"], 
-            "By default, the owners do not need to approve actions in the community, on the condition that individual 1 approve. Unless otherwise specified, the governors of the community can take any action. ")
+            "By default, the owners do not need to approve actions in the community, on the condition that one person in list of individuals (1) needs to approve. Unless otherwise specified, the governors of the community can take any action. ")
         self.assertEquals(text["community_members_info"], 'The members of this community are 13 and 4. ')
         self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
         self.assertEquals(text["community_permissions_info"], 
-            "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that individual 4 approve. ")
+            "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that one person in list of individuals (4) needs to approve. ")
         self.assertEquals(text["owned_objects_basic_info"], "The community owns 2 objects, Resource WoSo Forum and Resource Ticker Tape Parade Pictures. ") 
         self.assertEquals(text["owned_object_8"], "Everyone with role members can add item to resource for Ticker Tape Parade Pictures. Individual 10 can remove role from permission for AddItemResourceStateChange. ")
         self.assertEquals(text["owned_object_7"], "")

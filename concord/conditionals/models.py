@@ -119,8 +119,44 @@ class ApprovalCondition(ConditionModel):
         }
         return perm_dict[field_name], field_name.split("_")[1]
 
-    def description_for_passing_condition(self):
-        return "one person needs to approve this action"
+    def description_for_passing_condition(self, fill_dict=None):
+
+        # HACK to prevent key errors
+        if fill_dict:
+            fill_dict["approve_actors"] = fill_dict["approve_actors"] if "approve_actors" in fill_dict else []
+            fill_dict["approve_roles"] = fill_dict["approve_roles"] if "approve_roles" in fill_dict else []
+            fill_dict["reject_actors"] = fill_dict["reject_actors"] if "reject_actors" in fill_dict else []
+            fill_dict["reject_roles"] = fill_dict["reject_roles"] if "reject_roles" in fill_dict else []
+
+        # HACK: to get turn actors into strings (should really be usernames, not stringified pks)
+        fill_dict["approve_actors"] = [str(actor) for actor in fill_dict["approve_actors"]]
+        fill_dict["reject_actors"] = [str(actor) for actor in fill_dict["reject_actors"]]
+
+        if fill_dict and (fill_dict["approve_roles"] or fill_dict["approve_actors"]):
+            base_str = "one person "
+            if fill_dict["approve_roles"]:
+                role_string = "roles " if len(fill_dict["approve_roles"]) > 1 else "role "
+                base_str += "with " + role_string + " " +  ", ".join(fill_dict["approve_roles"])
+            if fill_dict["approve_actors"]: 
+                if fill_dict["approve_roles"]:
+                    base_str += " (or in list of individuals: " + ", ".join(fill_dict["approve_actors"]) + ")"
+                else:
+                    base_str += "in list of individuals (" + ", ".join(fill_dict["approve_actors"]) + ")"
+            base_str += " needs to approve"
+            if fill_dict["reject_actors"] or fill_dict["reject_roles"]:
+                base_str += ", with no one "
+                if fill_dict["reject_roles"]:
+                    role_string = "roles " if len(fill_dict["reject_roles"]) > 1 else "role "
+                    base_str += "with " + role_string + " " +  ", ".join(fill_dict["reject_roles"])
+                if fill_dict["reject_actors"]:
+                    if fill_dict["reject_roles"]:
+                        base_str += " (or in list of individuals: " +  ", ".join(fill_dict["reject_actors"]) + ")"
+                    else:
+                        base_str += "in list of individuals (" + ", ".join(fill_dict["reject_actors"]) + ")"
+                base_str += " rejecting."
+            return base_str
+        else:
+            return "one person needs to approve this action"
 
     def description_status(self):
         status = self.condition_status()
@@ -253,11 +289,31 @@ class VoteCondition(ConditionModel):
             time_pieces.append("%d hours" % hours if hours > 1 else "1 hour")
         return ", ".join(time_pieces)
 
-    def description_for_passing_condition(self):
-        # string = "a group of people must vote by %s" % self.voting_deadline().strftime("%Y-%m-%d at %H:%M:%S")
+    def description_for_passing_condition(self, fill_dict=None):
+
+        # HACK to prevent key errors
+        if fill_dict:
+            fill_dict["vote_actors"] = fill_dict["vote_actors"] if "vote_actors" in fill_dict else []
+            fill_dict["vote_roles"] = fill_dict["vote_roles"] if "vote_roles" in fill_dict else []
+
+        # HACK: to get turn actors into strings (should really be usernames, not stringified pks)
+        fill_dict["vote_actors"] = [str(actor) for actor in fill_dict["vote_actors"]]
+
         if self.require_majority:
-            return "a majority of people vote for it within %s" % self.describe_voting_period()
-        return "a plurality of people vote for it within %s" % self.describe_voting_period()
+            base_str = "a majority of people "
+        else:
+            base_str = "a plurality of people "
+        if fill_dict and (fill_dict["vote_roles"] or fill_dict["vote_actors"]):
+            if fill_dict["vote_roles"]:
+                role_string = "roles " if len(fill_dict["vote_roles"]) > 1 else "role "
+                base_str += "with " + role_string + " " +  ", ".join(fill_dict["vote_roles"])
+            if fill_dict["vote_actors"]:
+                if fill_dict["vote_roles"]:
+                    base_str += " (or in list of individuals: " + ", ".join(fill_dict["vote_actors"]) + ")"
+                else:
+                    base_str += "in list of individuals (" + ", ".join(fill_dict["vote_actors"]) + ")"
+        base_str += " vote for it within %s" % self.describe_voting_period()
+        return base_str
 
     def description_status(self):
 
@@ -297,8 +353,8 @@ class ConditionTemplate(PermissionedModel):
     condition_type - one of the concrete ConditionModel types specified in this file
     condition_data - configures a condition that isn't simply using defaults, for instance
                      making the voting period longer or setting self-approval to True
-    permission_data - this data is used to create a permissions resource for the condition,
-                     otherwise the default permission is used  
+    permission_data - stored as a json-ized list of dictionaries, this data is used to create a permissions 
+                    resource for the condition, therwise the default permission is used  
 
     conditioned_object is either permission or community, generic relations have been added to those
     models for ease of reference.
@@ -356,7 +412,7 @@ class ConditionTemplate(PermissionedModel):
     def get_condition_description(self):
         condition_model = self.get_condition_type_class()
         condition_instance = condition_model(json.loads(self.condition_data))
-        return condition_instance.description_for_passing_condition()
+        return "on the condition that " + condition_instance.description_for_passing_condition(fill_dict=json.loads(self.permission_data))
 
     def get_permission_data_options(self):
         return self.get_condition_type_class().get_condition_permissions()

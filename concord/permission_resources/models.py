@@ -156,12 +156,12 @@ class PermissionsItem(PermissionedModel):
         if actor.pk in actors:
             return True, None
 
-        # FIXME: querying every role separately is a lot of lookups. create method to check if 
-        # in any one of a subset of roles? 
         from concord.communities.client import CommunityClient
         cc = CommunityClient(system=True)
+        community_owning_permitted_object = self.permitted_object.get_owner()
+        cc.set_target(community_owning_permitted_object)
+
         for role in self.roles.get_roles():
-            cc.set_target_community(community_pk=self.permitted_object.pk)
             if cc.has_role_in_community(role=role, actor_pk=actor.pk):
                 return True, role
 

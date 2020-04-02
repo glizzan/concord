@@ -198,16 +198,8 @@ def conditions_to_text(conditions):
     from conditionals.client import PermissionConditionalClient
     pcc = PermissionConditionalClient(actor="system")
 
-    condition_strings = []
-    for condition in conditions:
-        # FIXME: complex conditions will require different formatting, may need to move this to a
-        # method on conditiontemplate
-        condition_object = pcc.condition_lookup_helper(lookup_string=condition.condition_type)
-        permission_data = json.loads(condition.permission_data)[0]
-        people_and_role_list = roles_and_actors({ "roles": permission_data["permission_roles"], 
-            "actors": permission_data["permission_actors"]})
-        new_string = "on the condition that " + people_and_role_list + " " + condition_object.verb_name
-        condition_strings.append(new_string)
+    condition_strings = [ condition.get_condition_description() for condition in conditions ]
+
     return list_to_text(condition_strings)
 
 

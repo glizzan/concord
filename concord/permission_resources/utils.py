@@ -74,20 +74,28 @@ def format_as_list_of_strings(permissions):
     return formatted_permissions
 
 
-def create_permission_outside_pipeline(permission_dict, condition_item, condition_template):
+def create_permissions_outside_pipeline(permission_dict, condition_item, condition_template):
     '''Helper method used internally to bypass permissions pipeline when creating 
-    a permission.'''
+    a permission.  A bit hinky since permission_dicts have up to two key-value pairs for each
+    permission (one for roles, one for actors).'''
     from concord.permission_resources.models import PermissionsItem
-    permission = PermissionsItem(permitted_object=condition_item)
+
+    new_permissions = {}   # keys will be change_types, values the actual permission
+
     for field_name, field_value in permission_dict.items():
+
         change_type, perm_type = condition_item.get_data_from_permission_field(field_name)
-        permission.change_type = change_type
+        if change_type not in new_permissions:
+            new_permissions[change_type] = PermissionsItem(permitted_object=condition_item, change_type=change_type,
+                owner=condition_template.get_owner())
+
         if perm_type == "roles":
-            permission.roles.add_roles(role_list=field_value)
+            new_permissions[change_type].roles.add_roles(role_list=field_value)
         if perm_type == "actors":
-            permission.actors.add_actors(actors=field_value)
-    permission.owner = condition_template.get_owner()
-    permission.save()
+            new_permissions[change_type].actors.add_actors(actors=field_value)
+
+    for key, permission in new_permissions.items():
+        permission.save()
 
 
 # Checks inputs of actors, roles, etc.

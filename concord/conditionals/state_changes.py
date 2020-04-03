@@ -2,10 +2,11 @@ from typing import Dict
 import json
 
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange
 from concord.conditionals.models import ConditionTemplate
-from concord.conditionals.utils import validate_condition
+from concord.conditionals.customfields import ConditionData
 
 
 ###################################
@@ -24,9 +25,8 @@ class AddConditionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
         from concord.permission_resources.models import PermissionsItem
-        return [Community, PermissionsItem]    
+        return self.get_community_models() + [PermissionsItem]
 
     def description_present_tense(self):
         return "add condition %s to %s" % (self.condition_type, self.target_type)  
@@ -35,28 +35,22 @@ class AddConditionStateChange(BaseStateChange):
         return "added condition %s to %s" % (self.condition_type, self.target_type)
 
     def validate(self, actor, target):
-        # FIXME: CPREFACTOR
-        is_valid, error_log = validate_condition(self.condition_type, self.condition_data,
-            self.permission_data, self.target_type)
-        if not is_valid:
-            self.set_validation_error(message=error_log)
+        try:
+            ConditionData(condition_type=self.condition_type, condition_data=self.condition_data,
+                permission_data=self.permission_data, target_type=self.target_type, validate=True)
+            return True
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
             return False
-        return True
-
+        
     def implement(self, actor, target):
-        # FIXME: CPREFACTOR <-- need to add permission_data differently, maybe thru method call
-        if type(self.condition_data) is not str:
-            self.condition_data = json.dumps(self.condition_data)
-        if type(self.permission_data) is not str:
-            self.permission_data = json.dumps(self.permission_data)
+        condition_data = ConditionData(condition_type=self.condition_type, condition_data=self.condition_data,
+            permission_data=self.permission_data, target_type=self.target_type, validate=True)
         return ConditionTemplate.objects.create(
             owner = target.get_owner(), 
-            condition_type=self.condition_type,
-            condition_data=self.condition_data,
-            permission_data=self.permission_data,
+            condition_data = condition_data,
             conditioned_object_content_type = ContentType.objects.get_for_model(target),
-            conditioned_object_id=target.pk,
-            target_type=self.target_type)
+            conditioned_object_id=target.pk)
 
 
 class RemoveConditionStateChange(BaseStateChange):
@@ -67,9 +61,8 @@ class RemoveConditionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
         from concord.permission_resources.models import PermissionsItem
-        return [Community, PermissionsItem]    
+        return self.get_community_models() + [PermissionsItem]
 
     def description_present_tense(self):
         return "remove condition %s" % (self.condition_pk)  
@@ -87,12 +80,11 @@ class RemoveConditionStateChange(BaseStateChange):
         return True
 
 
-# FIXME: CPREFACTOR
 class ChangeConditionStateChange(BaseStateChange):
     description = "Change condition"
 
     def __init__(self, condition_pk, permission_data: Dict, condition_data: Dict):
-        # Note that only permission data and condition data are changeable, if you want to switch
+        # For now only permission data and condition data are changeable, if you want to switch
         # the condition type, owner, etc, you'll have to remove and add another.
         self.condition_pk = condition_pk
         self.condition_data = condition_data if condition_data else "{}"
@@ -100,9 +92,8 @@ class ChangeConditionStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        from concord.communities.models import Community
         from concord.permission_resources.models import PermissionsItem
-        return [Community, PermissionsItem]    
+        return self.get_community_models() + [PermissionsItem] 
 
     def description_present_tense(self):
         return "change condition %s" % (self.condition_pk)  
@@ -111,12 +102,31 @@ class ChangeConditionStateChange(BaseStateChange):
         return "changed condition %s" % (self.condition_pk)  
 
     def validate(self, actor, target):
+
+        template = ConditionTemplate.objects.get(pk=self.condition_pk)
+        error_log = ""
+        
+        try:
+            template.condition_data.update_condition_data(self.condition_data)
+        except ValidationError as error:
+            for key, value in error.message_dict.items():
+                error_log += key + " : " + value[0]
+        
+        try:
+            template.permission_data.update_permission_data(self.permission_data)
+        except ValidationError as error:
+            for key, value in error.message_dict.items():
+                error_log += key + " : " + value[0]
+
+        if error_log:
+            self.set_validation_error(message=error_log)
+            return False
         return True
 
     def implement(self, actor, target):
         template = ConditionTemplate.objects.get(pk=self.condition_pk)
-        template.condition_data = self.condition_data
-        template.permission_data = self.permission_data
+        template.condition_data.update_condition_data(self.condition_data)
+        template.permission_data.update_permission_data(self.permission_data)
         template.save()
         return template
 

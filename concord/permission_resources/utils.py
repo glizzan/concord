@@ -74,7 +74,7 @@ def format_as_list_of_strings(permissions):
     return formatted_permissions
 
 
-def create_permissions_outside_pipeline(permission_dict, condition_item, condition_template):
+def create_permissions_outside_pipeline(permission_dict, condition_item, owner):
     '''Helper method used internally to bypass permissions pipeline when creating 
     a permission.  A bit hinky since permission_dicts have up to two key-value pairs for each
     permission (one for roles, one for actors).'''
@@ -87,7 +87,7 @@ def create_permissions_outside_pipeline(permission_dict, condition_item, conditi
         change_type, perm_type = condition_item.get_data_from_permission_field(field_name)
         if change_type not in new_permissions:
             new_permissions[change_type] = PermissionsItem(permitted_object=condition_item, change_type=change_type,
-                owner=condition_template.get_owner())
+                owner=owner)
 
         if perm_type == "roles":
             new_permissions[change_type].roles.add_roles(role_list=field_value)

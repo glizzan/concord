@@ -41,14 +41,16 @@ def foundational_permission_pipeline(action):
         action.resolution.approve_action(resolved_through="foundational", role=matched_role, 
             log="action approved via foundational pipeline with with no condition set")
     elif condition_status == "approved":
-        action.resolution.approve_action(resolved_through="foundational", role=matched_role, condition=condition_template.condition_type,
-            log="action approved via foundational pipeline with condition %s" % condition_template.condition_type)
+        action.resolution.approve_action(resolved_through="foundational", role=matched_role, 
+            condition=condition_template.condition_name(),
+            log="action approved via foundational pipeline with condition %s" % str(condition_template))
     elif condition_status == "rejected": 
-        action.resolution.reject_action(resolved_through="foundational", role=matched_role, condition=condition_template.condition_type,
-            log="action passed foundational pipeline but was rejected by condition %s" % condition_template.condition_type)
+        action.resolution.reject_action(resolved_through="foundational", role=matched_role, 
+            condition=condition_template.condition_name(),
+            log="action passed foundational pipeline but was rejected by condition %s" % str(condition_template))
     elif condition_status == "waiting":
         action.resolution.status = "waiting"
-        action.log = "action passed foundational pipeline, now waiting on condition " + condition_template.condition_type
+        action.log = "action passed foundational pipeline, now waiting on condition " + str(condition_template)
     
     return action
 
@@ -98,14 +100,14 @@ def specific_permission_pipeline(action, specific_permissions):
                 log="action approved via specific pipeline with with no condition set")
         elif conditional_status == "approved":
             action.resolution.approve_action(resolved_through="specific", role=matched_role,
-                condition=condition_template.condition_type,
-                log="action approved via specific pipeline with with condition %s" % condition_template.condition_type)
+                condition=condition_template.condition_name(),
+                log="action approved via specific pipeline with with condition %s" % str(condition_template))
         elif conditional_status == "waiting":
             waiting_on_permission = True
-            temp_log.append("waiting on condition %s for permission %s (role %s)" % (condition_template.condition_type,
+            temp_log.append("waiting on condition %s for permission %s (role %s)" % (str(condition_template),
                 matched_perm, matched_role))
         elif conditional_status == "rejected":
-            temp_log.append("rejected by condition %s for permission %s (role %s)" % (condition_template.condition_type,
+            temp_log.append("rejected by condition %s for permission %s (role %s)" % (str(condition_template),
                 matched_perm, matched_role))
 
         # If permission is accepted, return, otherwise continue with loop
@@ -121,7 +123,7 @@ def specific_permission_pipeline(action, specific_permissions):
     else:
         # Hack to save info if only one matched permission
         if len(matching_permissions) == 1:
-            condition = condition_template.condition_type
+            condition = condition_template.condition_name()
             role = matched_role
         else:
             condition, role = None, None
@@ -150,14 +152,16 @@ def governing_permission_pipeline(action):
         action.resolution.approve_action(resolved_through="governing",  role=matched_role,
             log="action approved via governing pipeline with with no condition set")
     elif condition_status == "approved":
-        action.resolution.approve_action(resolved_through="governing", role=matched_role, condition=condition_template.condition_type,
-            log="action approved via governing pipeline with condition %s" % condition_template.condition_type)
+        action.resolution.approve_action(resolved_through="governing", role=matched_role, 
+            condition=condition_template.condition_name(),
+            log="action approved via governing pipeline with condition %s" % str(condition_template))
     elif condition_status == "rejected": 
-        action.resolution.reject_action(resolved_through="governing", role=matched_role, condition=condition_template.condition_type,
-            log="action passed governing pipeline but was rejected by condition %s" % condition_template.condition_type)
+        action.resolution.reject_action(resolved_through="governing", role=matched_role, 
+            condition=condition_template.condition_name(),
+            log="action passed governing pipeline but was rejected by condition %s" % str(condition_template))
     elif condition_status == "waiting":
         action.resolution.status = "waiting"
-        action.log = "action passed governing pipeline, now waiting on condition " + condition_template.condition_type
+        action.log = "action passed governing pipeline, now waiting on condition " + str(condition_template)
     
     return action
 

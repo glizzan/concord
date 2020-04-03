@@ -34,6 +34,8 @@ class ActorList(object):
                 self.as_pks()
             elif type(first_item) == int:
                 self.pk_list = actor_list
+            else:
+                raise ValidationError(message="actor_list must be User objects or pks, not " + str(type(first_item)))
 
     def as_pks(self):
         if not self.pk_list:  # pk_list is authoritative so we don't check len against instance_list
@@ -289,7 +291,7 @@ class TemplateData(object):
         """We currently allow only simple non-related fields to be edited, but eventually all fields
         should be editable."""
         # '"_id" in field.name' is a bit of a hack to identify positive integer fields used in gfks
-        if field.is_relation or field.auto_created or "_id" in field.name:
+        if field.is_relation or field.auto_created or "_id" in field.name or "condition_data" == field.name:
             return False
         return True
 

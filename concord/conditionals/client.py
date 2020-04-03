@@ -8,7 +8,6 @@ from concord.actions.models import Action  # Just needed for type hinting
 
 from concord.conditionals.models import ApprovalCondition, VoteCondition, ConditionTemplate
 from concord.conditionals import state_changes as sc
-from concord.conditionals import utils
 
 
 """The conditionals app is one of the more confusing core apps, and the client is fairly confusing 
@@ -98,28 +97,14 @@ class BaseConditionalClient(BaseClient):
         if formatted_as == "shortstring":
             return [cond.__name__.lower().split("condition")[0] for cond in conditions]
 
-    # FIXME: this feels like too much logic for the client, but where else could it go?
     def create_condition_item(self, *, condition_template: ConditionTemplate, action: Action) -> Model:
-
-        # Instantiate condition object
-        data_dict = json.loads(condition_template.condition_data)
-        conditionModel = self.condition_lookup_helper(lookup_string=condition_template.condition_type)
-        condition_item = conditionModel.objects.create(action=action.pk, 
-                owner=condition_template.get_owner(), **data_dict)
-
-        # Add permission(s) - permission data is a dict of key-value pairs (no nested dictionaries)
-        if condition_template.permission_data is not None:
-            permission_dict = json.loads(condition_template.permission_data)
-            from concord.permission_resources.utils import create_permissions_outside_pipeline
-            create_permissions_outside_pipeline(permission_dict, condition_item, condition_template)
-
-        return condition_item
+        return condition_template.condition_data.create_condition_and_permissions(
+                action=action, owner=condition_template.get_owner())
 
     def get_or_create_condition(self, *, condition_template: ConditionTemplate, action: Action) -> Model:
         condition_item = self.get_condition_item_given_action(action_pk=action.pk)
-        if not condition_item :
-            condition_item  = self.create_condition_item(condition_template=condition_template, 
-                action=action)
+        if not condition_item:
+            condition_item  = self.create_condition_item(condition_template=condition_template, action=action)
         return condition_item 
 
     def create_vote_condition(self, *, action: Action, **kwargs) -> VoteConditionClient:
@@ -131,8 +116,6 @@ class BaseConditionalClient(BaseClient):
     # condition kwargs directly
     def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None, target_type: str = None):
-        condition_data = utils.reformat_condition_data(condition_data)
-        permission_data = utils.reformat_permission_data(permission_data)
         change = sc.AddConditionStateChange(condition_type=condition_type,
             permission_data=permission_data, condition_data=condition_data, target_type=target_type)
         return self.create_and_take_action(change)
@@ -195,7 +178,7 @@ class CommunityConditionalClient(BaseConditionalClient):
 
     def get_condition_template_for_owner(self) -> ConditionTemplate:
         for condition in self.target.condition.all():
-            if condition.target_type == "own":
+            if condition.condition_data.target_type == "own":
                 return condition
         return None
 
@@ -207,7 +190,7 @@ class CommunityConditionalClient(BaseConditionalClient):
 
     def get_condition_template_for_governor(self) -> ConditionTemplate:
         for condition in self.target.condition.all():
-            if condition.target_type == "gov":
+            if condition.condition_data.target_type == "gov":
                 return condition
         return None
 

@@ -1,22 +1,7 @@
 from concord.actions.state_changes import BaseStateChange
 from django.conf import settings
 from django.apps import apps
-
-
-def get_community_models():
-    """This helper method lets us indicate alternative community models as allowable targets for community actions."""
-
-    # first get default model
-    from concord.communities.models import Community
-    community_models = [Community]
-
-    # then get custom models added by third parties
-    if hasattr(settings, "ALTERNATIVE_COMMUNITY_MODELS"):
-        for model in settings.ALTERNATIVE_COMMUNITY_MODELS:
-            model_instance = apps.get_model(model["app_name"], model["model_name"])
-            community_models.append(model_instance)
-    return community_models
-    
+  
 
 ###############################
 ### Community State Changes ###

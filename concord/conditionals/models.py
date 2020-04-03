@@ -10,12 +10,12 @@ from django.urls import reverse
 from django.db.models.signals import post_save
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import ValidationError
 
 from concord.actions.models import PermissionedModel
 from concord.actions.client import ActionClient
 from concord.permission_resources.client import PermissionResourceClient
 from concord.actions.state_changes import Changes
+from concord.conditionals.customfields import UnvalidatedConditionData, ConditionDataField
 
 
 ##################################
@@ -42,6 +42,11 @@ class ConditionModel(PermissionedModel):
     def get_configurable_fields(cls):
         """Returns field values as list instead of dict"""
         return [ value for key, value in cls.configurable_fields().items() ]
+
+    @classmethod
+    def get_configurable_field_names(cls):
+        """Return field names as list."""
+        return [ key for key, value in cls.configurable_fields().items() ]
     
     @classmethod
     def get_slug(cls):
@@ -70,8 +75,8 @@ class ConditionModel(PermissionedModel):
 
     @classmethod
     def get_form_dict_for_field(cls, field):
-        return { 'name': field.field.name, 'type': field.field.__class__.__name__, 
-            'required': "required" if field.field.blank else "", 'value': field.field.default }
+        return { 'name': field.name, 'type': field.__class__.__name__, 
+            'required': "required" if field.blank else "", 'value': field.default }
 
 
 class ApprovalCondition(ConditionModel):
@@ -99,7 +104,7 @@ class ApprovalCondition(ConditionModel):
     def configurable_fields(cls):
         return {          
             "self_approval_allowed": { "display": "Can individuals approve their own actions?",
-                **cls.get_form_dict_for_field(getattr(cls, "self_approval_allowed"))},
+                **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))},
             "approve_roles" : { "display": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
                 "value": None, "field_name": "approve_roles" },
             "approve_actors" : { "display": "People who can approve", "type": "PermissionActorField", "required": False, 
@@ -193,13 +198,13 @@ class VoteCondition(ConditionModel):
     def configurable_fields(cls):
         return {
             "allow_abstain": { "display": "Let people abstain from voting?",
-                **cls.get_form_dict_for_field(getattr(cls, "allow_abstain")) },
+                **cls.get_form_dict_for_field(cls._meta.get_field("allow_abstain")) },
             "require_majority": { "display": "Require a majority rather than a plurality to pass?",
-                **cls.get_form_dict_for_field(getattr(cls, "require_majority")) },
+                **cls.get_form_dict_for_field(cls._meta.get_field("require_majority")) },
             "publicize_votes": { "display": "Publicize peoples' votes?",
-                **cls.get_form_dict_for_field(getattr(cls, "publicize_votes")) },
+                **cls.get_form_dict_for_field(cls._meta.get_field("publicize_votes")) },
             "voting_period":  { "display": "How long should the vote go on, in hours?",
-                ** cls.get_form_dict_for_field(getattr(cls, "voting_period")) },
+                **cls.get_form_dict_for_field(cls._meta.get_field("voting_period")) },
             "vote_roles" : { "display": "Roles who can vote", "type": "PermissionRoleField", 
                 "required": False, "value": None, "field_name": "vote_roles" },
             "vote_actors": { "display": "People who can vote", "type": "PermissionActorField", 
@@ -350,130 +355,22 @@ for conditionModel in [ApprovalCondition, VoteCondition]:  # FIXME: should be au
 
 class ConditionTemplate(PermissionedModel):
     """
-    condition_type - one of the concrete ConditionModel types specified in this file
-    condition_data - configures a condition that isn't simply using defaults, for instance
-                     making the voting period longer or setting self-approval to True
-    permission_data - stored as a json-ized list of dictionaries, this data is used to create a permissions 
-                    resource for the condition, therwise the default permission is used  
-
-    conditioned_object is either permission or community, generic relations have been added to those
+    Conditioned_object is either permission or community, generic relations have been added to those
     models for ease of reference.
     """
-
-    condition_type = models.CharField(max_length=400)  # Replace with choices field???
-    condition_data = models.CharField(max_length=400, blank=True, null=True)
-    permission_data = models.CharField(max_length=400, blank=True, null=True)
 
     conditioned_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     conditioned_object_id = models.PositiveIntegerField()
     conditioned_object = GenericForeignKey('conditioned_object_content_type', 'conditioned_object_id')
 
-    COMMUNITY_CHOICES = (
-        ('gov', 'Governor'),
-        ('own', 'Owner'),
-    )
-    target_type = models.CharField(max_length=3, blank=True, null=True, choices=COMMUNITY_CHOICES)
+    condition_data = ConditionDataField(default=UnvalidatedConditionData)
 
     def __str__(self):
-        return "%s Condition on %s (configuration: %s, permission: %s) " % (self.condition_type, 
-            str(self.conditioned_object), str(self.condition_data), str(self.permission_data))
+        return "%s condition on %s" % (self.condition_data.describe(), str(self.conditioned_object))
 
     def get_name(self):
         return self.__str__()
 
-    def get_data_as_json(self):
-        # FIXME: this is a hack until we refactor these fields to be customfields and
-        # jsonfields, not sad permissive charfields 
-        try:
-            condition_data = json.loads(self.condition_data)
-        except:
-            condition_data = self.condition_data
-        try:
-            permission_data = json.loads(self.permission_data)
-        except:
-            permission_data = self.permission_data
-
-        return json.dumps({
-                "condition_type": self.condition_type,
-                "condition_data": condition_data,
-                "permission_data": permission_data,
-                "target_type": self.target_type
-        })
-
-    def get_condition_type_class(self, lookup_string=None):
-        # lookup_string is used when doing an uninstantiated lookup
-        condition_dict = {
-            "approvalcondition": ApprovalCondition,
-            "votecondition": VoteCondition
-        }
-        condition = lookup_string if lookup_string else self.condition_type
-        return condition_dict[condition]
-
-    def get_condition_description(self):
-        condition_model = self.get_condition_type_class()
-        condition_instance = condition_model(json.loads(self.condition_data))
-        return "on the condition that " + condition_instance.description_for_passing_condition(fill_dict=json.loads(self.permission_data))
-
-    def get_permission_data_options(self):
-        return self.get_condition_type_class().get_condition_permissions()
-
-    def get_permission_data(self):
-        return json.loads(self.permission_data)
-
-    def set_permission_data(self, permission_data):
-        self.permission_data = json.dumps(permission_data)
-        pass
-
-    def validate_permission_data_formatting(self, data_dict):
-        if not (hasattr(data_dict, "roles") or hasattr(data_dict, "actors")):
-            return False
-        if hasattr(data_dict, "roles"):
-            if type(data_dict["roles"]) != list:
-                return False
-        if hasattr(data_dict, "actors"):
-            if type(data_dict["roles"]) != list:
-                return False
-        return True
-
-    def has_actor_or_role(self, data_dict):
-        if self.validate_permission_data_formatting(data_dict):
-            if hasattr(data_dict, "roles") and len(data_dict["roles"]) > 0:
-                return True
-            if hasattr(data_dict, "actors") and len(data_dict["actors"]) > 0:
-                return True
-        return False
-
-    def validate_permission_data(self, permission_data):
-        """Permission data should be a dict with the following format:
-        { "ApprovalStateChange": { "roles": [], "actors": [] }, "RejectStateChange: { "roles": [], "actors": [] } } """
-
-        for change_type, change_info in self.get_permission_data_options.items():
-            if change_info['required']:
-                if change_type not in permission_data:
-                    raise ValidationError("Permission " + change_type + " is required but was not supplied.")
-                if not self.has_actor_or_role(permission_data[change_type]):
-                    raise ValidationError("Permission " + change_type + " is required, so at least one actor or role must be specified.")
-            else:
-                if not self.validate_permission_data_formatting(permission_data[change_type]):
-                    raise ValidationError("Permission " + change_type + " is incorrectly formatted.")
-
-    def get_configurable_fields_with_data(self):
-
-        condition_data = json.loads(self.condition_data)
-        permission_data = json.loads(self.permission_data) if self.permission_data else {}
-
-        field_list = []        
-        
-        condition = self.get_condition_type_class()
-        fields = condition.configurable_fields()  # Retrieves formatted as dicts, not list
-
-        for field_name, field in fields.items():
-            if field["type"] in ["PermissionRoleField", "PermissionActorField"]:
-                if field["field_name"] in permission_data:
-                    field["value"] = permission_data[field["field_name"]]
-            else:
-                if field_name in condition_data:
-                    field["value"] = condition_data[field_name]
-            field_list.append(field)
-
-        return field_list
+    def condition_name(self):
+        """Helper method to make it easier to get the condition type."""
+        return self.condition_data.condition_type

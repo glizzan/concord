@@ -44,6 +44,19 @@ class BaseStateChange(object):
         target_names = [model.__name__ for model in cls.get_all_possible_targets()]
         return True if model_name in target_names else False
 
+    def get_community_models(self):
+        """This helper method lets us indicate alternative community models as allowable targets for community actions."""
+        # first get default model
+        from concord.communities.models import Community
+        community_models = [Community]
+
+        # then get custom models added by third parties
+        if hasattr(settings, "ALTERNATIVE_COMMUNITY_MODELS"):
+            for model in settings.ALTERNATIVE_COMMUNITY_MODELS:
+                model_instance = apps.get_model(model["app_name"], model["model_name"])
+                community_models.append(model_instance)
+        return community_models
+
     def stringify_list(self, objlist):
         """Helper method for use in displaying change info.  Probably belongs elsewhere."""
         if len(objlist) > 1:

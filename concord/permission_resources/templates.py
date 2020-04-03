@@ -33,13 +33,14 @@ def json_serializable_community(community):
 
 
 def json_serializable_condition(condition):
+    from concord.conditionals.customfields import parse_condition_data
     dict_to_save = get_basic_info(condition)
     dict_to_save.update({"fields": get_universal_fields(condition)})
     dict_to_save["fields"].update({
-        "condition_type": condition.condition_type,
-        "condition_data": condition.condition_data,
-        "permission_data": condition.permission_data,
-        "target_type": condition.target_type
+        "condition_type": condition.condition_data.condition_type,
+        "condition_data": condition.condition_data.condition_data,
+        "permission_data": condition.condition_data.permission_data,
+        "target_type": condition.condition_data.target_type
     })
     return dict_to_save
 
@@ -116,7 +117,22 @@ def create_unsaved_instance_given_template(template):
         instance = model(**template["fields"])
         return instance  
 
-    if template["model_type"] in ["ConditionTemplate", "Resource", "Item"]:
+    if template["model_type"] == "ConditionTemplate":
+        from concord.conditionals.customfields import ConditionData
+        condition_data = ConditionData(
+            condition_type=template["fields"]["condition_type"],
+            condition_data=template["fields"]["condition_data"],
+            permission_data=template["fields"]["permission_data"],
+            target_type=template["fields"]["target_type"],
+        )
+        template["fields"]["condition_data"] = condition_data
+        del(template["fields"]["condition_type"])
+        del(template["fields"]["permission_data"])
+        del(template["fields"]["target_type"])
+        instance = model(**template["fields"])
+        return instance
+
+    if template["model_type"] in ["Resource", "Item"]:
         instance = model(**template["fields"])
         return instance
 
@@ -193,12 +209,12 @@ def community_basic_info_to_text(template_model):
 
 
 def conditions_to_text(conditions):
-    """Takes a list of conditions and turns them into text."""
+    """Takes a list of conditions (condition templates?) and turns them into text."""
 
     from conditionals.client import PermissionConditionalClient
     pcc = PermissionConditionalClient(actor="system")
 
-    condition_strings = [ condition.get_condition_description() for condition in conditions ]
+    condition_strings = [ condition.condition_data.get_condition_description() for condition in conditions ]
 
     return list_to_text(condition_strings)
 
@@ -210,9 +226,9 @@ def community_governance_info_to_text(template_model):
 
     owner_condition, governor_condition = None, None
     for condition_key, condition in template_model.conditions.items():
-        if condition.target_type == "own":
+        if condition.condition_data.target_type == "own":
             owner_condition = condition
-        if condition.target_type == "gov":
+        if condition.condition_data.target_type == "gov":
             governor_condition = condition
     
     text = ""

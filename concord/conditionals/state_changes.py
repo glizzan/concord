@@ -26,13 +26,13 @@ class AddConditionStateChange(BaseStateChange):
     @classmethod
     def get_allowable_targets(cls):
         from concord.permission_resources.models import PermissionsItem
-        return self.get_community_models() + [PermissionsItem]
+        return cls.get_community_models() + [PermissionsItem]
 
     def description_present_tense(self):
-        return "add condition %s to %s" % (self.condition_type, self.target_type)  
+        return "add condition %s" % (self.condition_type)  
 
     def description_past_tense(self):
-        return "added condition %s to %s" % (self.condition_type, self.target_type)
+        return "added condition %s" % (self.condition_type)
 
     def validate(self, actor, target):
         try:
@@ -55,6 +55,7 @@ class AddConditionStateChange(BaseStateChange):
 
 class RemoveConditionStateChange(BaseStateChange):
     description = "Remove condition"
+    preposition = "from"
 
     def __init__(self, condition_pk):
         self.condition_pk = condition_pk
@@ -62,13 +63,13 @@ class RemoveConditionStateChange(BaseStateChange):
     @classmethod
     def get_allowable_targets(cls):
         from concord.permission_resources.models import PermissionsItem
-        return self.get_community_models() + [PermissionsItem]
+        return cls.get_community_models() + [PermissionsItem]
 
     def description_present_tense(self):
-        return "remove condition %s" % (self.condition_pk)  
+        return "remove condition with id %s" % (self.condition_pk)  
 
     def description_past_tense(self):
-        return "removed condition %s" % (self.condition_pk)  
+        return "removed condition with id %s" % (self.condition_pk)  
 
     def validate(self, actor, target):
         # If we add ability to remove by giving target, check that target == conditioned object
@@ -82,6 +83,7 @@ class RemoveConditionStateChange(BaseStateChange):
 
 class ChangeConditionStateChange(BaseStateChange):
     description = "Change condition"
+    preposition = "on"
 
     def __init__(self, condition_pk, permission_data: Dict, condition_data: Dict):
         # For now only permission data and condition data are changeable, if you want to switch
@@ -93,7 +95,7 @@ class ChangeConditionStateChange(BaseStateChange):
     @classmethod
     def get_allowable_targets(cls):
         from concord.permission_resources.models import PermissionsItem
-        return self.get_community_models() + [PermissionsItem] 
+        return cls.get_community_models() + [PermissionsItem] 
 
     def description_present_tense(self):
         return "change condition %s" % (self.condition_pk)  
@@ -113,7 +115,7 @@ class ChangeConditionStateChange(BaseStateChange):
                 error_log += key + " : " + value[0]
         
         try:
-            template.permission_data.update_permission_data(self.permission_data)
+            template.condition_data.update_permission_data(self.permission_data)
         except ValidationError as error:
             for key, value in error.message_dict.items():
                 error_log += key + " : " + value[0]
@@ -126,7 +128,7 @@ class ChangeConditionStateChange(BaseStateChange):
     def implement(self, actor, target):
         template = ConditionTemplate.objects.get(pk=self.condition_pk)
         template.condition_data.update_condition_data(self.condition_data)
-        template.permission_data.update_permission_data(self.permission_data)
+        template.condition_data.update_permission_data(self.permission_data)
         template.save()
         return template
 
@@ -184,6 +186,7 @@ class AddVoteStateChange(BaseStateChange):
 
 class ApproveStateChange(BaseStateChange):
     description = "Approve"
+    preposition = ""
 
     @classmethod
     def get_allowable_targets(cls):
@@ -217,6 +220,7 @@ class ApproveStateChange(BaseStateChange):
 
 class RejectStateChange(BaseStateChange):
     description = "Reject"
+    preposition = ""
 
     @classmethod
     def get_allowable_targets(cls):

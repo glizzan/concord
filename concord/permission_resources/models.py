@@ -79,10 +79,13 @@ class PermissionsItem(PermissionedModel):
         pcc = PermissionConditionalClient(system=True, target=self)
         return pcc.get_condition_template()
 
+    def get_state_change_object(self):
+        from concord.actions.utils import get_state_change_object_given_name
+        return get_state_change_object_given_name(self.change_type)
+
     def full_description(self):
         """Helper method for displaying permsisions."""
-        from concord.actions.utils import get_state_change_object_given_name
-        state_change_object = get_state_change_object_given_name(self.change_type)
+        state_change_object = self.get_state_change_object()
         configuration = self.get_configuration()
         if hasattr(state_change_object, "get_uninstantiated_description"):
             return state_change_object.get_uninstantiated_description(**configuration)
@@ -98,6 +101,13 @@ class PermissionsItem(PermissionedModel):
 
     def set_configuration(self, configuration_dict):
         self.configuration = json.dumps(configuration_dict)
+
+    def get_configured_field_data(self):
+        # Returns (possibly empty) dict with format { permissionfieldname : permissionfieldvalue }
+        return self.get_configuration()  # is it this simple?
+        # configuration = self.get_configuration()
+        # for field_name, field_data in configuration.items():
+
 
     # Activation & deactivation
 

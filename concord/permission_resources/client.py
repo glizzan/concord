@@ -34,8 +34,8 @@ class PermissionResourceClient(BaseClient):
         return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
             permitted_object_id=object.pk)
 
-    def actor_satisfies_permission(self, *, action, permission: PermissionsItem) -> bool:
-        return permission.match_actor(action.actor)
+    def actor_satisfies_permission(self, *, actor, permission: PermissionsItem) -> bool:
+        return permission.match_actor(actor)
 
     def get_permission_or_return_mock(self, permitted_object_id, 
         permitted_object_content_type, permission_change_type):

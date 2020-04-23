@@ -1,6 +1,7 @@
 from concord.actions.state_changes import BaseStateChange
 from django.conf import settings
 from django.apps import apps
+
   
 
 ###############################
@@ -9,13 +10,14 @@ from django.apps import apps
 
 class ChangeNameStateChange(BaseStateChange):
     description = "Change name of community"
+    preposition = "for"
 
     def __init__(self, new_name):
         self.new_name = new_name
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
         return "change name of community to %s" % (self.new_name)  
@@ -46,13 +48,13 @@ class AddMembersStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add %s as members in" % self.stringify_list(self.member_pk_list) 
+        return "add %s as members" % self.stringify_list(self.member_pk_list) 
 
     def description_past_tense(self):
-        return "added %s as members in" % self.stringify_list(self.member_pk_list) 
+        return "added %s as members" % self.stringify_list(self.member_pk_list) 
 
     def validate(self, actor, target):
         """
@@ -68,19 +70,20 @@ class AddMembersStateChange(BaseStateChange):
 
 class RemoveMembersStateChange(BaseStateChange):
     description = "Remove members from community"
+    preposition = "from"
 
     def __init__(self, member_pk_list):
         self.member_pk_list = member_pk_list
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s members from " % self.stringify_list(self.member_pk_list)   
+        return "remove members %s" % self.stringify_list(self.member_pk_list)   
 
     def description_past_tense(self):
-        return "removed %s members from " % self.stringify_list(self.member_pk_list)   
+        return "removed members %s " % self.stringify_list(self.member_pk_list)   
 
     def validate(self, actor, target):
         governor_list, owner_list = [], []
@@ -116,13 +119,13 @@ class AddGovernorStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add %s as governor in" % (self.governor_pk)  
+        return "add %s as governor" % (self.governor_pk)  
 
     def description_past_tense(self):
-        return "added %s as governor in" % (self.governor_pk)  
+        return "added %s as governor" % (self.governor_pk)  
 
     def validate(self, actor, target):
         """
@@ -140,19 +143,20 @@ class AddGovernorStateChange(BaseStateChange):
 
 class RemoveGovernorStateChange(BaseStateChange):
     description = "Remove governor from community"
+    preposition = "from"
 
     def __init__(self, governor_pk):
         self.governor_pk = governor_pk
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s as governor in" % (self.governor_pk)  
+        return "remove %s as governor" % (self.governor_pk)  
 
     def description_past_tense(self):
-        return "removed %s as governor in" % (self.governor_pk)  
+        return "removed %s as governor" % (self.governor_pk)  
 
     def validate(self, actor, target):
         """
@@ -164,7 +168,7 @@ class RemoveGovernorStateChange(BaseStateChange):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
         target.roles.remove_governor(self.governor_pk)  
-        target.roles.save()
+        target.save()
         return target
 
 
@@ -176,13 +180,13 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add role %s as governor in" % (self.role_name)  
+        return "add role %s as governor" % (self.role_name)  
 
     def description_past_tense(self):
-        return "added role %s as governor in" % (self.role_name)  
+        return "added role %s as governor" % (self.role_name)  
 
     def validate(self, actor, target):
         """
@@ -201,19 +205,20 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
 class RemoveGovernorRoleStateChange(BaseStateChange):
     description = "Remove role of governor from community"
+    preposition = "from"
 
     def __init__(self, role_name):
         self.role_name = role_name
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove role %s as governor in" % (self.role_name)  
+        return "remove role %s as governor" % (self.role_name)  
 
     def description_past_tense(self):
-        return "removed role %s as governor in" % (self.role_name) 
+        return "removed role %s as governor" % (self.role_name) 
 
     def validate(self, actor, target):
         """
@@ -238,13 +243,13 @@ class AddOwnerStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add %s as owner in" % (self.owner_pk)  
+        return "add %s as owner" % (self.owner_pk)  
 
     def description_past_tense(self):
-        return "added %s as owner in" % (self.owner_pk)  
+        return "added %s as owner" % (self.owner_pk)  
 
     def validate(self, actor, target):
         """
@@ -262,19 +267,20 @@ class AddOwnerStateChange(BaseStateChange):
 
 class RemoveOwnerStateChange(BaseStateChange):
     description = "Remove owner from community"
+    preposition = "from"
 
     def __init__(self, owner_pk):
         self.owner_pk = owner_pk
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s as owner in" % (self.owner_pk)  
+        return "remove %s as owner" % (self.owner_pk)  
 
     def description_past_tense(self):
-        return "removed %s as owner in" % (self.owner_pk) 
+        return "removed %s as owner" % (self.owner_pk) 
 
     def validate(self, actor, target):
         """
@@ -285,7 +291,7 @@ class RemoveOwnerStateChange(BaseStateChange):
     def implement(self, actor, target):
         # FIXME: if we forget to accidentally add this state change to our list of foundational
         # changes we could have access issues
-        target.roles.remove_owner(owner_pk)
+        target.roles.remove_owner(self.owner_pk)
         target.save()
         return target
 
@@ -298,13 +304,13 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add role %s as owner in" % (self.role_name)  
+        return "add role %s as owner" % (self.role_name)  
 
     def description_past_tense(self):
-        return "added role %s as owner in" % (self.role_name) 
+        return "added role %s as owner" % (self.role_name) 
 
     def validate(self, actor, target):
         """
@@ -323,19 +329,20 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
 class RemoveOwnerRoleStateChange(BaseStateChange):
     description = "Remove role from owners of community"
+    preposition = "from"
 
     def __init__(self, role_name):
         self.role_name = role_name
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove role %s as owner in" % (self.role_name)  
+        return "remove role %s as owner" % (self.role_name)  
 
     def description_past_tense(self):
-        return "remove role %s as owner in" % (self.role_name) 
+        return "remove role %s as owner" % (self.role_name) 
 
     def validate(self, actor, target):
         """
@@ -344,10 +351,8 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
         # NOTE: we assume the role added is ALWAYS in the target community
-        target.roles.remove_owner_role(self.role_name, target.pk)
+        target.roles.remove_owner_role(self.role_name)
         target.save()
         return target
 
@@ -360,13 +365,13 @@ class AddRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add role %s to" % (self.role_name)  
+        return "add role %s" % (self.role_name)  
 
     def description_past_tense(self):
-        return "added role %s to" % (self.role_name) 
+        return "added role %s" % (self.role_name) 
 
     def validate(self, actor, target):
         if self.role_name in ["members", "governors", "owners"]:
@@ -386,19 +391,20 @@ class AddRoleStateChange(BaseStateChange):
 
 class RemoveRoleStateChange(BaseStateChange):
     description = "Remove role from community"
+    preposition = "from"
 
     def __init__(self, role_name):
         self.role_name = role_name
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove role %s from" % (self.role_name)  
+        return "remove role %s" % (self.role_name)  
 
     def description_past_tense(self):
-        return "removed role %s from" % (self.role_name) 
+        return "removed role %s" % (self.role_name) 
 
     def validate(self, actor, target):
         return True
@@ -411,6 +417,7 @@ class RemoveRoleStateChange(BaseStateChange):
 
 class AddPeopleToRoleStateChange(BaseStateChange):
     description = "Add people to role in community"
+    preposition = "in"
 
     def __init__(self, role_name, people_to_add):
         self.role_name = role_name
@@ -418,11 +425,12 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     @classmethod 
     def get_configurable_fields(self):
-        return ["role_name"]
+        return { "role_name": { "display": "Role people can be added to", "type": "PermissionRoleField",
+        "other_data": { "multiple": False } } }
 
     @classmethod
     def get_uninstantiated_description(self, **configuration_kwargs):
@@ -433,21 +441,33 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return "add people to role %s" % (role_name)
 
     def description_present_tense(self):
-        return "add %s to role %s in" % (self.stringify_list(self.people_to_add), self.role_name)  
+        return "add %s to role %s" % (self.stringify_list(self.people_to_add), self.role_name)  
 
     def description_past_tense(self):
-        return "added %s to role %s in" % (self.stringify_list(self.people_to_add), self.role_name)  
+        return "added %s to role %s" % (self.stringify_list(self.people_to_add), self.role_name)  
+
+    @classmethod
+    def check_configuration_is_valid(cls, configuration):
+        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
+        By contrast, check_configuration checks a specific action against an already-validated configuration."""
+        if "role_name" in configuration:
+            if type(configuration["role_name"]) != str:
+                return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
+        return True, ""
 
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
         configuration = permission.get_configuration()
         if "role_name" in configuration:  
             if self.role_name not in configuration["role_name"]:
-                return False, "Can't add people to role %s, allowable roles are: %s" % (self.role_name,
-                    ", ".join(configuration["role_name"]))
+                return False, "Can't add people to role %s, configured role is %s" % (self.role_name,
+                    configuration["role_name"])
         return True, None
 
     def validate(self, actor, target):
+        if type(self.role_name) != str:
+            self.set_validation_error("Role must be type str, not " + str(type(self.role_name)))
+            return False
         if not target.roles.is_role(self.role_name):
             self.set_validation_error("Role " + self.role_name + " does not exist")
             return False
@@ -469,6 +489,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
 class RemovePeopleFromRoleStateChange(BaseStateChange):
     description = "Remove people from role in community"
+    preposition = "in"
 
     def __init__(self, role_name, people_to_remove):
         self.role_name = role_name
@@ -476,13 +497,13 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return get_community_models()
+        return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s from role %s in" % (self.stringify_list(self.people_to_remove), self.role_name)  
+        return "remove %s from role %s" % (self.stringify_list(self.people_to_remove), self.role_name)  
 
     def description_past_tense(self):
-        return "removed %s from role %s in" % (self.stringify_list(self.people_to_remove), self.role_name)  
+        return "removed %s from role %s" % (self.stringify_list(self.people_to_remove), self.role_name)  
 
     def validate(self, actor, target):
         return True

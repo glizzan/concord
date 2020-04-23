@@ -2,6 +2,7 @@ import json
 
 from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
+from concord.permission_resources.utils import get_verb_given_permission_type
 
 
 #####################################
@@ -31,24 +32,40 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
     def get_allowable_targets(cls):
         from concord.communities.models import Community
         from concord.resources.models import Resource, Item
-        return [Community, Resource, Item]    
+        return [Community, Resource, Item, PermissionsItem]    
 
-    def description_present_tense(self):
-        permission_string = "add permission of type %s" % (self.permission_type)
+    def description_present_tense(self):        
+        permission_string = "add permission '%s'" % get_verb_given_permission_type(self.permission_type)
         if self.permission_configuration:
             permission_string += " (configuration: %s)" % (str(self.permission_configuration))
         return permission_string
 
     def description_past_tense(self):
-        permission_string = "added permission of type %s" % (self.permission_type)
+        permission_string = "added permission '%s'" % get_verb_given_permission_type(self.permission_type)
         if self.permission_configuration:
             permission_string += " (configuration: %s)" % (str(self.permission_configuration))
         return permission_string
 
     def validate(self, actor, target):
+        """ To validate a permission being added, we need to instantiate the permission and check its configuration is valid.
+        We also need to validate that the given permission can be set on the given target.
         """
-        put real logic here
-        """
+        from concord.actions.utils import get_state_change_object_given_name
+        permission =  get_state_change_object_given_name(self.permission_type)
+
+        # check valid target
+        if target.__class__ not in permission.get_allowable_targets():
+            self.set_validation_error("This kind of permission cannot be set on target %s of class %s, must be %s" % (
+                str(target), str(target.__class__), ", ".join([str(option) for option in permission.get_allowable_targets()])))
+            return False
+
+        # check configuration
+        if hasattr(permission, "check_configuration") and self.permission_configuration is not None: 
+            is_valid, error_message = permission.check_configuration_is_valid(self.permission_configuration)
+            if not is_valid:
+                self.set_validation_error(error_message)
+                return False
+
         return True
 
     def implement(self, actor, target):
@@ -73,6 +90,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
 class RemovePermissionStateChange(PermissionResourceBaseStateChange):
     description = "Remove permission"
+    preposition = "from"
 
     def __init__(self, item_pk):
         self.item_pk = item_pk
@@ -84,10 +102,10 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
         return [Community, Resource, Item]    
 
     def description_present_tense(self):
-        return "remove permission %d" % (self.item_pk)  
+        return "remove permission with id %d" % (self.item_pk)  
 
     def description_past_tense(self):
-        return "removed permission %d" % (self.item_pk)
+        return "removed permission with id %d" % (self.item_pk)
 
     def validate(self, actor, target):
         """
@@ -111,6 +129,7 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
 class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
 
     description = "Add actor to permission"
+    preposition = "for"
     instantiated_fields = ['permission']
 
     def __init__(self, *, actor_to_add: str, permission_pk: int):
@@ -126,7 +145,7 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         return "add actor %s to permission %d (%s)" % (self.actor_to_add, 
-            self.permission_pk, self.permission.get_change_type())  
+            self.permission_pk, get_verb_given_permission_type(self.permission.get_change_type()))
 
     def description_past_tense(self):
         return "added actor %s to permission %d (%s)" % (self.actor_to_add, 
@@ -146,6 +165,7 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
 class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     description = "Remove actor from permission"
+    preposition = "for"
     instantiated_fields = ['permission']
 
     def __init__(self, *, actor_to_remove: str, permission_pk: int):
@@ -161,7 +181,7 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         return [PermissionsItem]
 
     def description_present_tense(self):
-        return "remove actor %s from permission %d (%s) " % (self.actor_to_remove, 
+        return "remove actor %s from permission %d (%s)" % (self.actor_to_remove, 
             self.permission_pk, self.permission.get_change_type())  
 
     def description_past_tense(self):
@@ -182,6 +202,7 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
 class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
 
     description = "Add role to permission"
+    preposition = "for"
     instantiated_fields = ['permission']
 
     def __init__(self, *, role_name: str, permission_pk: int):
@@ -217,6 +238,7 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
 class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     description = "Remove role from permission"
+    preposition = "for"
     instantiated_fields = ['permission']
 
     def __init__(self, *, role_name: str, permission_pk: int):
@@ -232,7 +254,8 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod 
     def get_configurable_fields(self):
-        return ["role_name"]
+        return { "role_name": 
+            { "display": "Role that can be removed from the permission", "type": "PermissionRoleField" } }
 
     @classmethod
     def get_uninstantiated_description(self, **configuration_kwargs):
@@ -248,6 +271,15 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
     def description_past_tense(self):
         return "removed role %s from permission %d (%s)" % (self.role_name, 
             self.permission_pk, self.permission.get_change_type())  
+
+    @classmethod
+    def check_configuration_is_valid(cls, configuration):
+        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
+        By contrast, check_configuration checks a specific action against an already-validated configuration."""
+        if "role_name" in configuration:
+            if type(configuration["role_name"]) != str:
+                return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
+        return True, ""
 
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
@@ -273,6 +305,7 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
 class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange):
 
     description = "Change configuration of permission"
+    preposition = "for"
     instantiated_fields = ['permission']
 
     def __init__(self, *, configurable_field_name: str, configurable_field_value: str, 
@@ -315,6 +348,7 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
 class ChangeInverseStateChange(PermissionResourceBaseStateChange):
 
     description = "Toggle permission's inverse field"
+    preposition = "for"
     instantiated_fields = ['permission']
 
     def __init__(self, *, change_to: bool, permission_pk: int):

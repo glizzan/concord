@@ -2,6 +2,8 @@ import json, warnings
 
 from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
+from django.apps import apps
 
 
 class BaseStateChange(object):
@@ -24,7 +26,7 @@ class BaseStateChange(object):
         permission enabled attribute (a bit of a hack to find anything descended from
         PermissionedModel) and if they are not abstract models.
         '''
-        from django.apps import apps
+        # TODO: should get targets from customizing sites
         models = apps.get_models()
         possible_targets = []
         for model in models:
@@ -33,10 +35,26 @@ class BaseStateChange(object):
         return possible_targets 
 
     @classmethod 
-    def get_configurable_fields(self):
-        if hasattr(self, 'check_configuration'): 
+    def get_configurable_fields(cls):
+        if hasattr(cls, 'check_configuration'): 
             warnings.warn("You have added a check_configuration method to your state change without specifying any configurable fields.")
-        return []
+        return {}
+
+    @classmethod 
+    def get_configurable_form_fields(cls):
+        fields = {}
+        for field_name, field_data in cls.get_configurable_fields().items():
+            fields.update({ 
+                field_name : {
+                    "field_name": field_name,
+                    "display": field_data["display"],
+                    "type": field_data["type"] if "type" in field_data else "CharField",
+                    "required": field_data["required"] if "required" in field_data else False,
+                    "other_data": field_data["other_data"] if "other_data" in field_data else None,
+                    "value": None
+                }
+            })
+        return fields
 
     @classmethod
     def model_is_target(cls, model_name):
@@ -44,7 +62,8 @@ class BaseStateChange(object):
         target_names = [model.__name__ for model in cls.get_all_possible_targets()]
         return True if model_name in target_names else False
 
-    def get_community_models(self):
+    @classmethod
+    def get_community_models(cls):
         """This helper method lets us indicate alternative community models as allowable targets for community actions."""
         # first get default model
         from concord.communities.models import Community
@@ -56,6 +75,27 @@ class BaseStateChange(object):
                 model_instance = apps.get_model(model["app_name"], model["model_name"])
                 community_models.append(model_instance)
         return community_models
+
+    @classmethod
+    def get_permissionable_models(cls):
+        """This helper method lets us indicate allowable targets for permission actions."""
+        # must be a way to find this automatically?
+        from concord.communities import community_models
+        from concord.conditionals import conditional_models
+        from concord.permission_resources import permission_models
+        from concord.resources import resource_models
+
+        targets = [community_models.Community, community_models.DefaultCommunity, conditional_models.ConditionTemplate,
+        conditional_models.VoteCondition, conditional_models.ApprovalCondition, permission_models.PermissionsItem, 
+        permission_models.Template, resource_models.Resource, resource_models.Item]
+
+        # then get custom models added by third parties
+        if hasattr(settings, "ADDITIONAL_PERMISSIONED_MODELS"):
+            for model in settings.ADDITIONAL_PERMISSIONED_MODELS:
+                model_instance = apps.get_model(model["app_name"], model["model_name"])
+                targets.append(model_instance)
+        
+        return targets
 
     def stringify_list(self, objlist):
         """Helper method for use in displaying change info.  Probably belongs elsewhere."""
@@ -94,9 +134,17 @@ class BaseStateChange(object):
                 del(new_vars)[field]
         return json.dumps(new_vars)
 
+    @classmethod 
+    def get_preposition(cls):
+        """By default, we make changes "to" things but change types can override this default preposition with "for", "with", etc."""
+        if hasattr(cls, "preposition"):
+            return cls.preposition
+        return "to"
+
 
 class ChangeOwnerStateChange(BaseStateChange):
     description = "Change owner"
+    preposition = "for"
 
     def __init__(self, new_owner_content_type, new_owner_id):
         self.new_owner_content_type = new_owner_content_type
@@ -132,16 +180,17 @@ class ChangeOwnerStateChange(BaseStateChange):
 
 class EnableFoundationalPermissionStateChange(BaseStateChange):
     description = "Enable the foundational permission"
+    preposition = "for"
 
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "enable foundational permission" 
+        return "enable the foundational permission" 
 
     def description_past_tense(self):
-        return "enabled foundational permission"
+        return "enabled the foundational permission"
 
     def validate(self, actor, target):
         """
@@ -157,16 +206,17 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
 class DisableFoundationalPermissionStateChange(BaseStateChange):
     description = "disable foundational permission"
+    preposition = "for"
 
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "disable foundational permission" 
+        return "disable the foundational permission" 
 
     def description_past_tense(self):
-        return "disabled foundational permission"
+        return "disabled the foundational permission"
 
     def validate(self, actor, target):
         """
@@ -181,16 +231,17 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
 class EnableGoverningPermissionStateChange(BaseStateChange):
     description = "Enable the governing permission"
+    preposition = "for"
 
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_all_possible_targets() 
 
     def description_present_tense(self):
-        return "enable governing permission" 
+        return "enable the governing permission" 
 
     def description_past_tense(self):
-        return "enabled governing permission"
+        return "enabled the governing permission"
 
     def validate(self, actor, target):
         """
@@ -206,16 +257,17 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
 class DisableGoverningPermissionStateChange(BaseStateChange):
     description = "disable governing permission"
+    preposition = "for"
 
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "disable governing permission" 
+        return "disable the governing permission" 
 
     def description_past_tense(self):
-        return "disabled governing permission"
+        return "disabled the governing permission"
 
     def validate(self, actor, target):
         """
@@ -234,6 +286,7 @@ class ViewChangelessStateChange(BaseStateChange):
     while the item inherits from BaseStateChange, it does not actually change
     any state - merely gets the specified fields."""
     description = "View"
+    preposition = "for"
 
     def __init__(self, fields_to_include=None):
         self.fields_to_include = fields_to_include
@@ -244,7 +297,7 @@ class ViewChangelessStateChange(BaseStateChange):
 
     @classmethod 
     def get_configurable_fields(self):
-        return ["fields_to_include"]
+        return { "fields_to_include": { "display": "Fields that can be viewed" }}
 
     def description_present_tense(self):
         field_string = ", ".join(self.fields_to_include) if self.fields_to_include else "all fields"
@@ -253,6 +306,18 @@ class ViewChangelessStateChange(BaseStateChange):
     def description_past_tense(self):
         field_string = ", ".join(self.fields_to_include) if self.fields_to_include else "all fields"
         return "viewed %s" % field_string  
+
+    @classmethod
+    def check_configuration_is_valid(cls, configuration):
+        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
+        By contrast, check_configuration checks a specific action against an already-validated configuration."""
+        if "fields_to_include" in configuration:
+            if type(configuration["fields_to_include"]) != list:
+                return False, "fields_to_include must be of type list, not %s " % str(type(configuration["fields_to_include"]))
+            if not all(type(field) == str for field in configuration["fields_to_include"]):
+                return False, "fields_to_include must be a list of strings"
+        
+        return True, ""
 
     def check_configuration(self, permission):
         '''All configurations must pass for the configuration check to pass.'''
@@ -281,10 +346,7 @@ class ViewChangelessStateChange(BaseStateChange):
 
     def implement(self, actor, target):
         """Gets data from specified fields, or from all fields, and returns as dictionary."""
-
-        # print("Fields in fields to include: ", self.fields_to_include)
-        # print("Fields on target: ", [field.name for field in target._meta.get_fields()])
-
+        
         data_dict = {}
 
         target_data = target.get_serialized_field_data()

@@ -56,32 +56,37 @@ def foundational_permission_pipeline(action):
 
 
 def find_specific_permissions(action):
-    """Returns matching permission or None."""
+    """Returns matching permissions or empty list."""
     permissionClient = PermissionResourceClient(system=True)
     permissionClient.set_target(action.target)
     specific_permissions = []
     for permission in permissionClient.get_specific_permissions(change_type=action.change.get_change_type()):
         if not permission.is_active:
             continue       
-        satisfies_configuration_or_no_configuration = check_configuration(action, permission)
-        if satisfies_configuration_or_no_configuration:
+        if check_configuration(action, permission):
             specific_permissions.append(permission)
     return specific_permissions
 
 
 def specific_permission_pipeline(action, specific_permissions):
+    """Goes through matching specific permissions.  First, it checks to see that the actor satisfies the permission.
+    If the actor doesn't satisfy any permissions, the actoin is rejected.  For the permissions the actor does 
+    satisfy, we look for conditions:
 
-    # If actor does not match specific permission, reject
+        * If any permissions have no condition, the action is approved
+        * If any of the conditions are approved, the action is approved
+        * If none are approved, but any are waiting, the action is waiting; 
+        * If none are approved or waiting, the action is rejected."""
     
     permissionClient = PermissionResourceClient(system=True)
 
     matching_permissions = {}
     for permission in specific_permissions:
-        is_matched, matched_role = permissionClient.actor_satisfies_permission(action=action, permission=permission)
+        is_matched, matched_role = permissionClient.actor_satisfies_permission(actor=action.actor, permission=permission)
         if is_matched:
             matching_permissions.update({permission : matched_role})
 
-    if not matching_permissions:
+    if not matching_permissions:    # If actor does not match specific permission, reject
         action.resolution.reject_action(resolved_through="specific", log="no matching specific permissions found")
         return action
 
@@ -118,9 +123,10 @@ def specific_permission_pipeline(action, specific_permissions):
     # is set to waiting, otherwise reject.
     if waiting_on_permission:
         action.resolution.status = "waiting"
-        action.log = "; ".join(temp_log)
+        action.resolution.add_to_log("; ".join(temp_log))
         return action
     else:
+
         # Hack to save info if only one matched permission
         if len(matching_permissions) == 1:
             condition = condition_template.condition_name()

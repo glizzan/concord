@@ -45,34 +45,6 @@ class BaseCommunityModel(PermissionedModel):
         Communities own themselves by default, although subtypes may differ.
         """
         return self
-    
-    def owner_list_display(self):
-        """
-        Helper function to display results of list_owners() more nicely.
-        """
-        owners = self.list_owners()
-        has_actors = 'actors' in owners and owners['actors']
-        has_roles = 'roles' in owners and owners['roles']
-        if has_actors and has_roles:
-            return english_list(owners['actors']) + " and people in roles " + english_list(owners['roles'])
-        if has_actors:
-            return english_list(owners['actors'])
-        if has_roles:
-            return "people in roles " + english_list(owners['roles'])
-
-    def governor_list_display(self):
-        """
-        Helper function to display results of list_governors() more nicely.
-        """
-        governors = self.list_governors()
-        has_actors = 'actors' in governors and governors['actors']
-        has_roles = 'roles' in governors and governors['roles']
-        if has_actors and has_roles:
-            return english_list(governors['actors']) + " and people in roles " + english_list(governors['roles'])
-        if has_actors:
-            return english_list(governors['actors'])
-        if has_roles:
-            return "people in roles " + english_list(governors['roles'])
 
     def owner_condition_display(self):
         comCondClient = CommunityConditionalClient(system=True, target=self)

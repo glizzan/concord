@@ -9,6 +9,7 @@ from concord.resources.models import Item
 
 class ChangeResourceNameStateChange(BaseStateChange):
     description = "Change name of resource"
+    preposition = "for"
 
     def __init__(self, new_name):
         self.new_name = new_name
@@ -51,10 +52,10 @@ class AddItemResourceStateChange(BaseStateChange):
         return [AbstractResource, AbstractItem, Resource, Item]    
 
     def description_present_tense(self):
-        return "add item %s to resource" % (self.item_name)  
+        return "add item %s" % (self.item_name)  
 
     def description_past_tense(self):
-        return "added item %s to resource" % (self.item_name)
+        return "added item %s" % (self.item_name)
 
     def validate(self, actor, target):
         """
@@ -72,6 +73,7 @@ class AddItemResourceStateChange(BaseStateChange):
 
 class RemoveItemResourceStateChange(BaseStateChange):
     description = "Remove item from resource"
+    preposition = "from"
 
     def __init__(self, item_pk):
         self.item_pk = item_pk
@@ -84,10 +86,10 @@ class RemoveItemResourceStateChange(BaseStateChange):
         return [AbstractResource, AbstractItem, Resource, Item]    
 
     def description_present_tense(self):
-        return "remove item with pk %s from resource" % (self.item_pk)  
+        return "remove item with pk %s" % (self.item_pk)  
 
     def description_past_tense(self):
-        return "removed item with pk %s from resource" % (self.item_pk)
+        return "removed item with pk %s" % (self.item_pk)
 
     def validate(self, actor, target):
         """

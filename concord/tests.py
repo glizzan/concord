@@ -2992,10 +2992,10 @@ class TemplateTest(DataTestCase):
         text = template_model.data.generate_text()
 
         self.assertEquals(len(text), 6)
-        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1 and governed by individual 1. ")
+        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1. It is governed by individual 1. ")
         self.assertEquals(text["community_governance_info"], 
             "By default, the owners do not need to approve actions in the community, on the condition that one person in list of individuals (1) needs to approve. Unless otherwise specified, the governors of the community can take any action. ")
-        self.assertEquals(text["community_members_info"], 'The members of this community are 13 and 4. ')
+        self.assertEquals(text["community_members_info"], 'The members of this community are 1, 3 and 4. ')
         self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
         self.assertEquals(text["community_permissions_info"], 
             "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that one person in list of individuals (4) needs to approve. ")
@@ -3012,10 +3012,10 @@ class TemplateTest(DataTestCase):
         text = template_model.data.generate_text()
 
         self.assertEquals(len(text), 8)
-        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1 and governed by individual 1. ")
+        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1. It is governed by individual 1. ")
         self.assertEquals(text["community_governance_info"], 
             "By default, the owners do not need to approve actions in the community, on the condition that one person in list of individuals (1) needs to approve. Unless otherwise specified, the governors of the community can take any action. ")
-        self.assertEquals(text["community_members_info"], 'The members of this community are 13 and 4. ')
+        self.assertEquals(text["community_members_info"], 'The members of this community are 1, 3 and 4. ')
         self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
         self.assertEquals(text["community_permissions_info"], 
             "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that one person in list of individuals (4) needs to approve. ")
@@ -3113,7 +3113,7 @@ class TemplateTest(DataTestCase):
         but if you don't the permission actors in the condition data are overwritten as strings not ints, this
         is likely to do with some kind of shallow copying happening when we need a deep copy."""
         self.assertEquals(self.templateClient.target.data.generate_text()["community_basic_info"],
-            "Community United States Women's National Team is owned by individual 1 and governed by individual 1. ")
+            "Community United States Women's National Team is owned by individual 1. It is governed by individual 1. ")
         self.templateClient.refresh_target()
 
         # Editing a custom field using valid data successfully updates template
@@ -3155,7 +3155,7 @@ class TemplateTest(DataTestCase):
             template_object_id=community_name_field["template_object_id"], field_name="name",
             new_field_data="United States Women's National Team")
         self.assertEquals(result["template_text"]["community_basic_info"], 
-            "Community United States Women's National Team is owned by individual 1 and governed by individual 1. ")
+            "Community United States Women's National Team is owned by individual 1. It is governed by individual 1. ")
         community_name_field = [field_dict for field_dict in result["editable_fields"]
             if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0] 
         self.assertEquals(community_name_field["field_value"], "United States Women's National Team")

@@ -40,21 +40,19 @@ class Action(models.Model):
 
     def get_description(self):
         if self.resolution.status == "implemented":
-            if hasattr(self.change,"description_past_tense"):
-                return self.actor.username + " " + self.change.description_past_tense() + " on target " + self.target.get_name()
+            description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
+            return self.actor.username + " " + description + " " + target_preposition + " " + self.target.get_name()
         else:
-            if hasattr(self.change, "description_present_tense"):
-                return self.actor.username + " asked to " + self.change.description_present_tense() + " on target " + self.target.get_name()
-        return self.__str__()
+            description, target_preposition = self.change.description_present_tense(), self.change.get_preposition()
+            return self.actor.username + " asked to " + description + " " + target_preposition + " " + self.target.get_name()
 
     def get_targetless_description(self):
         if self.resolution.status == "implemented":
-            if hasattr(self.change,"description_past_tense"):
-                return self.actor.username + " " + self.change.description_past_tense()
+            description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
+            return self.actor.username + " " + description
         else:
-            if hasattr(self.change, "description_present_tense"):
-                return self.actor.username + " asked to " + self.change.description_present_tense()
-        return self.__str__() 
+            description, target_preposition = self.change.description_present_tense(), self.change.get_preposition()
+            return self.actor.username + " asked to " + description
 
     def get_condition(self):
         from concord.conditionals.client import PermissionConditionalClient
@@ -234,6 +232,9 @@ class PermissionedModel(models.Model):
 
     def get_owner(self):
         return self.owner
+
+    def get_content_type(self):
+        return ContentType.objects.get_for_model(self).pk
 
     def get_unique_id(self):
         # App name + model name + pk

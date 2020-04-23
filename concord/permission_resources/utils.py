@@ -84,7 +84,7 @@ def create_permissions_outside_pipeline(permission_dict, condition_item, owner):
 
     for field_name, field_value in permission_dict.items():
 
-        change_type, perm_type = condition_item.get_data_from_permission_field(field_name)
+        change_type, perm_type = condition_item.permission_field_map(field_name)
         if change_type not in new_permissions:
             new_permissions[change_type] = PermissionsItem(permitted_object=condition_item, change_type=change_type,
                 owner=owner)
@@ -150,6 +150,12 @@ def check_configuration(action, permission):
     # Then call check_configuration on the state_change, passing in the permission
     # configuration data, and return the result.
     result, message = change_object.check_configuration(permission)
-    if message:
+    if result == False and message:
         action.resolution.add_to_log(message)
     return result
+
+
+def get_verb_given_permission_type(permission):
+    from concord.actions.utils import get_state_change_object_given_name
+    state_change_object = get_state_change_object_given_name(permission)
+    return state_change_object.description.lower()

@@ -284,8 +284,14 @@ class TemplateData(object):
         for related_field in self.relationship_map["related_fields"]:
             if related_field["name"] == field_name and related_field["field_on"] == int(item_id):
                 target_id = str(related_field["field_target_id"])
-        if target_id:
+        try:
             return self.get_combined_objects()[target_id]
+        except:
+            pass
+        try:
+            return self.get_combined_objects()[int(target_id)]
+        except:
+            pass
 
     def is_editable_field(self, field):
         """We currently allow only simple non-related fields to be edited, but eventually all fields
@@ -340,7 +346,7 @@ class TemplateData(object):
             id_count += 1
             self.community = { id_count : community }
             if recursive:
-                self.get_recursive_data_for_template()
+                id_count = self.get_recursive_data_for_template(id_count)
 
         if permissions:
             for permission in permissions:
@@ -360,17 +366,17 @@ class TemplateData(object):
         if community or permissions or conditions or owned_objects:
             self.generate_relationship_map()
 
-    def get_recursive_data_for_template(self):
+    def get_recursive_data_for_template(self, id_count):
         """Called when we have a community and recursive=True, gets all permissions and conditions
         related to the community and any owned objects also passed in."""
 
         from concord.permission_resources.client import PermissionResourceClient
         from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
-        permissionClient = PermissionResourceClient(actor=actor)
-        commConditionalClient = CommunityConditionalClient(actor=actor)
-        permConditionalClient = PermissionConditionalClient(actor=actor)
+        permissionClient = PermissionResourceClient(actor="system")
+        commConditionalClient = CommunityConditionalClient(actor="system")
+        permConditionalClient = PermissionConditionalClient(actor="system")
 
-        objects_to_check = [community] + self.owned_objects
+        objects_to_check = [self.get_community()] + self.get_owned_objects()
 
         while len(objects_to_check) > 0:
         
@@ -378,25 +384,27 @@ class TemplateData(object):
 
             # Check permission
             permissions = permissionClient.get_permissions_on_object(object=current_object)
-            if permissions:
-                self.permissions += permission
-                objects_to_check += permissions
+            for permission in permissions:
+                id_count += 1
+                self.permissions.update({ id_count : permission })
+                objects_to_check.append(permission)
 
+            condition_templates = []
             # Check for conditionals set on it
             if current_object.__class__.__name__ == "Community":
                 commConditionalClient.set_target(target=current_object)
                 govConditionTemplate = commConditionalClient.get_condition_template_for_governor()
                 ownerConditionTemplate = commConditionalClient.get_condition_template_for_owner()
-                for conditionTemplate in [govConditionTemplate, ownerConditionTemplate]:
-                    if conditionTemplate:
-                        self.conditions.append(conditionTemplate)
-                        objects_to_check.append(conditionTemplate)
+                condition_templates.append(govConditionTemplate, ownerConditionTemplate)
             elif current_object.__class__.__name__ == "PermissionsItem":
                 permConditionalClient.set_target(target=current_object)
                 conditionTemplate = permConditionalClient.get_condition_template()
-                if conditionTemplate:
-                    self.conditions.append(conditionTemplate)
-                    objects_to_check.append(conditionTemplate)
+                condition_templates.append(conditionTemplate)
+            for condition in condition_templates:
+                if condition:
+                    id_count += 1
+                    self.conditions.update({ id_count : condition })
+                    objects_to_check.append(condition)
 
     def is_saveable_related_field(self, field):
         """This method indicates whether the given field is (a) a related field and (b) a related
@@ -429,6 +437,10 @@ class TemplateData(object):
         for item_key, item in all_objects.items():
             fields = item._meta.get_fields()
             for field in fields:
+                # skip owner field for community only
+                if hasattr(item, "is_community") and item.is_community:
+                    if field.name == "owner":
+                        continue
                 # if the field is a related field and its value is not None, store data
                 if self.is_saveable_related_field(field) and getattr(item, field.name) is not None: 
                     new_key = str(item.pk) + "_" + item._meta.model.__name__

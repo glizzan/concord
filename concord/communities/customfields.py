@@ -65,7 +65,7 @@ class RoleHandler(object):
         '''Members should be a list of integers.  For now, we do not check that these are
         real users.'''
         if type(members) is not list:
-            raise TypeError("Members must be supplied as a list.")
+            raise 
         if not members:
             raise ValueError("Members list must contain at least one member.")
         if type(members[0]) is not int:
@@ -357,24 +357,32 @@ class RoleHandler(object):
             print("Role ", role_name, " not in governor roles") 
 
     def add_owner(self, pk):
+        if not pk:
+            raise TypeError("Owner pk must be int, not type ", type(pk))
         if pk not in self.owners['actors']:
             self.owners['actors'].append(pk)
         else:
             print("User ", str(pk), " is already an owner.")
 
     def add_owner_role(self, role_name):
+        if not role_name:
+            raise TypeError("Owner role must be string, not type ", type(pk))
         if role_name not in self.owners['roles']:
             self.owners['roles'].append(role_name)
         else:
             print("Role ", role_name, " already in owner roles") 
 
     def remove_owner(self, pk):
+        if not pk:
+            raise TypeError("Owner pk must be int, not type ", type(pk))
         if pk in self.owners['actors']:
             self.owners['actors'].remove(pk)
         else:
             print("User ", str(pk), " is not an owner and can't be removed from owner role.")
 
     def remove_owner_role(self, role_name):
+        if not role_name:
+            raise TypeError("Owner role must be string, not type ", type(pk))
         if role_name in self.owners['roles']:
             self.owners['roles'].remove(role_name)
         else:

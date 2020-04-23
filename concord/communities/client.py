@@ -11,6 +11,7 @@ from concord.actions.models import PermissionedModel
 from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
+from concord.permission_resources.templates import community_governance_info_to_text
 
 
 ######################
@@ -86,6 +87,20 @@ class CommunityClient(BaseClient):
 
     def get_users_given_role(self, *, role_name: str):
         return self.target.roles.get_users_given_role(role_name)
+
+    def get_governance_info_as_text(self):
+        # HACK to make use of template's text utils, need to refactor them to be more general use
+        from concord.conditionals.client import CommunityConditionalClient
+        ccc = CommunityConditionalClient(actor=self.actor, target=self.target)
+        from concord.permission_resources.templates import community_basic_info_to_text, community_governance_info_to_text
+
+        conditions = list(filter(None, [ccc.get_condition_template_for_owner(), 
+            ccc.get_condition_template_for_governor()]))
+        basic_info_string = community_basic_info_to_text(template_model=None, community=self.target)
+        governance_string = community_governance_info_to_text(template_model=None, community=self.target,
+            conditions=conditions)
+
+        return basic_info_string + " " + governance_string
 
     def get_ownership_info(self, shorten_roles=False) -> dict:
         owner_data = self.target.roles.get_owners()
@@ -186,12 +201,12 @@ class CommunityClient(BaseClient):
 
         for new_owner in new_owner_data["individuals"]:
             if new_owner not in existing_owners["actors"]:
-                action, result = self.add_owner(owner_name=new_owner)
+                action, result = self.add_owner(owner_pk=new_owner)
                 actions.append(action)
 
         for old_owner in existing_owners["actors"]:
             if old_owner not in new_owner_data["individuals"]:
-                action, result = self.remove_owner(owner_name=old_owner)
+                action, result = self.remove_owner(owner_pk=old_owner)
                 actions.append(action)
 
         for new_owner_role in new_owner_data["roles"]:
@@ -201,8 +216,7 @@ class CommunityClient(BaseClient):
 
         for old_owner_role in existing_owners["roles"]:
             if old_owner_role not in new_owner_data["roles"]:
-                community_pk, old_role = old_owner_role.split("_") # Make better API to get roles, and remove this?
-                action, result = self.remove_owner_role(owner_role=old_role)
+                action, result = self.remove_owner_role(owner_role=old_owner_role)
                 actions.append(action)
 
         return actions
@@ -217,12 +231,12 @@ class CommunityClient(BaseClient):
 
         for new_governor in new_governor_data["individuals"]:
             if new_governor not in existing_governors["actors"]:
-                action, result = self.add_governor(governor_name=new_governor)
+                action, result = self.add_governor(governor_pk=new_governor)
                 actions.append(action)
 
         for old_governor in existing_governors["actors"]:
             if old_governor not in new_governor_data["individuals"]:
-                action, result = self.remove_governor(governor_name=old_governor)
+                action, result = self.remove_governor(governor_pk=old_governor)
                 actions.append(action)
 
         for new_governor_role in new_governor_data["roles"]:
@@ -232,8 +246,7 @@ class CommunityClient(BaseClient):
 
         for old_governor_role in existing_governors["roles"]:
             if old_governor_role not in new_governor_data["roles"]:
-                community_pk, old_role = old_governor_role.split("_") # Make better API to get roles, and remove this?
-                action, result = self.remove_governor_role(governor_role=old_role)
+                action, result = self.remove_governor_role(governor_role=old_governor_role)
                 actions.append(action)
 
         return actions

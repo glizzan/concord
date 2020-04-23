@@ -148,14 +148,17 @@ def capitalize_first_letter(text):
 
 
 def list_to_text(list_to_convert):
-    """Given a list of strings, return them as list in format 'apple, banana and carrot'."""
+    """Given a list with items that can be turned into strings, return them as text in format 
+    'apple, banana and carrot'."""
+
+    if len(list_to_convert) == 0:
+        return ""
     if len(list_to_convert) == 1:
         return str(list_to_convert[0])
-    text = ""
-    last_index = len(list_to_convert)-1
-    for item in list_to_convert[:last_index]:
-        text += str(item)
-    text += " and " + str(list_to_convert[last_index])
+    
+    last_item = list_to_convert.pop(-1)
+    text = ", ".join([str(item) for item in list_to_convert])
+    text += " and " + str(last_item)
     return text
 
 
@@ -182,6 +185,8 @@ def actors_to_text(actor_info):
 
 
 def roles_and_actors(role):
+    import copy
+    role = copy.deepcopy(role)
 
     text = ""
 
@@ -200,10 +205,11 @@ def roles_and_actors(role):
     return text
 
 
-def community_basic_info_to_text(template_model):
+def community_basic_info_to_text(template_model, community=None):
     """Gets basic community info such as name, owners, governors."""
-    community = template_model.get_community()
-    return "Community %s is owned by %s and governed by %s. " % (community.name, 
+    if not community:
+        community = template_model.get_community()
+    return "Community %s is owned by %s. It is governed by %s. " % (community.name, 
         roles_and_actors(community.roles.get_owners()),
         roles_and_actors(community.roles.get_governors()))
 
@@ -211,7 +217,7 @@ def community_basic_info_to_text(template_model):
 def conditions_to_text(conditions):
     """Takes a list of conditions (condition templates?) and turns them into text."""
 
-    from conditionals.client import PermissionConditionalClient
+    from concord.conditionals.client import PermissionConditionalClient
     pcc = PermissionConditionalClient(actor="system")
 
     condition_strings = [ condition.condition_data.get_condition_description() for condition in conditions ]
@@ -219,13 +225,15 @@ def conditions_to_text(conditions):
     return list_to_text(condition_strings)
 
 
-def community_governance_info_to_text(template_model):
+def community_governance_info_to_text(template_model, community=None, conditions=None):
     """Give details of how owners/governors operate on this community."""
 
-    community = template_model.get_community()
+    if template_model:
+        community = template_model.get_community()
+        conditions = [value for key,value in template_model.conditions.items()]
 
     owner_condition, governor_condition = None, None
-    for condition_key, condition in template_model.conditions.items():
+    for condition in conditions:
         if condition.condition_data.target_type == "own":
             owner_condition = condition
         if condition.condition_data.target_type == "gov":

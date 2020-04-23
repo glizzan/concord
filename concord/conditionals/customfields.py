@@ -161,21 +161,15 @@ class ConditionData(object):
 
     def get_configurable_fields_with_data(self):
 
-        condition_data = json.loads(self.condition_data)
-        permission_data = json.loads(self.permission_data) if self.permission_data else {}
-
         field_list = []        
-        
-        condition = self.get_condition_type_class()
-        fields = condition.configurable_fields()  # Retrieves formatted as dicts, not list
 
-        for field_name, field in fields.items():
+        for field_name, field in self.condition_object.configurable_fields().items():
             if field["type"] in ["PermissionRoleField", "PermissionActorField"]:
-                if field["field_name"] in permission_data:
-                    field["value"] = permission_data[field["field_name"]]
+                if field["field_name"] in self.permission_data:
+                    field["value"] = self.permission_data[field["field_name"]]
             else:
-                if field_name in condition_data:
-                    field["value"] = condition_data[field_name]
+                if field_name in self.condition_data:
+                    field["value"] = self.condition_data[field_name]
             field_list.append(field)
 
         return field_list
@@ -183,9 +177,10 @@ class ConditionData(object):
     # Update methods
 
     def update_condition_data(self, condition_data):
+        """Takes in data, typically from the front, and reformats into key-value pairs using reformat_front_end_data."""
         self.condition_data, throwaway = self.reformat_front_end_data(condition_data=condition_data)
         condition_class = self.get_condition_type_class()
-        self.condition_object = condition_class(**condition_data)
+        self.condition_object = condition_class(**self.condition_data)
         self.validate_condition()
 
     def update_permission_data(self, permission_data):

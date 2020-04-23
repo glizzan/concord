@@ -71,6 +71,10 @@ class BaseConditionalClient(BaseClient):
             condition_items = VoteCondition.objects.filter(action=action_pk)
         return condition_items[0] if condition_items else None
 
+    def get_condition_item(self, *, condition_pk, condition_type):
+        condition_class = self.get_condition_class(condition_type=condition_type)
+        return condition_class.objects.get(pk=int(condition_pk))
+
     def get_conditions_given_targets(self, *, target_pks: list):
         return ConditionTemplate.objects.filter(permission__in=target_pks)
 
@@ -84,6 +88,11 @@ class BaseConditionalClient(BaseClient):
 
     def condition_lookup_helper(self, *, lookup_string: str) -> Model:
         return ConditionTemplate().get_condition_type_class(lookup_string=lookup_string)
+
+    def get_condition_class(self, *, condition_type):
+        for condition in self.get_possible_conditions():
+            if condition.__name__.lower() == condition_type.lower():
+                return condition
 
     def get_possible_conditions(self, *, formatted_as="objects"):
         
@@ -112,6 +121,18 @@ class BaseConditionalClient(BaseClient):
             action=action.pk, **kwargs)
         return VoteConditionClient(target=vote_object, actor=self.actor)
 
+    # Requires target to be set
+
+    def get_condition_template(self) -> ConditionTemplate:
+        result = self.target.condition.all()
+        # result = ConditionTemplate.objects.filter(conditioned_object=self.target)
+        if result:
+            return result[0]
+        return
+        # FIXME: should probably return empty list, but that breaks a bunch of tests, so need to refactor
+
+    # Stage changes
+
     # FIXME: It would be nice to be able to pass in the ConditionTemplate, and/or to be able to pass in
     # condition kwargs directly
     def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
@@ -120,7 +141,12 @@ class BaseConditionalClient(BaseClient):
             permission_data=permission_data, condition_data=condition_data, target_type=target_type)
         return self.create_and_take_action(change)
 
-    # Stage changes
+    def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
+        condition_data: Dict = None) -> Tuple[int, Any]:
+        # FIXME: this unnecessarily requires target (a permission) to be set 
+        change = sc.ChangeConditionStateChange(condition_pk=condition_pk,
+            permission_data=permission_data, condition_data=condition_data)
+        return self.create_and_take_action(change)
 
     def remove_condition(self, *, condition: Model) -> Tuple[int, Any]:
         change = sc.RemoveConditionStateChange(condition_pk=condition.pk)
@@ -131,26 +157,6 @@ class PermissionConditionalClient(BaseConditionalClient):
     '''
     Target is always a Permission.
     '''
-
-    # Target-less methods (don't require a target to be set ahead of time)
-
-    # Read methods which require target to be set
-
-    def get_condition_template(self) -> ConditionTemplate:
-        result = self.target.condition.all()
-        # result = ConditionTemplate.objects.filter(conditioned_object=self.target)
-        if result:
-            return result[0]
-        return
-        # FIXME: should probably return empty list, but that breaks a bunch of tests, so need to refactor
-
-    def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
-        condition_data: Dict = None) -> Tuple[int, Any]:
-        # FIXME: this unnecessarily requires target (a permission) to be set 
-        change = sc.ChangeConditionStateChange(condition_pk=condition_pk,
-            permission_data=permission_data, condition_data=condition_data)
-        return self.create_and_take_action(change)
-
 
 class CommunityConditionalClient(BaseConditionalClient):
     '''

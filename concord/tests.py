@@ -1384,7 +1384,7 @@ class PermissionFormTest(DataTestCase):
     def test_add_role_to_permission(self):
 
         # Before changes, no permissions associated with role
-        permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
+        permissions_for_role = self.prClient.get_permissions_associated_with_role_for_target(role_name="spirit players")
         self.assertEqual(permissions_for_role, [])
 
         # add role to permission

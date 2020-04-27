@@ -68,7 +68,7 @@ class PermissionsItem(PermissionedModel):
 
     def get_target(self):
         # does this get used? what does it do?
-        return self.resource.permitted_object
+        return self.permitted_object
 
     def get_permitted_object(self):
         return self.permitted_object

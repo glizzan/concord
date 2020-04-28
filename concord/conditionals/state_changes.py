@@ -24,7 +24,7 @@ class AddConditionStateChange(BaseStateChange):
         self.target_type = target_type
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.permission_resources.models import PermissionsItem
         return cls.get_community_models() + [PermissionsItem]
 
@@ -61,7 +61,7 @@ class RemoveConditionStateChange(BaseStateChange):
         self.condition_pk = condition_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.permission_resources.models import PermissionsItem
         return cls.get_community_models() + [PermissionsItem]
 
@@ -93,7 +93,7 @@ class ChangeConditionStateChange(BaseStateChange):
         self.permission_data = permission_data
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.permission_resources.models import PermissionsItem
         return cls.get_community_models() + [PermissionsItem] 
 
@@ -145,7 +145,7 @@ class AddVoteStateChange(BaseStateChange):
         self.vote = vote
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.conditionals.models import VoteCondition
         return [VoteCondition]    
 
@@ -189,7 +189,7 @@ class ApproveStateChange(BaseStateChange):
     preposition = ""
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.conditionals.models import ApprovalCondition
         return [ApprovalCondition]    
 
@@ -223,7 +223,7 @@ class RejectStateChange(BaseStateChange):
     preposition = ""
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.conditionals.models import ApprovalCondition
         return [ApprovalCondition]    
 

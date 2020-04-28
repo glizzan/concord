@@ -45,27 +45,24 @@ def get_matching_state_changes(model_name, state_changes):
     """Iterate through a list of state changes and check for matches."""
     matching_state_changes = []
     for member_tuple in state_changes:  #member_tuple is (name, value) tuple 
-        if hasattr(member_tuple[1], "model_is_target"):
-            if member_tuple[1].model_is_target(model_name):
-                if member_tuple[0] != "BaseStateChange":
-                    matching_state_changes.append(member_tuple[1])
+        if hasattr(member_tuple[1], "can_set_on_model") and member_tuple[1].can_set_on_model(model_name):
+            if member_tuple[0] != "BaseStateChange":
+                matching_state_changes.append(member_tuple[1])
     return matching_state_changes
 
 
 def get_parent_matches(model_to_match, model_to_get_parent_of):
     matching_state_changes = []
     for parent in  model_to_get_parent_of.__bases__:
-        if hasattr(parent, "get_state_changes_for_model"):
+        if hasattr(parent, "get_settable_state_changes"):   # only checks parents which are PermissionedModels
             state_changes = get_possible_state_changes(parent._meta.app_label)
             matching_state_changes += get_matching_state_changes(model_to_match.__name__, state_changes)
-
             # Get parent matches
             matching_state_changes += get_parent_matches(model_to_match, parent)
-
     return matching_state_changes
 
 
-def get_state_change_objects_for_model(model_class, app_name):
+def get_state_change_objects_which_can_be_set_on_model(model_class, app_name):
     """When given a model and its containing app, returns all state changes that apply to that model."""
     
     # Find the app_name & import its state_changes module, then get the actual statate change objects

@@ -9,6 +9,7 @@ from django.apps import apps
 class BaseStateChange(object):
 
     allowable_targets = []
+    settable_classes = []
     instantiated_fields = []
 
     @classmethod 
@@ -17,7 +18,16 @@ class BaseStateChange(object):
 
     @classmethod 
     def get_allowable_targets(cls):
+        """Returns the classes that an action of this type may target.  Most likely called by the validate
+        method in a state change."""
         return cls.allowable_targets
+
+    @classmethod 
+    def get_settable_classes(cls):
+        """Returns the classes that a permission with this change type may be set on.  This overlaps with
+        allowable targets, but also includes classes that allowable targets may be nested on.  Most likely
+        called by the validate method in AddPermissionStateChange."""
+        return cls.settable_classes
 
     @classmethod
     def get_all_possible_targets(cls):
@@ -57,9 +67,9 @@ class BaseStateChange(object):
         return fields
 
     @classmethod
-    def model_is_target(cls, model_name):
+    def can_set_on_model(cls, model_name):
         """Tests whether a given model, passed in as a string, is in allowable target."""
-        target_names = [model.__name__ for model in cls.get_all_possible_targets()]
+        target_names = [model.__name__ for model in cls.get_settable_classes()]
         return True if model_name in target_names else False
 
     @classmethod
@@ -151,7 +161,7 @@ class ChangeOwnerStateChange(BaseStateChange):
         self.new_owner_id = new_owner_id
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
@@ -183,7 +193,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
     preposition = "for"
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
@@ -209,7 +219,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
     preposition = "for"
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
@@ -234,7 +244,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
     preposition = "for"
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_all_possible_targets() 
 
     def description_present_tense(self):
@@ -260,7 +270,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
     preposition = "for"
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
@@ -292,7 +302,7 @@ class ViewChangelessStateChange(BaseStateChange):
         self.fields_to_include = fields_to_include
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_all_possible_targets() 
 
     @classmethod 

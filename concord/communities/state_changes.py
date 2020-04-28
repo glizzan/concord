@@ -16,7 +16,7 @@ class ChangeNameStateChange(BaseStateChange):
         self.new_name = new_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -47,7 +47,7 @@ class AddMembersStateChange(BaseStateChange):
         self.member_pk_list = member_pk_list
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -76,7 +76,7 @@ class RemoveMembersStateChange(BaseStateChange):
         self.member_pk_list = member_pk_list
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -118,7 +118,7 @@ class AddGovernorStateChange(BaseStateChange):
         self.governor_pk = governor_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -149,7 +149,7 @@ class RemoveGovernorStateChange(BaseStateChange):
         self.governor_pk = governor_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -179,7 +179,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -211,7 +211,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -242,7 +242,7 @@ class AddOwnerStateChange(BaseStateChange):
         self.owner_pk = owner_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -273,7 +273,7 @@ class RemoveOwnerStateChange(BaseStateChange):
         self.owner_pk = owner_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -303,7 +303,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -335,7 +335,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -364,7 +364,7 @@ class AddRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -397,7 +397,7 @@ class RemoveRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -424,7 +424,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         self.people_to_add = people_to_add
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     @classmethod 
@@ -496,7 +496,7 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         self.people_to_remove = people_to_remove
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):

@@ -39,6 +39,9 @@ class AbstractItem(PermissionedModel):
 
 class Resource(AbstractResource):
     ...
+
+    def get_nested_objects(self):
+        return [self.get_owner()]
     
 
 class Item(AbstractItem):

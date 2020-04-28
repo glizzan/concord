@@ -49,12 +49,13 @@ class MockMetaPermission:
 
 def get_settable_permissions(* , target):
     """Gets a list of all permissions that may be set on the model."""
+    # FIXME: this should call get_settable_classes instead, 
 
-    settable_permissions = target.get_state_changes_for_model()
+    settable_permissions = target.get_settable_state_changes()
     
     for parent in target.__class__.__bases__:
-        if hasattr(parent, "get_state_changes_for_model"):
-            settable_permissions += parent.get_state_changes_for_model()
+        if hasattr(parent, "get_settable_state_changes"):
+            settable_permissions += parent.get_settable_state_changes()
 
     # Remove duplicates while preserving order
     return list(OrderedDict.fromkeys(settable_permissions))

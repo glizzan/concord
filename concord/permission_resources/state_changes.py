@@ -29,7 +29,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         self.inverse = inverse
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.communities.models import Community
         from concord.resources.models import Resource, Item
         return [Community, Resource, Item, PermissionsItem]    
@@ -48,15 +48,15 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
     def validate(self, actor, target):
         """ To validate a permission being added, we need to instantiate the permission and check its configuration is valid.
-        We also need to validate that the given permission can be set on the given target.
+        We also need to validate that the given permission can be set on the target.
         """
         from concord.actions.utils import get_state_change_object_given_name
         permission =  get_state_change_object_given_name(self.permission_type)
 
-        # check valid target
-        if target.__class__ not in permission.get_allowable_targets():
+        # check that target is a valid class for the permission to be set on
+        if target.__class__ not in permission.get_settable_classes():
             self.set_validation_error("This kind of permission cannot be set on target %s of class %s, must be %s" % (
-                str(target), str(target.__class__), ", ".join([str(option) for option in permission.get_allowable_targets()])))
+                str(target), str(target.__class__), ", ".join([str(option) for option in permission.get_settable_classes()])))
             return False
 
         # check configuration
@@ -96,7 +96,7 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
         self.item_pk = item_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.communities.models import Community
         from concord.resources.models import Resource, Item
         return [Community, Resource, Item]    
@@ -140,7 +140,7 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         self.permission = self.look_up_permission()
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return [PermissionsItem]
 
     def description_present_tense(self):
@@ -177,7 +177,7 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         self.permission = self.look_up_permission()
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return [PermissionsItem]
 
     def description_present_tense(self):
@@ -213,7 +213,7 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         self.permission = self.look_up_permission()
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return [PermissionsItem]   
 
     def description_present_tense(self):
@@ -249,7 +249,7 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         self.permission = self.look_up_permission()
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return [PermissionsItem]   
 
     @classmethod 
@@ -318,7 +318,7 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         self.permission = self.look_up_permission()
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return [PermissionsItem]   
 
     def description_present_tense(self):
@@ -359,7 +359,7 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
         self.permission = self.look_up_permission()
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         return [PermissionsItem]   
 
     def description_present_tense(self):
@@ -390,7 +390,7 @@ class EditTemplateStateChange(BaseStateChange):
         self.new_field_data = new_field_data
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         from concord.permission_resources.models import Template
         return [Template]    
 

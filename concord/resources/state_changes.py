@@ -15,7 +15,7 @@ class ChangeResourceNameStateChange(BaseStateChange):
         self.new_name = new_name
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         # FIXME: if we want to let people inherit from abstract resource, we need to check
         # parents here.
         from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
@@ -45,11 +45,11 @@ class AddItemResourceStateChange(BaseStateChange):
         self.item_name = item_name
 
     @classmethod
-    def get_allowable_targets(cls):
-        # FIXME: if we want to let people inherit from abstract resource, we need to check
-        # parents here.
-        from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
-        return [AbstractResource, AbstractItem, Resource, Item]    
+    def get_settable_classes(cls):
+        """An AddItem permission can be set on an item, a resource, or on the community that owns the
+        item or resource."""
+        from concord.resources.models import Resource, Item
+        return [Resource, Item] + cls.get_community_models()
 
     def description_present_tense(self):
         return "add item %s" % (self.item_name)  
@@ -79,7 +79,7 @@ class RemoveItemResourceStateChange(BaseStateChange):
         self.item_pk = item_pk
 
     @classmethod
-    def get_allowable_targets(cls):
+    def get_settable_classes(cls):
         # FIXME: if we want to let people inherit from abstract resource, we need to check
         # parents here.
         from concord.resources.models import AbstractResource, AbstractItem, Resource, Item

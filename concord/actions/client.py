@@ -26,8 +26,15 @@ class BaseClient(object):
         self.actor = actor
         self.target = target
 
-    def set_target(self, target):
-        self.target = target
+    def set_target(self, target=None, target_pk=None, target_ct=None):
+        if target:
+            self.target = target
+        elif target_pk and target_ct:
+            ct = ContentType.objects.get_for_id(target_ct)
+            model_class = ct._model_class()
+            self.target = model_class.objects.get(id=target_pk)
+        else:
+            raise BaseException("Must supply target or target_pk and target_ct.")
 
     def refresh_target(self):
         self.target.refresh_from_db()

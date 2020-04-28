@@ -6,7 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import can_jsonify, get_state_change_objects_for_model
+from concord.actions.utils import can_jsonify, get_state_change_objects_which_can_be_set_on_model
 from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
 
 
@@ -246,6 +246,9 @@ class PermissionedModel(models.Model):
         client = ActionClient(system=True, target=self)
         return client.get_action_history_given_target(target=self)
 
+    def get_nested_objects(self):
+        return []
+
     def get_serialized_field_data(self):
         """By default, the readable attributes of a permissioned model are all fields specified on the 
         model.  However, we cannot simply use self._meta.get_fields() since the field name is sometimes
@@ -279,9 +282,12 @@ class PermissionedModel(models.Model):
         return data_dict
 
     @classmethod
-    def get_state_changes_for_model(cls):
-        """Returns a list of state_changes that can be applied to this model."""
-        return get_state_change_objects_for_model(model_class=cls, app_name=cls._meta.app_label)
+    def get_settable_state_changes(cls):
+        """Returns a list of state_changes that can be set via permissions targetting this model.  This
+        may include some permissions where the *targets* are other than this model - for instance, if this
+        object owns another object, we may have set permissions for actions targetting the owned object."""
+        
+        return get_state_change_objects_which_can_be_set_on_model(model_class=cls, app_name=cls._meta.app_label)
 
     def save(self, *args, override_check=False, **kwargs):
         '''

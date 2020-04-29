@@ -144,12 +144,19 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         return [PermissionsItem]
 
     def description_present_tense(self):
-        return "add actor %s to permission %d (%s)" % (self.actor_to_add, 
-            self.permission_pk, get_verb_given_permission_type(self.permission.get_change_type()))
+        if hasattr(self, "permission"):
+            return "add actor %s to permission %d (%s)" % (self.actor_to_add, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "add actor %s to permission %d" % (self.actor_to_add, self.permission_pk) 
 
     def description_past_tense(self):
-        return "added actor %s to permission %d (%s)" % (self.actor_to_add, 
-            self.permission_pk, self.permission.get_change_type()) 
+        if hasattr(self, "permission"):
+            return "added actor %s to permission %d (%s)" % (self.actor_to_add, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "added actor %s to permission %d" % (self.actor_to_add, self.permission_pk)
+
 
     def validate(self, actor, target):
         # put real logic here
@@ -181,12 +188,18 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         return [PermissionsItem]
 
     def description_present_tense(self):
-        return "remove actor %s from permission %d (%s)" % (self.actor_to_remove, 
-            self.permission_pk, self.permission.get_change_type())  
+        if hasattr(self, "permission"):
+            return "remove actor %s from permission %d (%s)" % (self.actor_to_remove, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "remove actor %s from permission %d" % (self.actor_to_remove, self.permission_pk) 
 
     def description_past_tense(self):
-        return "removed actor %s from permission %d (%s)" % (self.actor_to_remove, 
-            self.permission_pk, self.permission.get_change_type())   
+        if hasattr(self, "permission"):
+            return "removed actor %s from permission %d (%s)" % (self.actor_to_remove, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "removed actor %s from permission %d" % (self.actor_to_remove, self.permission_pk)
 
     def validate(self, actor, target):
         # put real logic here
@@ -217,12 +230,18 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         return [PermissionsItem]   
 
     def description_present_tense(self):
-        return "add role %s to permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.get_change_type())  
+        if hasattr(self, "permission"):
+            return "add role %s to permission %d (%s)" % (self.role_name, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "add role %s to permission %d" % (self.role_name, self.permission_pk) 
 
     def description_past_tense(self):
-        return "added role %s to permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.get_change_type())
+        if hasattr(self, "permission"):
+            return "added role %s to permission %d (%s)" % (self.role_name, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "added role %s to permission %d" % (self.role_name, self.permission_pk)
 
     def validate(self, actor, target):
         # put real logic here
@@ -265,12 +284,18 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         return "remove role%sfrom permission" % (role_name)
 
     def description_present_tense(self):
-        return "remove role %s from permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.get_change_type())  
+        if hasattr(self, "permission"):
+            return "remove role %s from permission %d (%s)" % (self.role_name, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "remove role %s from permission %d" % (self.role_name, self.permission_pk) 
 
     def description_past_tense(self):
-        return "removed role %s from permission %d (%s)" % (self.role_name, 
-            self.permission_pk, self.permission.get_change_type())  
+        if hasattr(self, "permission"):
+            return "removed role %s from permission %d (%s)" % (self.role_name, self.permission_pk, 
+                self.permission.get_change_type())
+        else:
+            return "removed role %s from permission %d" % (self.role_name, self.permission_pk)
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):

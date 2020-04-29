@@ -59,6 +59,11 @@ class PermissionResourceClient(BaseClient):
                 permitted_object_content_type = permitted_object_content_type,
                 permission_change_type = permission_change_type)
 
+    def get_all_permissions_in_db(self):
+        """Gets all permissions in the DB.  We should swap this out with getting all permissions in a group
+        plus all of its owned objects but for now, this is what we have."""
+        return PermissionsItem.objects.all()
+
     # Read methods which require target to be set
 
     def get_all_permissions(self) -> PermissionsItem:
@@ -96,6 +101,9 @@ class PermissionResourceClient(BaseClient):
             if permission.actors.actor_in_list(actor):
                 matching_permissions.append(permission)
         return matching_permissions
+
+    def get_settable_permissions_for_model(self, model):
+        return utils.get_settable_permissions(target=model)
 
     def get_settable_permissions(self, return_format="tuples") -> List[Tuple[str,str]]:
         """Gets a list of permissions it is possible to set on the target, return type copied from
@@ -171,7 +179,7 @@ class PermissionResourceClient(BaseClient):
 
         return actions
 
-    def update_roles_on_permission(self, *, role_data, permission, owner):
+    def update_roles_on_permission(self, *, role_data, permission):
         """Given a list of roles, updates the given permission to match those roles."""
         
         actions = []
@@ -182,11 +190,11 @@ class PermissionResourceClient(BaseClient):
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            action = self.add_role_to_permission(role_name=role, permission_pk=permission.pk)
+            action, result = self.add_role_to_permission(role_name=role, permission_pk=permission.pk)
             actions.append(action)
         
         for role in roles_to_remove:
-            action = self.remove_role_from_permission(role_name=role, permission_pk=permission.pk)
+            action, result = self.remove_role_from_permission(role_name=role, permission_pk=permission.pk)
             actions.append(action)
 
         # FIXME: why is this here??????
@@ -195,7 +203,7 @@ class PermissionResourceClient(BaseClient):
         return actions
 
     def update_actors_on_permission(self, *, actor_data, permission):
-        """Given a list of roles, updates the given permission to match those roles."""
+        """Given a list of actors, updates the given permission to match those actors."""
 
         actions = []
 
@@ -205,12 +213,12 @@ class PermissionResourceClient(BaseClient):
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            action = self.add_actor_to_permission(actor=actor, 
+            action, result = self.add_actor_to_permission(actor=actor, 
                 permission_pk=permission.pk)
             actions.append(action)
         
         for actor in actors_to_remove:
-            action = self.remove_actor_from_permission(actor=actor, 
+            action, result = self.remove_actor_from_permission(actor=actor, 
                 permission_pk=permission.pk)
             actions.append(action)
 

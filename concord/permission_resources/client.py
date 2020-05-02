@@ -102,22 +102,25 @@ class PermissionResourceClient(BaseClient):
                 matching_permissions.append(permission)
         return matching_permissions
 
-    def get_settable_permissions_for_model(self, model):
-        return utils.get_settable_permissions(target=model)
+    # FIXME: also need to update tests
+    
+    def get_settable_permissions_for_model(self, model_class):
+        """Given a model class (or, optionally, an instance of a model class), gets the state change objects
+        which may be set on that model via a permission."""
+        from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model
+        if hasattr(model, "pk"):
+            model_class = model_class.__class__   # just in case we've been passed in an instance
+        app_name = model_class._meta.app_label 
+        return get_state_change_objects_which_can_be_set_on_model(model_class, app_name)
 
     def get_settable_permissions(self, return_format="tuples") -> List[Tuple[str,str]]:
-        """Gets a list of permissions it is possible to set on the target, return type copied from
-        target.get_settable_permissions() return type."""
-        # NOTE: doesn't actually require target if given a class
-        permissions = utils.get_settable_permissions(target=self.target)
+        """Gets a list of permissions it is possible to set on the target, in various formats"""
+        permissions = self.get_settable_permissions_for_model(self.target.__class__)
         if return_format == "tuples":
             return utils.format_as_tuples(permissions)
         elif return_format == "list_of_strings":
             return utils.format_as_list_of_strings(permissions)
         return permissions
-
-    def get_settable_permissions_for_user(self, *, name):
-        ...
 
     # State changes
 

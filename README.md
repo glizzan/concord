@@ -8,4 +8,7 @@
 1. Activate virtual environment: `source testenv/bin/activate`
 1. Git clone
 1. cd glizzan-concord
+1. pip install --upgrade pip
 1. pip install -r requirements.txt
+1. cd concord
+1. python manage.py test

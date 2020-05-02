@@ -1,3 +1,5 @@
+"""Django models for Actions and Permissioned Models."""
+
 import inspect, importlib, json
 from typing import List, Tuple
 
@@ -11,9 +13,14 @@ from concord.actions.customfields import ResolutionField, Resolution, StateChang
 
 
 def get_default_resolution():
+    """Helper function to set default resolution object for  in database for new actions."""
     return Resolution(status="draft")
 
+
 class Action(models.Model):
+    """All changes of state that go through the permissions system must do so via an Action instance.
+    Action instances must include information about the actor taking the action and the target of the action,
+    among other information."""
 
     # Related fields
     actor = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -35,10 +42,12 @@ class Action(models.Model):
     # Basics
 
     def __str__(self):
+        """Provides string describing the Action."""
         return "%s action %s by %s on %s " % (self.resolution.status, self.change.get_change_type(), self.actor, 
             self.target)
 
     def get_description(self):
+        """Gets description of the action by reference to change_types set via change field, including the target."""
         if self.resolution.status == "implemented":
             description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
             return self.actor.username + " " + description + " " + target_preposition + " " + self.target.get_name()
@@ -47,6 +56,7 @@ class Action(models.Model):
             return self.actor.username + " asked to " + description + " " + target_preposition + " " + self.target.get_name()
 
     def get_targetless_description(self):
+        """Gets description of the action by reference to change_types set via change field, without the target."""
         if self.resolution.status == "implemented":
             description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
             return self.actor.username + " " + description
@@ -55,11 +65,13 @@ class Action(models.Model):
             return self.actor.username + " asked to " + description
 
     def get_condition(self):
+        """Gets condition set on the action, if one exists."""
         from concord.conditionals.client import PermissionConditionalClient
         pcc = PermissionConditionalClient(system=True)
         return pcc.get_condition_item_given_action(action_pk=self.pk) 
 
     def get_condition_link(self):
+        """Gets link to condition set on the action, if one exists."""
         '''Returns link to condition formatted as display, or None.'''
         condition = self.get_condition()
         if condition:
@@ -110,6 +122,7 @@ CONTAINER_STATUS_CHOICES = (
     ('permanent', 'Run Permanently'),
 )
 
+
 class ActionContainer(models.Model):
     '''An ActionContainer is a tool for helping generate, process, and implement a set of actions
     as a cohesive group.  This is useful for user-facing templates as well as for system actions
@@ -121,8 +134,8 @@ class ActionContainer(models.Model):
     action_info = models.CharField(max_length=800, null=True, blank=True)  # Probably should be a custom field
     status = models.CharField(max_length=11, choices=CONTAINER_STATUS_CHOICES, default='draft')
 
-    # BUG: this doesn't work is something's invalid *because* a previous action in container has not been implemented
-    # turning off the tests for this for now - need to rethink
+    # BUG: this doesn't work if an action's invalid *because* a previous action in container has not been 
+    # implemented turning off the tests for this for now - need to rethink
 
     def process_actions_provisionally(self):
         '''Sets all related actions to provisional and processes them, storing their results in
@@ -217,6 +230,8 @@ class ActionContainer(models.Model):
 
 
 class PermissionedModel(models.Model):
+    """PermissionedModel is an abstract base class that all models that want to use the permissions system
+    should inherit from."""
 
     owner_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,
         related_name="%(app_label)s_%(class)s_owned_objects", blank=True, null=True)
@@ -231,22 +246,29 @@ class PermissionedModel(models.Model):
         abstract = True
 
     def get_owner(self):
+        """Gets owner of the permissioned model.  All permissioned models have an owner."""
         return self.owner
 
     def get_content_type(self):
+        """Gets content type of the model; helpful since PermissionedModels may be subclassed into a variety
+        of other models."""
         return ContentType.objects.get_for_model(self).pk
 
     def get_unique_id(self):
-        # App name + model name + pk
+        """Gets a unique ID for the model, consisting of the contenty type and pk."""
         contentType = ContentType.objects.get_for_model(self)
         return "_".join([contentType.app_label, contentType.model, str(self.pk)])
 
     def get_actions(self):
+        """Helper method which gets all actions targetting the instance of the class which has inherited from
+        PermissionedModel."""
         from concord.actions.client import ActionClient
         client = ActionClient(system=True, target=self)
         return client.get_action_history_given_target(target=self)
 
     def get_nested_objects(self):
+        """Gets objects the model is nested within, often things like the owner of instance or, for example,
+        a forum that a post is posted within.  Called by the permissions pipeline in permissions.py."""
         return []
 
     def get_serialized_field_data(self):

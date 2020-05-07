@@ -23,6 +23,17 @@ class Comment(PermissionedModel):
 
 
 
+class CommentCatcher(PermissionedModel):
+    """The comment catcher model is a hack to deal with leaving comments on non-permissioned models.  Right now,
+    the only model we're doing this for is Action."""
+
+    action =  models.IntegerField(unique=True)
+
+    def get_name(self):
+        return f"Comment catcher for action {self.action}"
+
+
+
 class AbstractResource(PermissionedModel):
 
     name = models.CharField(max_length=200)

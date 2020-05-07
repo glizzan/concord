@@ -18,7 +18,7 @@ class AddCommentStateChange(BaseStateChange):
     def get_settable_classes(cls):
         """Comments may be made on any target - it's up to the front end to decide what comment functionality to
         expose to the user."""
-        return self.get_all_possible_targets()
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "add comment"  
@@ -52,7 +52,7 @@ class EditCommentStateChange(BaseStateChange):
     def get_settable_classes(cls):
         """Comments may be made on any target - it's up to the front end to decide what comment functionality to
         expose to the user."""
-        return self.get_all_possible_targets()
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"edit comment {self.pk}"  
@@ -71,6 +71,7 @@ class EditCommentStateChange(BaseStateChange):
         comment = Comment.objects.get(pk=self.pk)
         comment.text = self.text
         comment.save()
+        return comment
 
 
 class DeleteCommentStateChange(BaseStateChange):
@@ -83,7 +84,7 @@ class DeleteCommentStateChange(BaseStateChange):
     def get_settable_classes(cls):
         """Comments may be made on any target - it's up to the front end to decide what comment functionality to
         expose to the user."""
-        return self.get_all_possible_targets()
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"delete comment {self.pk}"

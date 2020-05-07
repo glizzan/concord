@@ -1,11 +1,37 @@
 from typing import List, Tuple, Any
 
 from django.db.models import QuerySet
+from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.client import BaseClient
-
-from concord.resources.models import Resource
+from concord.resources.models import Resource, Comment
 from concord.resources import state_changes as sc
+
+
+######################
+### CommentClient ###
+######################
+
+
+class CommentClient(BaseClient):
+
+    def get_all_comments_on_target(self):
+        content_type = ContentType.objects.get_for_model(self.target)
+        return Comment.objects.filter(commented_object_id=self.target.id, commented_object_content_type=content_type)
+
+    # state change method
+
+    def add_comment(self, text):
+        change = sc.AddCommentStateChange(text=text)
+        return self.create_and_take_action(change)
+
+    def edit_comment(self, pk, text):
+        change = sc.EditCommentStateChange(pk=pk, text=text)
+        return self.create_and_take_action(change)
+
+    def delete_comment(self, pk):
+        change = sc.DeleteCommentStateChange(pk=pk)
+        return self.create_and_take_action(change)
 
 
 ######################

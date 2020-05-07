@@ -11,7 +11,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
-from concord.resources.client import ResourceClient
+from concord.resources.client import ResourceClient, CommentClient
 from concord.permission_resources.client import PermissionResourceClient, TemplateClient
 from concord.conditionals.client import (ApprovalConditionClient, VoteConditionClient, 
     PermissionConditionalClient, CommunityConditionalClient)
@@ -3329,3 +3329,64 @@ class PermissionedReadTest(DataTestCase):
         action, result = self.roseResourceClient.get_target_data(fields_to_include=["name"])
         self.assertEquals(action.resolution.status, "rejected")
         self.assertTrue("Cannot view fields name" in action.resolution.log)
+
+
+class CommentTest(DataTestCase):
+
+    def setUp(self):
+
+        # Create a community with roles
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.commClient.add_role(role_name="forwards")
+        self.commClient.add_members([self.users.tobin.pk, self.users.rose.pk])
+        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
+
+        # Create a resource and put it in the community
+        self.rc = ResourceClient(actor=self.users.pinoe)
+        self.resource = self.rc.create_resource(name="Go USWNT!")
+        self.rc.set_target(target=self.resource)
+        self.rc.change_owner_of_target(new_owner=self.instance)
+
+        # Create comment client
+        self.commentClient = CommentClient(actor=self.users.pinoe, target=self.resource)
+
+    def test_add_comment(self):
+
+        # we start off with no comments
+        comments = list(self.commentClient.get_all_comments_on_target())
+        self.assertEquals(comments, [])
+
+        # we add a comment and now we have one on the target
+        self.commentClient.add_comment(text="This is a new comment")
+        comments = self.commentClient.get_all_comments_on_target()
+        self.assertEquals(comments.first().text, "This is a new comment")
+
+    def test_edit_comment(self):
+
+        # we start off by adding a comment
+        self.commentClient.add_comment(text="This is a new comment")
+        comments = self.commentClient.get_all_comments_on_target()
+        self.assertEquals(comments.first().text, "This is a new comment")
+
+        # when we edit it, the text changes
+        self.commentClient.edit_comment(pk=comments.first().pk, text="This is an edited comment")
+        comments = self.commentClient.get_all_comments_on_target()  # refresh
+        self.assertEquals(comments.first().text, "This is an edited comment")
+
+    def test_delete_comment(self):
+
+        # we start off by adding a comment
+        self.commentClient.add_comment(text="This is a new comment")
+        comments = self.commentClient.get_all_comments_on_target()
+        self.assertEquals(comments.first().text, "This is a new comment")
+
+        # when we delete it, it disappears
+        self.commentClient.delete_comment(pk=comments.first().pk)
+        comments = self.commentClient.get_all_comments_on_target()  # refresh
+        self.assertEquals(list(comments), [])
+
+
+
+

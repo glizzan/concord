@@ -1,6 +1,104 @@
 from concord.actions.state_changes import BaseStateChange
 
-from concord.resources.models import Item
+from concord.resources.models import Item, Comment
+
+
+#############################
+### Comment State Changes ###
+#############################
+
+
+class AddCommentStateChange(BaseStateChange):
+    description = "Add comment"
+
+    def __init__(self, text):
+        self.text = text
+
+    @classmethod
+    def get_settable_classes(cls):
+        """Comments may be made on any target - it's up to the front end to decide what comment functionality to
+        expose to the user."""
+        return self.get_all_possible_targets()
+
+    def description_present_tense(self):
+        return "add comment"  
+
+    def description_past_tense(self):
+        return "added comment"
+
+    def validate(self, actor, target):
+        """Checks that text is a string of at least one character long."""
+        if self.text and type(self.text) == str and len(self.text) > 0:
+            return True
+        self.set_validation_error(message="Comment text must be a string at least one character long.")
+        return False
+
+    def implement(self, actor, target):
+        comment = Comment(text=self.text, commentor=actor)
+        comment.commented_object = target
+        comment.owner = target.get_owner() # FIXME: should it be the target owner though?
+        comment.save()
+        return comment
+
+
+class EditCommentStateChange(BaseStateChange):
+    description = "Edit comment"
+
+    def __init__(self, pk, text):
+        self.pk = pk
+        self.text = text
+
+    @classmethod
+    def get_settable_classes(cls):
+        """Comments may be made on any target - it's up to the front end to decide what comment functionality to
+        expose to the user."""
+        return self.get_all_possible_targets()
+
+    def description_present_tense(self):
+        return f"edit comment {self.pk}"  
+
+    def description_past_tense(self):
+        return f"edited comment {self.pk}" 
+
+    def validate(self, actor, target):
+        """Checks that text is a string of at least one character long."""
+        if self.text and type(self.text) == str and len(self.text) > 0:
+            return True
+        self.set_validation_error(message="Comment text must be a string at least one character long.")
+        return False
+
+    def implement(self, actor, target):
+        comment = Comment.objects.get(pk=self.pk)
+        comment.text = self.text
+        comment.save()
+
+
+class DeleteCommentStateChange(BaseStateChange):
+    description = "Delete comment"
+
+    def __init__(self, pk):
+        self.pk = pk
+
+    @classmethod
+    def get_settable_classes(cls):
+        """Comments may be made on any target - it's up to the front end to decide what comment functionality to
+        expose to the user."""
+        return self.get_all_possible_targets()
+
+    def description_present_tense(self):
+        return f"delete comment {self.pk}"
+
+    def description_past_tense(self):
+        return f"deleted comment {self.pk}"
+
+    def validate(self, actor, target):
+        # TODO: real validation
+        return True
+
+    def implement(self, actor, target):
+        comment = Comment.objects.get(pk=self.pk)
+        comment.delete()
+        return self.pk
 
 
 #####################################

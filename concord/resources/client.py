@@ -4,7 +4,7 @@ from django.db.models import QuerySet
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.client import BaseClient
-from concord.resources.models import Resource, Comment
+from concord.resources.models import Resource, Comment, CommentCatcher
 from concord.resources import state_changes as sc
 
 
@@ -15,21 +15,40 @@ from concord.resources import state_changes as sc
 
 class CommentClient(BaseClient):
 
+    def swap_target_if_needed(self, create=False):
+        if self.target.__class__.__name__ == "Action":
+            catcher = CommentCatcher.objects.filter(action=self.target.pk)
+            if catcher:
+                self.target = catcher[0]
+            else:
+                if create:
+                    # FIXME: is there a better way to get the community which owns the target of the action?
+                    owner = self.target.target.get_owner()
+                    owner_content_type = ContentType.objects.get_for_model(owner.__class__)
+                    catcher = CommentCatcher.objects.create(
+                        action=self.target.pk, owner_object_id=owner.pk, owner_content_type=owner_content_type
+                    )
+                    self.target = catcher
+
     def get_all_comments_on_target(self):
+        self.swap_target_if_needed()
         content_type = ContentType.objects.get_for_model(self.target)
         return Comment.objects.filter(commented_object_id=self.target.id, commented_object_content_type=content_type)
 
     # state change method
 
     def add_comment(self, text):
+        self.swap_target_if_needed(create=True)
         change = sc.AddCommentStateChange(text=text)
         return self.create_and_take_action(change)
 
     def edit_comment(self, pk, text):
+        self.swap_target_if_needed(create=True)
         change = sc.EditCommentStateChange(pk=pk, text=text)
         return self.create_and_take_action(change)
 
     def delete_comment(self, pk):
+        self.swap_target_if_needed(create=True)
         change = sc.DeleteCommentStateChange(pk=pk)
         return self.create_and_take_action(change)
 

@@ -53,7 +53,27 @@ class CommunityClient(BaseClient):
         raise Exception("Get community require community name or community pk")
 
     def get_communities(self):
-        ... 
+        return self.community_model.objects.all()
+
+    def get_communities_for_user(self, user_pk, split=False):
+
+        community_list, leader_list, member_list = [], [], []
+        
+        for community in self.get_communities():
+        
+            if community.roles.is_member(user_pk):
+                community_list.append(community)
+
+            if split:
+                if community.roles.is_governor(user_pk) or community.roles.is_owner(user_pk):
+                    leader_list.append(community)
+                else:
+                    member_list.append(community)
+
+        if split:
+            return leader_list, member_list
+        else:
+            return community_list
 
     def get_owner(self, *, owned_object: Model) -> Community:
         """Gets the owner of the owned object, which should always be a community."""

@@ -60,15 +60,19 @@ class CommunityClient(BaseClient):
         community_list, leader_list, member_list = [], [], []
         
         for community in self.get_communities():
-        
+
             if community.roles.is_member(user_pk):
                 community_list.append(community)
 
-            if split:
-                if community.roles.is_governor(user_pk) or community.roles.is_owner(user_pk):
-                    leader_list.append(community)
-                else:
-                    member_list.append(community)
+                if split:
+
+                    is_governor, through_role = community.roles.is_governor(user_pk)
+                    is_owner, through_role = community.roles.is_owner(user_pk)
+
+                    if is_governor or is_owner:
+                        leader_list.append(community)
+                    else:
+                        member_list.append(community)
 
         if split:
             return leader_list, member_list

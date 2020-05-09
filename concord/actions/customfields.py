@@ -102,7 +102,7 @@ class ResolutionField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'resolution'  
+        return 'varchar'
 
     def from_db_value(self, value, expression, connection):
         if value is None:
@@ -162,7 +162,7 @@ class StateChangeField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'statechange'  
+        return 'varchar'
 
     def from_db_value(self, value, expression, connection):
         return parse_state_change(value)

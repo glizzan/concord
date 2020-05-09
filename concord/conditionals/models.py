@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.db.models.signals import post_save
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.dispatch import receiver
 
 from concord.actions.models import PermissionedModel
 from concord.actions.client import ActionClient
@@ -17,6 +18,7 @@ from concord.permission_resources.client import PermissionResourceClient
 from concord.actions.state_changes import Changes
 from concord.conditionals.customfields import UnvalidatedConditionData, ConditionDataField
 from concord.conditionals import utils
+from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 
 
 ##################################
@@ -31,6 +33,7 @@ class ConditionModel(PermissionedModel):
 
     action =  models.IntegerField()
     descriptive_name = "condition"
+    has_timeout = False
 
     def get_name(self):
         return "%s (%d)" % (self.descriptive_name, self.pk)
@@ -188,6 +191,7 @@ class VoteCondition(ConditionModel):
 
     descriptive_name = "Vote Condition"
     verb_name = "vote"
+    has_timeout = True
 
     yeas = models.IntegerField(default=0)
     nays = models.IntegerField(default=0)
@@ -214,6 +218,9 @@ class VoteCondition(ConditionModel):
         if self.has_voted(user):
             return False, "has voted"
         return True, "has not voted"
+
+    def get_timeout(self):
+        return self.voting_deadline()
 
     def current_results(self):
         results = { "yeas": self.yeas, "nays": self.nays }
@@ -343,6 +350,7 @@ class VoteCondition(ConditionModel):
 
 # Set up signals so that when a condition is updated, the action it's linked to is retried.
         
+@receiver(retry_action_signal)
 def retry_action(sender, instance, created, **kwargs):
     if not created:
         actionClient = ActionClient(system=True)

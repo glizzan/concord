@@ -238,7 +238,7 @@ class ConditionDataField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'conditiondata'  
+        return 'varchar' 
 
     def from_db_value(self, value, expression, connection):
         if value is None:

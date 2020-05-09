@@ -140,7 +140,7 @@ class ActorListField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'actorlist'  
+        return 'varchar'  
 
     def from_db_value(self, value, expression, connection):
         if value is None:
@@ -220,7 +220,7 @@ class RoleListField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'rolelist'  
+        return 'varchar'  
 
     def from_db_value(self, value, expression, connection):
         if value is None:
@@ -663,7 +663,7 @@ class TemplateDataField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'templatedata'  
+        return 'varchar'  
 
     def from_db_value(self, value, expression, connection):
         if value is None:

@@ -410,7 +410,7 @@ class RoleField(models.Field):
         return name, path, args, kwargs
 
     def db_type(self, connection):
-        return 'rolehandler'  
+        return 'varchar' 
 
     def from_db_value(self, value, expression, connection):
         if value is None:

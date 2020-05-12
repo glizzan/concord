@@ -131,6 +131,12 @@ class BaseConditionalClient(BaseClient):
         return
         # FIXME: should probably return empty list, but that breaks a bunch of tests, so need to refactor
 
+
+class PermissionConditionalClient(BaseConditionalClient):
+    '''
+    Target is always a Permission.
+    '''
+
     # Stage changes
 
     # FIXME: It would be nice to be able to pass in the ConditionTemplate, and/or to be able to pass in
@@ -152,11 +158,6 @@ class BaseConditionalClient(BaseClient):
         change = sc.RemoveConditionStateChange(condition_pk=condition.pk)
         return self.create_and_take_action(change)
 
-
-class PermissionConditionalClient(BaseConditionalClient):
-    '''
-    Target is always a Permission.
-    '''
 
 class CommunityConditionalClient(BaseConditionalClient):
     '''
@@ -206,6 +207,23 @@ class CommunityConditionalClient(BaseConditionalClient):
             return self.get_condition_info(condition_template)
 
     # State Changes
+
+    def add_condition(self, *, condition_type: str, target_type: str, permission_data: Dict = None, 
+            condition_data: Dict = None):
+        change = sc.AddLeaderConditionStateChange(condition_type=condition_type,
+            permission_data=permission_data, condition_data=condition_data, target_type=target_type)
+        return self.create_and_take_action(change)
+
+    def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 
+        condition_data: Dict = None) -> Tuple[int, Any]:
+        # FIXME: this unnecessarily requires target (a permission) to be set 
+        change = sc.ChangeLeaderConditionStateChange(condition_pk=condition_pk,
+            permission_data=permission_data, condition_data=condition_data)
+        return self.create_and_take_action(change)
+
+    def remove_condition(self, *, condition: Model) -> Tuple[int, Any]:
+        change = sc.RemoveLeaderConditionStateChange(condition_pk=condition.pk)
+        return self.create_and_take_action(change)
 
     def add_condition_to_governors(self, *, condition_type: str, permission_data: Dict = None, 
             condition_data: Dict = None) -> Tuple[int, Any]:

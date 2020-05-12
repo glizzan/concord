@@ -26,7 +26,7 @@ class AddConditionStateChange(BaseStateChange):
     @classmethod
     def get_settable_classes(cls):
         from concord.permission_resources.models import PermissionsItem
-        return cls.get_community_models() + [PermissionsItem]
+        return [PermissionsItem]
 
     def description_present_tense(self):
         return "add condition %s" % (self.condition_type)  
@@ -63,7 +63,7 @@ class RemoveConditionStateChange(BaseStateChange):
     @classmethod
     def get_settable_classes(cls):
         from concord.permission_resources.models import PermissionsItem
-        return cls.get_community_models() + [PermissionsItem]
+        return [PermissionsItem]
 
     def description_present_tense(self):
         return "remove condition with id %s" % (self.condition_pk)  
@@ -95,7 +95,7 @@ class ChangeConditionStateChange(BaseStateChange):
     @classmethod
     def get_settable_classes(cls):
         from concord.permission_resources.models import PermissionsItem
-        return cls.get_community_models() + [PermissionsItem] 
+        return [PermissionsItem] 
 
     def description_present_tense(self):
         return "change condition %s" % (self.condition_pk)  
@@ -131,6 +131,28 @@ class ChangeConditionStateChange(BaseStateChange):
         template.condition_data.update_permission_data(self.permission_data)
         template.save()
         return template
+
+
+class AddLeaderConditionStateChange(AddConditionStateChange):
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+
+class RemoveLeaderConditionStateChange(RemoveConditionStateChange):
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+
+class ChangeLeaderCondition(ChangeConditionStateChange):
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
 
 
 ####################################

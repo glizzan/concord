@@ -385,7 +385,10 @@ def foundational_changes():
         'concord.actions.state_changes.EnableFoundationalPermissionStateChange',
         'concord.actions.state_changes.DisableFoundationalPermissionStateChange',
         'concord.actions.state_changes.EnableGoverningPermissionStateChange',
-        'concord.actions.state_changes.DisableGoverningPermissionStateChange'
+        'concord.actions.state_changes.DisableGoverningPermissionStateChange',
+        'concord.conditionals.state_changes.AddLeaderConditionStateChange',
+        'concord.conditionals.state_changes.RemoveLeaderConditionStateChange',
+        'concord.conditionals.state_changes.ChangeLeaderCondition'
     ]
 
 

@@ -432,7 +432,7 @@ class EditTemplateStateChange(BaseStateChange):
         put real logic here
         """
         result = target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
-        if result.__class__.__name__ is "ValidationError":
+        if result.__class__.__name__ == "ValidationError":
             self.set_validation_error(result.message)
             return False
         return True

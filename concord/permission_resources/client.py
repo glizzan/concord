@@ -163,6 +163,15 @@ class PermissionResourceClient(BaseClient):
         change = sc.ChangeInverseStateChange(change_to=change_to, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
+    def give_anyone_permission(self):
+        change = sc.EnableAnyoneStateChange(permission_pk=self.target.pk)
+        return self.create_and_take_action(change)
+
+    def remove_anyone_from_permission(self):
+        change = sc.DisableAnyoneStateChange(permission_pk=self.target.pk)
+        return self.create_and_take_action(change)
+
+
     # Complex/multiple state changes
 
     def update_configuration(self, *, configuration_dict: dict, permission):

@@ -343,6 +343,49 @@ class PermissionSystemTest(DataTestCase):
         action, item = tobin_rc.add_item(item_name="Tobin Test 2")
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "waiting")
 
+    def test_anyone_permission_toggle(self):
+
+        # GOHERE
+
+        # Create a group with members, give members permission to change the group name
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.commClient.add_members([self.users.rose.pk, self.users.crystal.pk,
+            self.users.tobin.pk])
+        self.prc = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        action, result = self.prc.add_permission(permission_type=Changes.Communities.ChangeName,
+            permission_roles=['members'])
+        self.target_permission = result
+
+        # Test someone in the group can do the thing
+        self.commClient = CommunityClient(actor=self.users.rose, target=self.instance)
+        action, result = self.commClient.change_name(new_name="USWNT!!!!")
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(self.instance.name, "USWNT!!!!")
+
+        # Test that our user, Sonny, who is not in the group, can't do the thing
+        self.commClient = CommunityClient(actor=self.users.sonny, target=self.instance)
+        action, result = self.commClient.change_name(new_name="USWNT????")
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertEquals(self.instance.name, "USWNT!!!!")
+
+        # Now we give that permission to "anyone"
+        action, result = self.prc.give_anyone_permission()
+
+        # Our non-member can do the thing now!
+        action, result = self.commClient.change_name(new_name="USWNT????")
+        self.assertEquals(action.resolution.status, "implemented")
+        self.assertEquals(self.instance.name, "USWNT????")
+
+        # Let's toggle anyone back to disabled
+        action, result = self.prc.remove_anyone_from_permission()
+        
+        # Once again our non-member can no longer do the thing
+        action, result = self.commClient.change_name(new_name="USWNT :D :D :D")
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertEquals(self.instance.name, "USWNT????")
+
 
 class ConditionalsTest(DataTestCase):
 
@@ -3134,7 +3177,7 @@ class TemplateTest(DataTestCase):
         # FIXME: temporarily removed condition as editable field, but it should be editable
 
         # test we have the correct number of fields given the above structure
-        self.assertEquals(len(editable_fields), 16)
+        self.assertEquals(len(editable_fields), 17)
 
         # test we have successfully removed relationship fields and autofields
         list_of_field_names = [field_dict["field_name"] for field_dict in editable_fields]

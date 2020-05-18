@@ -5,9 +5,9 @@ from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources.utils import get_verb_given_permission_type
 
 
-#####################################
-### Resource & Item State Changes ###
-#####################################
+################################
+### Permission State Changes ###
+################################
 
 class PermissionResourceBaseStateChange(BaseStateChange):
 
@@ -404,6 +404,69 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
         self.permission.inverse = self.change_to
         self.permission.save()
         return self.permission
+
+
+class EnableAnyoneStateChange(PermissionResourceBaseStateChange):
+
+    description = "Give anyone permission"
+    preposition = "for"
+
+    def __init__(self, *, permission_pk: int):
+        self.permission_pk = permission_pk
+
+    @classmethod
+    def get_settable_classes(cls):
+        return [PermissionsItem]
+
+    def description_present_tense(self):
+        return f"give anyone permission {self.permission_pk}" 
+
+    def description_past_tense(self):
+        return f"gave anyone permission {self.permission_pk}" 
+
+    def validate(self, actor, target):
+        # put real logic here
+        return True
+    
+    def implement(self, actor, target):
+        permission = self.look_up_permission()
+        permission.anyone = True
+        permission.save()
+        return permission
+
+
+class DisableAnyoneStateChange(PermissionResourceBaseStateChange):
+
+    description = "Remove anyone from permission"
+    preposition = "for"
+
+    def __init__(self, *, permission_pk: int):
+        self.permission_pk = permission_pk
+
+    @classmethod
+    def get_settable_classes(cls):
+        return [PermissionsItem]
+
+    def description_present_tense(self):
+        return f"remove anyone from permission {self.permission_pk}" 
+
+    def description_past_tense(self):
+        return f"removed anyone from permission {self.permission_pk}" 
+
+    def validate(self, actor, target):
+        # put real logic here
+        return True
+    
+    def implement(self, actor, target):
+        permission = self.look_up_permission()
+        permission.anyone = False
+        permission.save()
+        return permission
+
+
+##############################
+### Template State Changes ###
+##############################
 
 
 class EditTemplateStateChange(BaseStateChange):

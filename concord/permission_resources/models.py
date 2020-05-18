@@ -39,6 +39,7 @@ class PermissionsItem(PermissionedModel):
 
     actors = ActorListField(default=ActorList) # Defaults to empty ActorList object  
     roles = RoleListField(default=RoleList) # Defaults to empty RoleList object
+    anyone = models.BooleanField(default=False)
 
     change_type = models.CharField(max_length=200)  # Replace with choices field???
     configuration = models.CharField(max_length=5000, default='{}')
@@ -151,6 +152,9 @@ class PermissionsItem(PermissionedModel):
     def match_actor(self, actor_pk):
         """Determines if actor in the permission.  If inverse is toggled, returns the oppposite -
         such that they would NOT match if they're listed in an inverse permission."""
+
+        if self.anyone:
+            return True, "anyone"
 
         in_permission, matched_role = self.actor_in_permission(actor_pk)
         if self.inverse == True:

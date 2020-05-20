@@ -50,17 +50,29 @@ class PermissionsItem(PermissionedModel):
         return "Permission %s (for %s on %s)" % (str(self.pk), self.change_type, self.permitted_object)
 
     def display_string(self):
+
         display_string = ""
-        actor_names = self.get_actors()
-        role_names = self.get_role_names()
-        if actor_names:
-            display_string += "individuals " + actor_names
-        if actor_names and role_names:
-            display_string += " and "
-        if role_names:
-            display_string += "those with roles " + role_names
-        display_string += " have permission to " + self.change_type.split(".")[-1]
-        return display_string
+        
+        if self.anyone:
+            display_string += "anyone has permission to "
+        else:
+            actor_names = self.get_actor_names(seperator=", ")
+            role_names = ", ".join(self.get_role_names())
+            if actor_names:
+                if "," in actor_names:
+                    display_string += "individuals " + actor_names
+                else:
+                    display_string += "individual " + actor_names
+            if actor_names and role_names:
+                display_string += " and "
+            if role_names:
+                if "," in role_names:
+                    display_string += "those with roles " + role_names
+                else:
+                    display_string += "those with role " + role_names
+            display_string += " have permission to " 
+
+        return display_string + self.get_state_change_object().description.lower()
 
     def get_change_type(self):
         return self.change_type.split(".")[-1]
@@ -130,8 +142,8 @@ class PermissionsItem(PermissionedModel):
             return self.actors.as_instances()
         return self.actors.as_pks()
 
-    def get_actor_names(self):
-        return " ".join([user.username for user in self.actors.as_instances()])
+    def get_actor_names(self, seperator=" "):
+        return seperator.join([user.username for user in self.actors.as_instances()])
 
     # RoleList-related methods
 

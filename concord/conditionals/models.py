@@ -355,7 +355,11 @@ def retry_action(sender, instance, created, **kwargs):
     if not created:
         actionClient = ActionClient(system=True)
         action = actionClient.get_action_given_pk(pk=instance.action)
-        action.take_action()  # FIXME: make this a client call as well.
+        if action.container is not None:
+            container = actionClient.get_container_given_pk(pk=action.container)
+            container.commit_actions()  # retry processing all actions in container
+        else:
+            actionClient.take_action(action=action)
 
 for conditionModel in [ApprovalCondition, VoteCondition]:  # FIXME: should be auto-detected
     post_save.connect(retry_action, sender=conditionModel)

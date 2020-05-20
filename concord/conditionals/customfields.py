@@ -63,7 +63,7 @@ class ConditionData(object):
 
         if self.target_type and self.target_type not in ["gov", "own"]:
             raise ValidationError(message="Target type must be 'gov', 'own' or 'none', not " + str(self.target_type))
-        
+
     def get_condition_type_class(self):       
         conditionals_module = importlib.import_module("concord.conditionals.models")
         conditional_models = inspect.getmembers(conditionals_module)
@@ -200,7 +200,7 @@ class ConditionData(object):
 
         # clear the condition object just in case
         condition_class = self.get_condition_type_class()
-        self.condition_object = condition_class(**self.condition_data)            
+        self.condition_object = condition_class(**self.condition_data) 
 
         return new_condition_object
 

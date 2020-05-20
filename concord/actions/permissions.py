@@ -15,6 +15,10 @@ def check_conditional(action, condition_template):
     if condition_template is None:
         return action, "no_template"
 
+    # Don't actually create condition if action is a mock
+    if hasattr(action, "is_mock") and action.is_mock == True:
+        return action, "waiting"
+
     # Does this action already have a condition action instance?  If no, make one.
     conditionalClient = PermissionConditionalClient(system=True)
     condition_item = conditionalClient.get_or_create_condition(action=action,
@@ -52,7 +56,7 @@ def foundational_permission_pipeline(action):
             log="action passed foundational pipeline but was rejected by condition %s" % str(condition_template))
     elif condition_status == "waiting":
         action.resolution.status = "waiting"
-        action.log = "action passed foundational pipeline, now waiting on condition " + str(condition_template)
+        action.resolution.log = "action passed foundational pipeline, now waiting on condition " + str(condition_template)
     
     return action
 

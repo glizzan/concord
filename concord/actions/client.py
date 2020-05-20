@@ -13,7 +13,7 @@ class BaseClient(object):
     Contains behavior needed for all clients.
     """
 
-    provisional = False
+    mode = "default"
 
     def __init__(self, actor=None, target=None, system=False):
         """Initialize client.  Can only initialize without an actor if running as system."""
@@ -51,31 +51,23 @@ class BaseClient(object):
         self.actor = actor
 
     def create_and_take_action(self, change):
+        """This method is called by clients when making changes to state.  In rare cases, we'll 
+        call to create Mocks (used to run through permissions.py just to determine if a user has
+        permission to do an action) or Drafts, which are managed by ActionContainers."""
         
         self.validate_target()
 
-        action = Action.objects.create(actor=self.actor, target=self.target, 
-                change=change)
-        
-        if self.provisional:
-            self.action_container.actions.add(action)
+        if self.mode == "mock":     # typically used when checking permissions to limit what's displayed
+            from concord.actions.utils import MockAction
+            return MockAction(change=change, actor=self.actor, target=self.target)
+
+        elif self.mode == "draft":  # typically used in Action Container
+            return Action.objects.create(actor=self.actor, target=self.target, 
+                    change=change)
         else:
+            action = Action.objects.create(actor=self.actor, target=self.target, 
+                    change=change)
             return action.take_action()
-
-    def begin_provisional(self):
-        self.provisional = True
-        self.action_container = ActionContainer.objects.create() # Create new action container
-        return self.action_container
-
-    def end_provisional(self):
-        self.provisional = False
-        self.action_container = None
-
-    def process_container(self, container, provisionally=True):
-        if provisionally:
-            container.process_actions_provisionally()
-        else:
-            container.process_actions_permanently()
 
     # Permissioned Reading
 
@@ -116,6 +108,14 @@ class ActionClient(BaseClient):
         actions = Action.objects.filter(pk=pk)
         if actions:
             return actions[0]
+        print(f"Warning: tried to get action {pk} that wasn't in database")
+        return None
+
+    def get_container_given_pk(self, pk):
+        containers = ActionContainer.objects.filter(pk=pk)
+        if containers:
+            return containers[0]
+        print(f"Warning: tried to get container {pk} that wasn't in database")
         return None
 
     def get_action_history_given_target(self, target=None) -> QuerySet:
@@ -155,4 +155,26 @@ class ActionClient(BaseClient):
                 owning_actions.append(action)
         return owning_actions
 
- 
+    # Indirect change of state
+
+    def create_action_container(self, action_list):
+        """Takes in a list of Mock Actions generated using mock mode for this or other clients.  """
+        container = ActionContainer.objects.create()
+        container.initialize_action_info(action_list=action_list)
+        return container
+
+    def retry_action_container(self, container_pk, test=True):
+        """Retries processing the actions in a given container.  If test is true, does not commit the actions."""
+        container = ActionContainer.objects.get(pk=container_pk)
+        container.commit_actions(test=test)
+        return container
+
+    def take_action(self, action=None, pk=None):
+        """Helper method to take an action (or, usually, retry taking an action) from the client."""
+        if not action and not pk:
+            print("Warning: take_action called with neither action nor pk")
+        if action:
+            action.take_action()
+        else:
+            action = self.get_action_given_pk(pk=pk)
+            action.take_action()

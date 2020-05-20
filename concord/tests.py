@@ -16,6 +16,7 @@ from concord.permission_resources.client import PermissionResourceClient, Templa
 from concord.conditionals.client import (ApprovalConditionClient, VoteConditionClient, 
     PermissionConditionalClient, CommunityConditionalClient)
 from concord.communities.client import CommunityClient
+from concord.actions.client import ActionClient
 
 from concord.communities.forms import RoleForm
 from concord.permission_resources.forms import PermissionForm, MetaPermissionForm
@@ -2563,204 +2564,239 @@ class ConfigurablePermissionTest(DataTestCase):
         roles = self.commClient.get_roles()
         self.assertCountEqual(roles["forwards"], [self.users.jmac.pk, self.users.christen.pk, self.users.tobin.pk])
 
-@skip("Need to rethink action containers - see models.py")
+
+class MockActionTest(DataTestCase):
+
+    def setUp(self):
+
+        # Create a Community and Client and some members
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.commClient.add_members([self.users.rose.pk, self.users.tobin.pk,
+            self.users.christen.pk, self.users.aubrey.pk])
+
+    def test_single_mock_action(self):
+        
+        self.commClient.mode = "mock"
+        action = self.commClient.add_role(role_name="forwards")
+        self.assertTrue(action.is_mock)
+
+    def test_check_permissions_for_action_group_when_user_has_unconditional_permission(self):
+
+        from concord.actions.utils import check_permissions_for_action_group
+        self.commClient.mode = "mock"
+
+        add_forwards_action = self.commClient.add_role(role_name="forwards")
+        add_mids_action = self.commClient.add_role(role_name="midfielders")
+
+        log = check_permissions_for_action_group([add_forwards_action, add_mids_action])
+
+        self.assertEquals(log, {
+            0: {
+                'is_valid': True, 
+                'validation_error': None, 
+                'status': 'approved', 
+                'log': 'action approved via governing pipeline with with no condition set'
+                }, 
+            1: {
+                'is_valid': True, 
+                'validation_error': None, 
+                'status': 'approved', 
+                'log': 'action approved via governing pipeline with with no condition set'}
+                })
+
+    def test_check_permissions_for_action_group_when_user_does_not_have_permission(self):
+
+        # Pinoe sets specific permission that Tobin does not have
+        self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddRole,
+            permission_actors=[self.users.christen.pk])
+
+        from concord.actions.utils import check_permissions_for_action_group
+        self.commClient.mode = "mock"
+        self.commClient.set_actor(actor=self.users.tobin)
+
+        add_forwards_action = self.commClient.add_role(role_name="forwards")
+        add_mids_action = self.commClient.add_role(role_name="midfielders")
+
+        log = check_permissions_for_action_group([add_forwards_action, add_mids_action])
+
+        self.assertEquals(log, {
+            0: {
+                'is_valid': True, 
+                'validation_error': None, 
+                'status': 'rejected', 
+                'log': 'action did not meet any permission criteria'
+                }, 
+            1: {
+                'is_valid': True, 
+                'validation_error': None, 
+                'status': 'rejected', 
+                'log': 'action did not meet any permission criteria'}
+                })
+
+    def test_check_permissions_for_action_group_when_user_has_conditional_permission(self):
+
+         # Pinoe sets specific permission & condition on that permission
+        self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddRole,
+            permission_actors=[self.users.tobin.pk])
+        self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
+        self.pcc.set_target(target=permission)
+        self.pcc.add_condition(condition_type="approvalcondition",
+            permission_data=json.dumps({ "approve_actors": [self.users.christen.pk] }) )
+
+        from concord.actions.utils import check_permissions_for_action_group
+        self.commClient.mode = "mock"
+        self.commClient.set_actor(actor=self.users.tobin)
+
+        add_forwards_action = self.commClient.add_role(role_name="forwards")
+        add_mids_action = self.commClient.add_role(role_name="midfielders")
+
+        log = check_permissions_for_action_group([add_forwards_action, add_mids_action])
+        self.assertEquals(log, {
+            0: {
+                'is_valid': True, 
+                'validation_error': None, 
+                'status': 'waiting', 
+                'log': 'waiting on condition approvalcondition condition condition on PermissionsItem object (1) for permission PermissionsItem object (1) (role None)'
+                }, 
+            1: {
+                'is_valid': True, 
+                'validation_error': None, 
+                'status': 'waiting', 
+                'log': 'waiting on condition approvalcondition condition condition on PermissionsItem object (1) for permission PermissionsItem object (1) (role None)'
+                }
+        })
+
+
 class ActionContainerTest(DataTestCase):
 
     def setUp(self):
 
-        # Create a Community and Client
+        # Create a Community and Clients
         self.commClient = CommunityClient(actor=self.users.pinoe)
         self.instance = self.commClient.create_community(name="USWNT")
         self.commClient.set_target(self.instance)
         self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        self.actionClient = ActionClient(actor=self.users.pinoe)
 
-        self.container = self.commClient.begin_provisional()
+        self.mock_action_list = []
+
+        self.commClient.mode = "mock"
 
         # Action 1: Add some members
-        self.commClient.add_members([self.users.rose.pk, self.users.tobin.pk,
-            self.users.christen.pk, self.users.aubrey.pk])
+        self.mock_action_list.append(self.commClient.add_members([self.users.rose.pk, self.users.tobin.pk,
+            self.users.christen.pk, self.users.aubrey.pk]))
 
         # Action 2: Add a role
-        self.commClient.add_role(role_name="forwards")
+        self.mock_action_list.append(self.commClient.add_role(role_name="forwards"))
 
         # Action 3: Add another role
-        self.commClient.add_role(role_name="spirit players")
+        self.mock_action_list.append(self.commClient.add_role(role_name="spirit players"))
 
         # Action 4: Add people to first role
-        self.commClient.add_people_to_role(role_name="forwards", 
-            people_to_add=[self.users.christen.pk, self.users.tobin.pk])
+        self.mock_action_list.append(self.commClient.add_people_to_role(role_name="forwards", 
+            people_to_add=[self.users.christen.pk, self.users.tobin.pk]))
 
         # Action 5: Add people to second role
-        self.commClient.add_people_to_role(role_name="spirit players", 
-            people_to_add=[self.users.rose.pk, self.users.aubrey.pk])
+        self.mock_action_list.append(self.commClient.add_people_to_role(role_name="spirit players", 
+            people_to_add=[self.users.rose.pk, self.users.aubrey.pk]))
 
-        self.commClient.end_provisional()
-        self.assertEquals(len(self.container.actions.all()), 5)
+    def test_initialize_container(self):
 
-    def test_process_actions_provisionally(self):
+        actions = Action.objects.all()   # before container is created, no actions in db
+        self.assertEquals(len(actions), 0)
+        
+        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
 
-        # Before processing, actions have not been implemented
-        roles = self.commClient.get_custom_roles()
-        self.assertEquals(roles, {})
-        members = self.commClient.get_members()
-        self.assertEquals(members, [self.users.pinoe])
+        actions = Action.objects.all()   # before container is created, no actions in db
+        self.assertEquals(len(actions), 5)
 
-        # Process provisionally
-        self.commClient.process_container(container=self.container)
+        self.assertEquals(container.summary_status, "drafted")
+        self.assertEquals(json.loads(container.action_info)['0']['log'], None)
+        self.assertEquals(actions[0].container, container.pk)
 
-        # After *provisional* processing, actions have still not been implemented 
-        roles = self.commClient.get_custom_roles()
-        self.assertEquals(roles, {})
-        members = self.commClient.get_members()
-        self.assertEquals(members, [self.users.pinoe])
+    def test_process_actions_with_and_without_commiting(self):
 
-        # Check action info & container status
-        action_info_dict = self.container.get_action_info()
-        self.assertNotEquals(action_info_dict['action_log'], {})
-        self.assertNotEquals(action_info_dict['action_status'], {})
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3', '4', '5'], 
-            'rejected': [], 'waiting': [], 'implemented': []})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "approved")
-        self.assertEquals(self.container.status, "provisional")
+        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
+        action_statuses = [action.resolution.status for action in Action.objects.all()]
+        self.assertEquals(action_statuses, ['draft', 'draft', 'draft', 'draft', 'draft'])
 
-    def test_process_actions_permanently(self):
+        # by default, we assume you *don't* want to commit, so with no test=False passed in, we won't commit
+        container = self.actionClient.retry_action_container(container_pk=container.pk)
+        action_statuses = [action.resolution.status for action in Action.objects.all()]
+        self.assertEquals(action_statuses, ['draft', 'draft', 'draft', 'draft', 'draft'])
+        self.assertEquals(container.summary_status, "okay to commit")
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe])
+        self.assertEquals(self.commClient.get_custom_roles(), {})
 
-        # Process permanently
-        self.commClient.process_container(container=self.container, provisionally=False)
+        # now we pass test=False in
+        container = self.actionClient.retry_action_container(container_pk=container.pk, test=False)
+        action_statuses = [action.resolution.status for action in Action.objects.all()]
+        self.assertEquals(action_statuses, ['implemented', 'implemented', 'implemented', 'implemented', 'implemented'])
+        self.assertEquals(container.summary_status, "committed")
         self.commClient.refresh_target()
-
-        # After *permanent* processing, actions have been implemented 
-        roles = self.commClient.get_custom_roles()
-        self.assertEquals(roles, {'forwards': [self.users.tobin.pk, self.users.christen.pk], 
-            'spirit players': [self.users.rose.pk, self.users.aubrey.pk]})
-        members = self.commClient.get_members()
-        self.assertEquals(members, [self.users.pinoe, self.users.rose, self.users.tobin,
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.rose, self.users.tobin,
             self.users.christen, self.users.aubrey])
+        self.assertEquals(self.commClient.get_custom_roles(), {'forwards': [3, 4], 'spirit players': [2, 10]})
+        
+    def test_cant_commit_actions_without_permission(self):
 
-        # Check action info & container status
-        action_info_dict = self.container.get_action_info()
-        self.assertNotEquals(action_info_dict['action_log'], {})
-        self.assertNotEquals(action_info_dict['action_status'], {})
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': [], 'rejected': [], 
-            'waiting': [], 'implemented': ['1', '2', '3', '4', '5']})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "implemented")
-        self.assertEquals(self.container.get_final_status(), "implemented")
-        self.assertEquals(self.container.status, "permanent")
+        # give pinoe specific permissions, but leave one out so container fails
+        self.commClient.mode = "default"
+        self.permClient.add_permission(permission_type=Changes.Communities.AddMembers, 
+            permission_actors=[self.users.pinoe.pk]) 
+        self.permClient.add_permission(permission_type=Changes.Communities.AddRole, 
+            permission_actors=[self.users.pinoe.pk]) 
+        self.permClient.add_permission(permission_type=Changes.Communities.AddPeopleToRole, 
+            permission_actors=[self.users.rose.pk])   # NOT PINOE
+        # then remove Pinoe as governor so she doesn't automatically pass all the actions
+        self.commClient.remove_governor(governor_pk=self.users.pinoe.pk)
 
-    def test_process_actions_provisionally_with_rejections(self):
+        # now try again process actions
+        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
+        container = self.actionClient.retry_action_container(container_pk=container.pk, test=False)
+        self.assertEquals(container.summary_status, "not okay to commit")
+        action_statuses = [action.resolution.status for action in Action.objects.all()]
+        self.assertEquals(action_statuses[4:], ['draft', 'draft', 'draft', 'draft', 'draft'])
+        action_info = json.loads(container.action_info)
+        # The last two actions should be the ones that fail
+        permissions_checked = [action["status"]["permissions_checked"] for index, action in action_info.items()]
+        self.assertEquals(permissions_checked, [True, True, True, False, False])
 
-        # Add permission on "add people to role" so actions 3 & 4 are rejected
-        action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
-            permission_actors=[self.users.crystal.pk])
+    def test_cant_commit_actions_until_condition_is_resolved(self):
 
-        # Process provisionally
-        self.commClient.process_container(container=self.container)
+        # give pinoe specific permissions
+        self.commClient.mode = "default"
+        self.permClient.add_permission(permission_type=Changes.Communities.AddMembers, 
+            permission_actors=[self.users.pinoe.pk]) 
+        self.permClient.add_permission(permission_type=Changes.Communities.AddRole, 
+            permission_actors=[self.users.pinoe.pk]) 
+        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddPeopleToRole, 
+            permission_actors=[self.users.pinoe.pk])   
+        # add condition to permission
+        self.pcc = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
+        action, result = self.pcc.add_condition(condition_type="approvalcondition",
+            condition_data='{"self_approval_allowed": true}', permission_data=json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) )
+        # then remove Pinoe as governor so she doesn't automatically pass all the actions
+        self.commClient.remove_governor(governor_pk=self.users.pinoe.pk)
 
-        # Check action info & container status
-        action_info_dict = self.container.get_action_info()
-        self.assertNotEquals(action_info_dict['action_log'], {})
-        self.assertNotEquals(action_info_dict['action_status'], {})
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 
-            'rejected': ['4', '5'], 'waiting': [], 'implemented': []})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "rejected")
-        self.assertEquals(self.container.status, "provisional")
-
-    def test_process_actions_permanently_with_rejections(self):
-
-        # Add permission on "add people to role" so actions 3 & 4 are rejected
-        action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
-            permission_actors=[self.users.crystal.pk])
-
-        # Process permanently
-        self.commClient.process_container(container=self.container, provisionally=False)
-
-        # Check action info & container status
-        action_info_dict = self.container.get_action_info()
-        self.assertNotEquals(action_info_dict['action_log'], {})
-        self.assertNotEquals(action_info_dict['action_status'], {})
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 'rejected': ['4', '5'], 
-            'waiting': [], 'implemented': []})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "rejected")
-        self.assertEquals(self.container.get_final_status(), "rejected")
-        self.assertEquals(self.container.status, "permanent")
-
-    def test_process_actions_provisionally_with_conditions(self):
-
-        # Set permission with condition
-        action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
-            permission_actors=[self.users.pinoe.pk])
-        self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
-        self.pcc.set_target(target=permission)
-        self.pcc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps({ "approve_actors": [self.users.crystal.pk] }) )
-
-        # Process provisionally
-        self.commClient.process_container(container=self.container)
-
-        # Check action info & container status
-        action_info_dict = self.container.get_action_info()
-        self.assertNotEquals(action_info_dict['action_log'], {})
-        self.assertNotEquals(action_info_dict['action_status'], {})
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 
-            'rejected': [], 'waiting': ['4', '5'], 'implemented': []})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "waiting")
-        self.assertEquals(self.container.status, "provisional")
-
-    def test_process_actions_permanently_with_conditions(self):
-
-        # Set permission with condition
-        action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
-            permission_actors=[self.users.pinoe.pk])
-        self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
-        self.pcc.set_target(target=permission)
-        self.pcc.add_condition(condition_type="approvalcondition",
-            permission_data=json.dumps({ "approve_actors" : [self.users.crystal.pk] }) )
-
-        # Can't process permanently if there's an unresolved condition (status == "waiting")
-        self.commClient.process_container(container=self.container, provisionally=False)
-
-        # Check action info & container status
-        action_info_dict = self.container.get_action_info()
-        self.assertNotEquals(action_info_dict['action_log'], {})
-        self.assertNotEquals(action_info_dict['action_status'], {})
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': ['1', '2', '3'], 
-            'rejected': [], 'waiting': ['4', '5'], 'implemented': []})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "waiting")
-        self.assertEquals(self.container.status, "provisional")
-
-        # Crystal approves the two actions
-        # FIXME: these conditional clients are cumbersome, need to fix the whole client concept
-        first_item = self.pcc.get_condition_item_given_action(action_pk=4)
-        second_item = self.pcc.get_condition_item_given_action(action_pk=5)
-        acc = ApprovalConditionClient(target=first_item, actor=self.users.crystal)
-        acc.approve()
-        acc.set_target(target=second_item)
-        acc.approve()
-
-        # now the container can be run
-        self.commClient.process_container(container=self.container, provisionally=False)
-        status_summary = self.container.get_status_summary()
-        self.assertEquals(status_summary, {'total_count': 5, 'approved': [], 
-            'rejected': [], 'waiting': [], 'implemented': ['1', '2', '3','4', '5']})
-        overall_status = self.container.determine_overall_status()
-        self.assertEquals(overall_status, "implemented")
-        self.assertEquals(self.container.status, "permanent")
+        # now try again process actions
+        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
+        container = self.actionClient.retry_action_container(container_pk=container.pk, test=False)
+        self.assertEquals(container.summary_status, "not okay to commit")
+        action_statuses = [action.resolution.status for action in Action.objects.all()]
+        self.assertEquals(action_statuses[5:], ['draft', 'draft', 'draft', 'draft', 'draft'])
+        action_info = json.loads(container.action_info)
+        self.assertTrue("waiting on condition approvalcondition" in action_info["3"]["log"])
+        self.assertTrue("waiting on condition approvalcondition" in action_info["4"]["log"])
+        # The last two actions should be the ones that fail
+        permissions_checked = [action["status"]["permissions_checked"] for index, action in action_info.items()]
+        self.assertEquals(permissions_checked, [True, True, True, False, False])
 
 
 class TemplateTest(DataTestCase):

@@ -2,7 +2,7 @@
 
 import json
 
-from django.db import models
+from django.db import models, DatabaseError, transaction
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
@@ -30,10 +30,7 @@ class Action(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     target = GenericForeignKey()
-    # TODO: Not sure this should be CASCADE
-    container = models.ForeignKey(
-        'ActionContainer', null=True, blank=True, related_name="actions", on_delete=models.CASCADE
-    )
+    container = models.PositiveIntegerField(blank=True, null=True)   
 
     # Change field
     change = StateChangeField()
@@ -133,126 +130,95 @@ class Action(models.Model):
         return self, current_result
 
 
-CONTAINER_STATUS_CHOICES = (
-    ('draft', 'Draft'),
-    ('provisional', 'Run Provisionally'),
-    ('permanent', 'Run Permanently'),
-)
-
-
 class ActionContainer(models.Model):
     """An `ActionContainer` is a tool for helping generate, process, and implement a set of actions
-    as a cohesive group.
-
-    An `ActionContainer` groups multi-step related actions which could logically be
-    represented or viewed by the user as a single action.
-
-    This is useful for user-facing templates as well as for system actions
+    as a cohesive group.  This is useful for user-facing templates as well as for system actions
     that are closely connected to each other and which users might see as a single action, for
-    example "adding a user with role X to group Y", where role X does not exist, might seem like
-    one action to a user but would actually by three: adding the role to the group, adding the user
-    to the group, and adding the user to the role.
+    example "adding a user with role X to group Y". This might seem like one action to a user but would actually 
+    be three: adding the role to the group, adding the user to the group, and adding the user to the role.
     """
     action_info = models.CharField(max_length=800, null=True, blank=True)  # Probably should be a custom field
-    status = models.CharField(max_length=11, choices=CONTAINER_STATUS_CHOICES, default='draft')
+    summary_status = models.CharField(max_length=20, default="drafted")
+    is_open = models.BooleanField(default=True)
 
-    # TODO
-    # BUG: this doesn't work if an action's invalid *because* a previous action in container has not been
-    # implemented turning off the tests for this for now - need to rethink
+    def initialize_action_info(self, action_list):
+        """Takes in a list of MockActions, which have typically just been checked using check_permissions_for_action_group.
+        Creates actions in the database, giving them draft status, and records their pks here."""
 
-    def process_actions_provisionally(self):
-        """Sets all related actions to provisional and processes them, storing their results in
-        action_info.
-        """
-        for action in self.actions.all():
-            action.resolution.provisional = True   # Should already be True, but just in case.
-            action.take_action()
-            self.update_action_info(action)
+        action_info = {}
 
-        self.status = "provisional"
+        for count, action in enumerate(action_list):
+
+            db_action = Action.objects.create(actor=action.actor, target=action.target, change=action.change,
+                container=self.pk)
+
+            action_info.update({ count: { "pk": db_action.pk , "status": {
+                "overall": "draft", "validated": None, "permissions_checked": None, "implemented": None,
+                "committed": None }, "log": None }})
+
+        self.action_info = json.dumps(action_info)
         self.save()
 
-    def process_actions_permanently(self):
-        """Sets all related actions to `Provisional=False` and processes them, implementing the results."""
-        self.process_actions_provisionally()
+    def process_actions(self):
+        """Goes through actions in order and implements them, updating action_info with the results of various checks.  
+        (Almost?) always called from within a transaction.atomic() block, so may not actually be committed to DB."""
 
-        overall_status = self.determine_overall_status()
-        if overall_status == "waiting":
-            return
+        from concord.actions.permissions import has_permission
 
-        if overall_status == "approved":  # Only implement actions if overall status is approved
+        action_info = json.loads(self.action_info)
+        ok_to_commit = True
 
-            for action in self.actions.all():
-                action.resolution.provisional = False
-                action.resolution.status = 'sent'   # need to reset
-                action, result = action.take_action()
-                self.update_action_info(action)
+        for count in range(0, len(action_info)):
 
-        overall_status = self.determine_overall_status()
-        self.set_final_status(overall_status)
-        self.status = 'permanent'
+            count = str(count)
+
+            action = Action.objects.get(pk=action_info[count]['pk'])
+
+            # Check that the action is still valid
+            is_valid = action.change.validate(actor=action.actor, target=action.target)  
+            if not is_valid:
+                action_info[count]["status"]["validated"] = False
+                action_info[count]["log"] = action.change.validation_error.message
+                ok_to_commit = False
+                continue
+            action_info[count]["validated"] = True 
+
+            # Check that the action passes permissions
+            changed_action = has_permission(action=action)
+            if changed_action.resolution.status != "approved":
+                action_info[count]["status"]["permissions_checked"] = False
+                action_info[count]["log"] = action.resolution.log
+                ok_to_commit = False
+                continue
+            action_info[count]["status"]["permissions_checked"] = True
+
+            # Implement action 
+            action.implement_action()
+            action_info[count]["status"]["implemented"] = True
+            action.save()
+
+        return action_info, ok_to_commit
+
+    def commit_actions(self, test=True):
+
+        try:
+
+            with transaction.atomic():
+
+                action_info, ok_to_commit = self.process_actions()
+
+                if not ok_to_commit or test:
+                    raise DatabaseError()
+
+                self.summary_status = "committed"
+                self.is_open = False   # one the actions have all been committed, close container
+
+        except DatabaseError as db_error:
+
+            self.summary_status = "okay to commit" if ok_to_commit else "not okay to commit"
+
+        self.action_info = json.dumps(action_info)
         self.save()
-
-    def get_action_info(self):
-        """Returns information about an action"""
-        if not self.action_info:
-            return {'action_log': {}, 'action_status': {}, 'final_container_status': ""}
-        return json.loads(self.action_info)
-
-    def update_action_info(self, action):
-        """Updates an action's information such as log and status."""
-        temp_dict = self.get_action_info()
-        temp_dict['action_log'].update({action.pk: action.resolution.log})
-        temp_dict['action_status'].update({action.pk: action.resolution.status})
-        self.action_info = json.dumps(temp_dict)
-
-    def set_final_status(self, status):
-        """Set final container status"""
-        temp_dict = self.get_action_info()
-        temp_dict['final_container_status'] = status
-        self.action_info = json.dumps(temp_dict)
-
-    def get_final_status(self):
-        """Get container's final status."""
-        return self.get_action_info()["final_container_status"]
-
-    def get_status_summary(self):
-        """Returns a `status_summary` for an `ActionContainer`"""
-        status_summary = {'total_count': 0, 'approved': [], 'rejected': [], 'waiting': [], 'implemented': []}
-        temp_dict = self.get_action_info()
-
-        for key, status in temp_dict['action_status'].items():
-            if status == "approved":
-                status_summary['approved'].append(key)
-            if status == "rejected":
-                status_summary['rejected'].append(key)
-            if status == "waiting":
-                status_summary['waiting'].append(key)
-            if status == "implemented":
-                status_summary['implemented'].append(key)
-            status_summary['total_count'] += 1
-
-        return status_summary
-
-    def determine_overall_status(self):
-        """Return overall status of the `ActionContainer`"""
-        status_summary = self.get_status_summary()
-
-        if status_summary['total_count'] == 0:
-            return "draft"
-
-        if len(status_summary["rejected"]) > 0:
-            return "rejected"
-        elif len(status_summary["waiting"]) > 0:
-            return "waiting"
-
-        if len(status_summary["implemented"]) == status_summary['total_count']:
-            return "implemented"
-
-        if len(status_summary["approved"]) == status_summary['total_count']:
-            return "approved"
-
-        raise ValueError("Can't determine overall_status from status_summary: ", status_summary)
 
 
 class PermissionedModel(models.Model):

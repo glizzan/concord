@@ -372,7 +372,7 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(self.instance.name, "USWNT!!!!")
 
         # Now we give that permission to "anyone"
-        action, result = self.prc.give_anyone_permission()
+        action, result = self.prc.give_anyone_permission(permission_pk=self.target_permission.pk)
 
         # Our non-member can do the thing now!
         action, result = self.commClient.change_name(new_name="USWNT????")
@@ -380,7 +380,7 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(self.instance.name, "USWNT????")
 
         # Let's toggle anyone back to disabled
-        action, result = self.prc.remove_anyone_from_permission()
+        action, result = self.prc.remove_anyone_from_permission(permission_pk=self.target_permission.pk)
         
         # Once again our non-member can no longer do the thing
         action, result = self.commClient.change_name(new_name="USWNT :D :D :D")

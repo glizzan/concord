@@ -19,7 +19,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Add permission"
 
     def __init__(self, permission_type, permission_actors, permission_roles, 
-        permission_configuration, inverse=False):
+        permission_configuration, anyone=False, inverse=False):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
         self.permission_type = permission_type
@@ -27,6 +27,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         self.permission_roles = permission_roles if permission_roles else []
         self.permission_configuration = permission_configuration
         self.inverse = inverse
+        self.anyone = anyone
 
     @classmethod
     def get_settable_classes(cls):
@@ -72,6 +73,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         permission = PermissionsItem()
         permission.owner = target.get_owner() # FIXME: should it be the target owner though?
         permission.permitted_object = target
+        permission.anyone = self.anyone
         permission.change_type = self.permission_type
         permission.inverse = self.inverse   
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here
@@ -306,7 +308,7 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
                 return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
         return True, ""
 
-    def check_configuration(self, permission):
+    def check_configuration(self, action, permission):
         '''All configurations must pass for the configuration check to pass.'''
         self.instantiate_fields()
         configuration = permission.get_configuration()

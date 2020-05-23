@@ -142,9 +142,9 @@ class PermissionConditionalClient(BaseConditionalClient):
     # FIXME: It would be nice to be able to pass in the ConditionTemplate, and/or to be able to pass in
     # condition kwargs directly
     def add_condition(self, *, condition_type: str, permission_data: Dict = None, 
-            condition_data: Dict = None, target_type: str = None):
-        change = sc.AddConditionStateChange(condition_type=condition_type,
-            permission_data=permission_data, condition_data=condition_data, target_type=target_type)
+            condition_data: Dict = None, action_sourced_fields: Dict = None, target_type: str = None):
+        change = sc.AddConditionStateChange(condition_type=condition_type, permission_data=permission_data,
+            condition_data=condition_data, action_sourced_fields=action_sourced_fields, target_type=target_type)
         return self.create_and_take_action(change)
 
     def change_condition(self, *, condition_pk: int, permission_data: Dict = None, 

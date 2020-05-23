@@ -329,7 +329,7 @@ class ViewChangelessStateChange(BaseStateChange):
         
         return True, ""
 
-    def check_configuration(self, permission):
+    def check_configuration(self, action, permission):
         '''All configurations must pass for the configuration check to pass.'''
         configuration = permission.get_configuration()
         missing_fields = []

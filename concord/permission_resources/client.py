@@ -3,7 +3,7 @@ from typing import Tuple, Any, List
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Model
 
-from concord.actions.client import BaseClient
+from concord.actions.client import BaseClient, ActionClient
 
 from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources import utils, templates, models
@@ -125,12 +125,12 @@ class PermissionResourceClient(BaseClient):
     # State changes
 
     def add_permission(self, *, permission_type: str, permission_actors: list = None, 
-            permission_roles: list = None, permission_configuration: dict = None) -> Tuple[int, Any]:
-        if not permission_actors and not permission_roles:
+            permission_roles: list = None, permission_configuration: dict = None, anyone=False) -> Tuple[int, Any]:
+        if not permission_actors and not permission_roles and anyone is not True:
             raise Exception("Either actor or role_pair must be supplied when creating a permission")       
         change = sc.AddPermissionStateChange(permission_type=permission_type, 
             permission_actors=permission_actors, permission_roles=permission_roles,
-            permission_configuration=permission_configuration)
+            permission_configuration=permission_configuration, anyone=anyone)
         return self.create_and_take_action(change)
 
     def remove_permission(self, *, item_pk: int) -> Tuple[int, Any]:
@@ -191,10 +191,12 @@ class PermissionResourceClient(BaseClient):
 
         return actions
 
-    def update_roles_on_permission(self, *, role_data, permission):
+    def update_roles_on_permission(self, *, role_data, permission, return_type="action"):
         """Given a list of roles, updates the given permission to match those roles."""
+
+        self.mode = "mock"
         
-        actions = []
+        mock_action_list = []
 
         old_roles = set(permission.get_role_names())
         new_roles = set(role_data)
@@ -202,22 +204,26 @@ class PermissionResourceClient(BaseClient):
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            action, result = self.add_role_to_permission(role_name=role, permission_pk=permission.pk)
-            actions.append(action)
+            mock_action_list.append(self.add_role_to_permission(role_name=role, permission_pk=permission.pk))
         
         for role in roles_to_remove:
-            action, result = self.remove_role_from_permission(role_name=role, permission_pk=permission.pk)
-            actions.append(action)
+            mock_action_list.append(self.remove_role_from_permission(role_name=role, permission_pk=permission.pk))
 
-        # FIXME: why is this here??????
-        permission = PermissionsItem.objects.get(pk=permission.pk)
+        if return_type == "action":
+            actionClient = ActionClient(actor=self.actor)
+            container = actionClient.create_action_container(action_list=mock_action_list)
+            container = actionClient.retry_action_container(container_pk=container.pk, test=False)
+            return container.get_actions()
+        
+        if return_type == "mock_action_list":
+            return mock_action_list
 
-        return actions
-
-    def update_actors_on_permission(self, *, actor_data, permission):
+    def update_actors_on_permission(self, *, actor_data, permission, return_type="action"):
         """Given a list of actors, updates the given permission to match those actors."""
 
-        actions = []
+        self.mode = "mock"
+        
+        mock_action_list = []
 
         old_actors = set(permission.get_actors())
         new_actors = set(actor_data)
@@ -225,16 +231,19 @@ class PermissionResourceClient(BaseClient):
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            action, result = self.add_actor_to_permission(actor=actor, 
-                permission_pk=permission.pk)
-            actions.append(action)
+            mock_action_list.append(self.add_actor_to_permission(actor=actor, permission_pk=permission.pk))
         
         for actor in actors_to_remove:
-            action, result = self.remove_actor_from_permission(actor=actor, 
-                permission_pk=permission.pk)
-            actions.append(action)
+            mock_action_list.append(self.remove_actor_from_permission(actor=actor, permission_pk=permission.pk))
 
-        return actions
+        if return_type == "action":
+            actionClient = ActionClient(actor=self.actor)
+            container = actionClient.create_action_container(action_list=mock_action_list)
+            container = actionClient.retry_action_container(container_pk=container.pk, test=False)
+            return container.get_actions()
+        
+        if return_type == "mock_action_list":
+            return mock_action_list
 
 
     # FIXME: this is still too complex

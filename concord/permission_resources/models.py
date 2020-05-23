@@ -198,14 +198,14 @@ def delete_empty_permission(sender, instance, created, **kwargs):
     """Toggle is_active so it is only true when there are actors or roles set on the permission."""
 
     # Deactivate if empty
-    if instance.actors.is_empty() and instance.roles.is_empty():
+    if instance.actors.is_empty() and instance.roles.is_empty() and instance.anyone == False:
         if instance.is_active:
             instance.is_active = False
             instance.save(override_check=True)
 
     # Reactivate if has data
     if not instance.is_active:
-        if not (instance.actors.is_empty() and instance.roles.is_empty()):
+        if not (instance.actors.is_empty() and instance.roles.is_empty() and instance.anyone == False):
             instance.is_active = True
             instance.save(override_check=True)            
 

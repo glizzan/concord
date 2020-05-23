@@ -125,7 +125,6 @@ class ConditionModel(PermissionedModel):
         pass
 
 
-
 class ApprovalCondition(ConditionModel):
 
     descriptive_name = "Approval Condition"

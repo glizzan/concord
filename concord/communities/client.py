@@ -11,6 +11,7 @@ from concord.actions.models import PermissionedModel
 from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
+from concord.communities.utils import MembershipHelper, get_membership_setting
 from concord.permission_resources.templates import community_governance_info_to_text
 
 
@@ -148,6 +149,9 @@ class CommunityClient(BaseClient):
     def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:
         return self.target.roles.has_specific_role(role, actor_pk)
 
+    def get_membership_setting(self):
+        return get_membership_setting(self.actor, self.target)
+
     # State changes
 
     def make_self_owned(self):
@@ -215,6 +219,21 @@ class CommunityClient(BaseClient):
 
     # Complex/multiple state changes
 
+    def change_membership_setting(self, new_setting, extra_data=None):
+        """Changes membership setting.  Doing so always creates a new AddMemberPermission in the database, so we always
+        pass back the new permission pk, with optional additional data."""
+
+        previous_setting = self.get_membership_setting()
+        membership_helper = MembershipHelper(actor=self.actor, community=self.target, previous_setting=previous_setting,
+            new_setting=new_setting, extra_data=extra_data)
+        mock_action_list = membership_helper.generate_actions_to_switch_settings()
+
+        from concord.actions.client import ActionClient
+        actionClient = ActionClient(actor=self.actor)
+        container = actionClient.create_action_container(action_list=mock_action_list)
+        container = actionClient.retry_action_container(container_pk=container.pk, test=False)
+        return container
+
     def update_owners(self, *, new_owner_data):
         """Takes in a list of owners, adds those that are missing and removes those that
         are no longer there."""
@@ -274,7 +293,6 @@ class CommunityClient(BaseClient):
                 actions.append(action)
 
         return actions
-
 
     def update_roles(self, *, role_data):
         """Takes in a list of roles and adds any which are missing from community."""

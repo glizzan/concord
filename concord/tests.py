@@ -346,8 +346,6 @@ class PermissionSystemTest(DataTestCase):
 
     def test_anyone_permission_toggle(self):
 
-        # GOHERE
-
         # Create a group with members, give members permission to change the group name
         self.commClient = CommunityClient(actor=self.users.pinoe)
         self.instance = self.commClient.create_community(name="USWNT")
@@ -372,7 +370,7 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(self.instance.name, "USWNT!!!!")
 
         # Now we give that permission to "anyone"
-        action, result = self.prc.give_anyone_permission()
+        action, result = self.prc.give_anyone_permission(permission_pk=self.target_permission.pk)
 
         # Our non-member can do the thing now!
         action, result = self.commClient.change_name(new_name="USWNT????")
@@ -380,7 +378,7 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(self.instance.name, "USWNT????")
 
         # Let's toggle anyone back to disabled
-        action, result = self.prc.remove_anyone_from_permission()
+        action, result = self.prc.remove_anyone_from_permission(permission_pk=self.target_permission.pk)
         
         # Once again our non-member can no longer do the thing
         action, result = self.commClient.change_name(new_name="USWNT :D :D :D")
@@ -2797,6 +2795,380 @@ class ActionContainerTest(DataTestCase):
         # The last two actions should be the ones that fail
         permissions_checked = [action["status"]["permissions_checked"] for index, action in action_info.items()]
         self.assertEquals(permissions_checked, [True, True, True, False, False])
+
+
+class MembershipSettingsTest(DataTestCase):
+
+    def setUp(self):
+
+        # Create a Community and Client
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        self.templateClient = TemplateClient(actor=self.users.pinoe)
+
+    def test_get_membership_settings(self):
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "no new members can join")
+
+    def test_change_membership_setting_to_anyone_can_join(self):
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can join")
+
+    def test_change_membership_setting_to_anyone_can_ask(self):
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can ask")
+
+    def test_change_membership_setting_to_invite_only(self):
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "invite only")
+
+    def test_change_from_anyone_can_join_to_anyone_can_ask(self):
+
+        # start with anyone can join
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+
+        # switch to anyone can ask
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can ask")
+
+    def test_change_from_anyone_can_join_to_invite_only(self):
+
+        # start with anyone can join
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+
+        # switch to invite only
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "invite only")
+
+    def test_change_from_anyone_can_join_to_no_member_can_join(self):
+
+        # start with anyone can join
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+
+        # switch to no member can join
+        container = self.commClient.change_membership_setting(new_setting="no new members can join")
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "no new members can join")
+
+    def test_change_from_anyone_can_ask_to_invite_only(self):
+
+        # start with anyone can ask
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+
+        # switch to invite only
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "invite only")
+
+    def test_change_from_anyone_can_ask_to_anyone_can_join(self):
+
+        # start with anyone can ask
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+
+        # switch to anyone can join
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can join")
+
+    def test_change_from_anyone_can_ask_to_no_member_can_join(self):
+
+        # start with anyone can ask
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+
+        # switch to no member can join
+        container = self.commClient.change_membership_setting(new_setting="no new members can join")
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "no new members can join")
+
+    def test_change_from_invite_only_to_anyone_can_ask(self):
+
+        # start with invite only
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+
+        # switch to anyone can ask
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can ask")
+
+    def test_change_from_invite_only_to_anyone_can_join(self):
+
+        # start with invite only
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+
+        # switch to anyone can join
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can join")
+
+    def test_change_from_invite_only_to_no_member_can_join(self):
+
+        # start with invite only
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+
+        # switch to no member can join
+        container = self.commClient.change_membership_setting(new_setting="no new members can join")
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "no new members can join")
+
+    def test_update_anyone_can_ask(self):
+
+        # start with anyone can ask
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.pinoe.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+
+        # Get current permission & condition on it
+        self.permissionClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        permission = self.permissionClient.get_specific_permissions(change_type="concord.communities.state_changes.AddMembersStateChange")[0]
+        self.assertEquals(permission.anyone, True)
+        self.conditionalClient = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
+        condition = self.conditionalClient.get_conditions_given_targets(target_pks=[permission.pk])[0]
+        self.assertEquals(condition.condition_data.permission_data, {'approve_actors': [1]})
+
+        # update it
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_roles" : ["forwards"] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can ask")
+
+        # Get current permission & condition on it
+        self.permissionClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        permission = self.permissionClient.get_specific_permissions(change_type="concord.communities.state_changes.AddMembersStateChange")[0]
+        self.assertEquals(permission.anyone, True)
+        self.conditionalClient = PermissionConditionalClient(actor=self.users.pinoe, target=permission)
+        condition = self.conditionalClient.get_conditions_given_targets(target_pks=[permission.pk])[0]
+        self.assertEquals(condition.condition_data.permission_data, {'approve_roles': ['forwards']})
+
+    def test_update_invite_only(self):
+
+        # start with invite only
+        extra_data = {
+            "permission_actors" : [self.users.pinoe.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+        self.permissionClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        permission = self.permissionClient.get_specific_permissions(change_type="concord.communities.state_changes.AddMembersStateChange")[0]
+        self.assertEquals(permission.anyone, False)
+        self.assertEquals(permission.actors.pk_list, [self.users.pinoe.pk])
+        self.assertEquals(permission.roles.role_list, [])
+
+        # update invite only
+        extra_data = {
+            "permission_actors" : [self.users.tobin.pk],
+            "permission_roles": ["forwards"]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+
+    def test_no_members_can_join_setting_works(self):
+
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "no new members can join")
+
+        # people cannot add themselves
+        self.commClient.set_actor(actor=self.users.crystal)
+        action, result = self.commClient.add_members(member_pk_list=[self.users.crystal.pk])
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe])
+        
+    def test_anyone_can_join_setting_works(self):
+
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+
+        self.commClient.refresh_target()
+        self.commClient.set_actor(actor=self.users.crystal)
+        
+        action, result = self.commClient.add_members(member_pk_list=[self.users.crystal.pk])
+        self.permissionClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        permission = self.permissionClient.get_specific_permissions(change_type="concord.communities.state_changes.AddMembersStateChange")[0]
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.crystal])
+
+    def test_anyone_can_ask_setting_works(self):
+
+        # use someone besides Pinoe, because her governing permission will override everything
+        action, result = self.commClient.add_members(member_pk_list=[self.users.christen.pk])
+
+        # change setting
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.christen.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can ask")
+
+        # setting works:
+
+        self.commClient.refresh_target()
+        self.commClient.set_actor(actor=self.users.crystal)
+        action, result = self.commClient.add_members(member_pk_list=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.status, "waiting")
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen])
+
+        self.commClient.set_actor(actor=self.users.christen)
+        self.cc = PermissionConditionalClient(actor=self.users.christen)
+        condition = self.cc.get_condition_item_given_action(action_pk=action.pk)
+        acc = ApprovalConditionClient(target=condition, actor=self.users.christen)
+        acc.approve()
+
+        self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented")   
+        self.commClient.refresh_target() 
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen, self.users.crystal])
+
+    def test_invite_only_setting_works(self):
+
+        # use someone besides Pinoe, because her governing permission will override everything
+        action, result = self.commClient.add_members(member_pk_list=[self.users.christen.pk])
+
+        # start with invite only
+        extra_data = {
+            "permission_actors" : [self.users.christen.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+
+        # crystal can't initiate
+        self.commClient.set_actor(actor=self.users.crystal)
+        action, result = self.commClient.add_members(member_pk_list=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen])
+
+        # but christen can invite her
+        self.commClient.set_actor(actor=self.users.christen)
+        action, result = self.commClient.add_members(member_pk_list=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.status, "waiting")
+
+        # christen can't approve
+        self.cc = PermissionConditionalClient(actor=self.users.christen)
+        condition = self.cc.get_condition_item_given_action(action_pk=action.pk)
+        acc = ApprovalConditionClient(target=condition, actor=self.users.christen)
+        acc.approve()
+        self.assertEquals(action.resolution.status, "waiting")
+
+        # but crystal can
+        self.cc = PermissionConditionalClient(actor=self.users.crystal)
+        condition = self.cc.get_condition_item_given_action(action_pk=action.pk)
+        acc = ApprovalConditionClient(target=condition, actor=self.users.crystal)
+        acc.approve()
+        action = Action.objects.get(pk=action.pk)
+        self.assertEquals(action.resolution.status, "implemented")
+        self.commClient.refresh_target()
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen, self.users.crystal])
+
+    def test_anyone_can_ask_setting_works_after_switching_a_bunch(self):
+
+        # use someone besides Pinoe, because her governing permission will override everything
+        action, result = self.commClient.add_members(member_pk_list=[self.users.christen.pk])
+        
+        # switch through three other settings first, then settle on ask
+        container = self.commClient.change_membership_setting(new_setting="anyone can join")
+        self.commClient.refresh_target()
+        extra_data = {
+            "permission_actors" : [self.users.christen.pk]
+        }
+        container = self.commClient.change_membership_setting(new_setting="invite only", extra_data=extra_data)
+        self.commClient.refresh_target()
+        extra_data = {
+            "condition_type": "approvalcondition",
+            "permission_data": json.dumps({ "approve_actors" : [self.users.christen.pk] }) ,
+            "condition_data": '{"self_approval_allowed": false}'
+        }
+        container = self.commClient.change_membership_setting(new_setting="anyone can ask", extra_data=extra_data)
+        self.commClient.refresh_target()
+        setting = self.commClient.get_membership_setting()
+        self.assertEquals(setting, "anyone can ask")
+
+        # now test the anyone can ask test (copied from above)
+
+        self.commClient.refresh_target()
+        self.commClient.set_actor(actor=self.users.crystal)
+        action, result = self.commClient.add_members(member_pk_list=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.status, "waiting")
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen])
+
+        self.commClient.set_actor(actor=self.users.christen)
+        self.cc = PermissionConditionalClient(actor=self.users.christen)
+        condition = self.cc.get_condition_item_given_action(action_pk=action.pk)
+        acc = ApprovalConditionClient(target=condition, actor=self.users.christen)
+        acc.approve()
+
+        self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented")   
+        self.commClient.refresh_target() 
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen, self.users.crystal])
 
 
 class TemplateTest(DataTestCase):

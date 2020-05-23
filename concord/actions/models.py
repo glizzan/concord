@@ -26,9 +26,9 @@ class Action(models.Model):
     and the target of the action, among other information.
     """
     # Related fields
-    actor = models.ForeignKey(User, on_delete=models.CASCADE)
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
+    actor = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, blank=True, null=True)
+    object_id = models.PositiveIntegerField(blank=True, null=True)
     target = GenericForeignKey()
     container = models.PositiveIntegerField(blank=True, null=True)   
 
@@ -47,6 +47,20 @@ class Action(models.Model):
     def __str__(self):
         """Provides string describing the Action."""
         return f"{self.resolution.status} action {self.change.get_change_type()} by {self.actor} on {self.target} "
+
+    def save(self, *args, override_check=False, **kwargs):
+        """
+        We turned off required fields so that drafts don't need to have them, so now we need to check for those fields
+        in save.  ( NOTE: this may also help with archived actions where the target has been deleted)
+        
+        # TODO: I'm worried that there may not be a save in between when draft gets changed to 'sent' and then 'approved'
+        and then 'implemented', and the call to implement(). Make sure we're not getting into a funky situation? Maybe
+        always save after switch to sent()?
+        """
+        if self.resolution.status != "draft":
+            if self.target is None or self.actor is None:
+                raise DatabaseError("Must set target and actor before sending or implementing an Action")
+        return super().save(*args, **kwargs)  # Call the "real" save() method.     
 
     def get_description(self):
         """Gets description of the action by reference to `change_types` set via change field, including the target."""
@@ -136,28 +150,58 @@ class ActionContainer(models.Model):
     that are closely connected to each other and which users might see as a single action, for
     example "adding a user with role X to group Y". This might seem like one action to a user but would actually 
     be three: adding the role to the group, adding the user to the group, and adding the user to the role.
-    """
+
+    The mock action list passed in when initializing (via initialize_action_info, not __init__) is generated
+    by switching the client mode to mock when making state change calls.  Instead of validating and attempting to
+    implement the action, the client simply constructs a Mock Action object (see actions/utils.py) with all the
+    relevant data.  This is not saved to the database - a mock action list not saved to a container will be lost.
+
+    Occasionally we get actions that are dependent on the result of a previous action.  In those cases, we
+    replace the missing field with {"action_container_placeholder": "action_x's_unique_id" }.  So our
+    process_actions method handles looking up the previously created object in action_results.  This is not to
+    be confused with action-sourced-fields, which is when a condition has fields which depend on or are sourced
+    from the action which triggers it.  That can happen with any kind of action, not just ones within containers,
+    and is handled within the condition model."""
+
     action_info = models.CharField(max_length=800, null=True, blank=True)  # Probably should be a custom field
     summary_status = models.CharField(max_length=20, default="drafted")
     is_open = models.BooleanField(default=True)
+
+    action_results = dict()
 
     def initialize_action_info(self, action_list):
         """Takes in a list of MockActions, which have typically just been checked using check_permissions_for_action_group.
         Creates actions in the database, giving them draft status, and records their pks here."""
 
-        action_info = {}
+        action_info = dict()
 
         for count, action in enumerate(action_list):
 
-            db_action = Action.objects.create(actor=action.actor, target=action.target, change=action.change,
+            if not hasattr(action.target, "foundational_permission_enabled"):
+                target = None   # if target is fake don't use it
+            else:
+                target = action.target 
+
+            db_action = Action.objects.create(actor=action.actor, target=target, change=action.change,
                 container=self.pk)
 
-            action_info.update({ count: { "pk": db_action.pk , "status": {
+            action.generate_dependent_fields()
+
+            action_info.update({ count: { "pk": db_action.pk , "unique_id": action.unique_id,  
+                "dependent_fields": action.dependent_fields, "log": None, "status": {
                 "overall": "draft", "validated": None, "permissions_checked": None, "implemented": None,
-                "committed": None }, "log": None }})
+                "committed": None } }})
 
         self.action_info = json.dumps(action_info)
         self.save()
+
+    def get_or_refresh_action(self, action_info_item):
+        """Helper method needed because I am deeply confused by how Python/Django are copying things."""
+        action = Action.objects.get(pk=action_info_item["pk"])
+        # Replace any missing fields with action results
+        for field_name, action_id in action_info_item["dependent_fields"].items():
+            setattr(action, field_name, self.action_results[action_id])
+        return action
 
     def process_actions(self):
         """Goes through actions in order and implements them, updating action_info with the results of various checks.  
@@ -172,7 +216,7 @@ class ActionContainer(models.Model):
 
             count = str(count)
 
-            action = Action.objects.get(pk=action_info[count]['pk'])
+            action = self.get_or_refresh_action(action_info_item=action_info[count])
 
             # Check that the action is still valid
             is_valid = action.change.validate(actor=action.actor, target=action.target)  
@@ -182,6 +226,8 @@ class ActionContainer(models.Model):
                 ok_to_commit = False
                 continue
             action_info[count]["validated"] = True 
+
+            action = self.get_or_refresh_action(action_info_item=action_info[count])  # UGH
 
             # Check that the action passes permissions
             changed_action = has_permission(action=action)
@@ -193,9 +239,11 @@ class ActionContainer(models.Model):
             action_info[count]["status"]["permissions_checked"] = True
 
             # Implement action 
-            action.implement_action()
+            result = action.implement_action()
             action_info[count]["status"]["implemented"] = True
             action.save()
+
+            self.action_results.update({  action_info[count]["unique_id"] : result })   # add result in case later action needs it
 
         return action_info, ok_to_commit
 
@@ -219,6 +267,15 @@ class ActionContainer(models.Model):
 
         self.action_info = json.dumps(action_info)
         self.save()
+
+    def get_actions(self):
+        actions = []
+        action_info = json.loads(self.action_info)
+        for count in range(0, len(action_info)):
+            count = str(count)
+            action = Action.objects.get(pk=action_info[count]['pk'])
+            actions.append(action)
+        return actions
 
 
 class PermissionedModel(models.Model):

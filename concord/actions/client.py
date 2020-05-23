@@ -54,8 +54,6 @@ class BaseClient(object):
         """This method is called by clients when making changes to state.  In rare cases, we'll 
         call to create Mocks (used to run through permissions.py just to determine if a user has
         permission to do an action) or Drafts, which are managed by ActionContainers."""
-        
-        self.validate_target()
 
         if self.mode == "mock":     # typically used when checking permissions to limit what's displayed
             from concord.actions.utils import MockAction
@@ -65,6 +63,9 @@ class BaseClient(object):
             return Action.objects.create(actor=self.actor, target=self.target, 
                     change=change)
         else:
+            
+            self.validate_target()
+
             action = Action.objects.create(actor=self.actor, target=self.target, 
                     change=change)
             return action.take_action()

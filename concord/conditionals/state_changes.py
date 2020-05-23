@@ -17,10 +17,11 @@ class AddConditionStateChange(BaseStateChange):
     description = "Add condition"
 
     def __init__(self, *, condition_type: str, permission_data: Dict, condition_data: Dict, 
-        target_type=None):
+        action_sourced_fields=None, target_type=None):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else "{}"
         self.permission_data = permission_data
+        self.action_sourced_fields = action_sourced_fields
         self.target_type = target_type
 
     @classmethod
@@ -37,7 +38,8 @@ class AddConditionStateChange(BaseStateChange):
     def validate(self, actor, target):
         try:
             ConditionData(condition_type=self.condition_type, condition_data=self.condition_data,
-                permission_data=self.permission_data, target_type=self.target_type, validate=True)
+                permission_data=self.permission_data, target_type=self.target_type, 
+                action_sourced_fields=self.action_sourced_fields, validate=True)
             return True
         except ValidationError as error:
             self.set_validation_error(message=error.message)
@@ -45,7 +47,8 @@ class AddConditionStateChange(BaseStateChange):
         
     def implement(self, actor, target):
         condition_data = ConditionData(condition_type=self.condition_type, condition_data=self.condition_data,
-            permission_data=self.permission_data, target_type=self.target_type, validate=True)
+            permission_data=self.permission_data, action_sourced_fields=self.action_sourced_fields, 
+            target_type=self.target_type, validate=True)
         return ConditionTemplate.objects.create(
             owner = target.get_owner(), 
             condition_data = condition_data,
@@ -230,6 +233,7 @@ class ApproveStateChange(BaseStateChange):
         from concord.actions.models import Action
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
+            self.set_validation_error("Self approval is not allowed.")
             return False
 
         return True
@@ -266,6 +270,7 @@ class RejectStateChange(BaseStateChange):
         from concord.actions.models import Action
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
+            self.set_validation_error("Actor cannot approve or reject their own action.")
             return False
 
         return True

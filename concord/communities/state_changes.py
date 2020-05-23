@@ -43,12 +43,35 @@ class ChangeNameStateChange(BaseStateChange):
 class AddMembersStateChange(BaseStateChange):
     description = "Add members to community"
 
-    def __init__(self, member_pk_list):
+    def __init__(self, member_pk_list, self_only=False):
         self.member_pk_list = member_pk_list
+        self.self_only = self_only
 
     @classmethod
     def get_settable_classes(cls):
         return cls.get_community_models()
+
+    @classmethod 
+    def get_configurable_fields(self):
+        return { "self_only": { "display": "Only allow actors to add themselves", "type": "BooleanField" } }
+
+    @classmethod
+    def check_configuration_is_valid(cls, configuration):
+        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
+        By contrast, check_configuration checks a specific action against an already-validated configuration."""
+        if "self_only" in configuration:
+            if configuration["self_only"] not in [True, False, "True", "False", "true", "false"]:
+                return False, f"self_only must be set to True or False, not {configuration['self_only']}"
+        return True, ""
+
+    def check_configuration(self, action, permission):
+        '''All configurations must pass for the configuration check to pass.'''
+
+        configuration = permission.get_configuration()
+        if "self_only" in configuration and configuration['self_only'] == True:
+            if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
+                return False, "self_only is set to true, which means member_pk_list can contain only the pk of the actor"
+        return True, None
 
     def description_present_tense(self):
         return "add %s as members" % self.stringify_list(self.member_pk_list) 
@@ -455,7 +478,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
                 return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
         return True, ""
 
-    def check_configuration(self, permission):
+    def check_configuration(self, action, permission):
         '''All configurations must pass for the configuration check to pass.'''
         configuration = permission.get_configuration()
         if "role_name" in configuration:  

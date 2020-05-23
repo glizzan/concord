@@ -149,8 +149,11 @@ class CommunityClient(BaseClient):
     def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:
         return self.target.roles.has_specific_role(role, actor_pk)
 
-    def get_membership_setting(self):
-        return get_membership_setting(self.actor, self.target)
+    def get_membership_setting(self, extra_data=False):
+        setting, permission, condition = get_membership_setting(self.actor, self.target)
+        if extra_data:
+            return setting, permission, condition
+        return setting
 
     # State changes
 

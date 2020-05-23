@@ -163,7 +163,7 @@ class ActionContainer(models.Model):
     from the action which triggers it.  That can happen with any kind of action, not just ones within containers,
     and is handled within the condition model."""
 
-    action_info = models.CharField(max_length=800, null=True, blank=True)  # Probably should be a custom field
+    action_info = models.CharField(max_length=2000, null=True, blank=True)  # Probably should be a custom field
     summary_status = models.CharField(max_length=20, default="drafted")
     is_open = models.BooleanField(default=True)
 

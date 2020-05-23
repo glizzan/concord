@@ -87,7 +87,7 @@ class MembershipHelper(object):
         } }
         action = self.conditionalClient.add_condition(condition_type="approvalcondition", condition_data=condition_data,
             action_sourced_fields=action_sourced_fields, 
-            permission_data={ "approve_actors": "action-sourced-field", "reject_actors" : "action-sourced-field"})
+            permission_data={ "approve_actors": ["action-sourced-field"], "reject_actors" : ["action-sourced-field"]})
         self.mock_action_list.append(action)
 
     def add_anyone_can_join(self):
@@ -178,18 +178,19 @@ def get_membership_setting(actor, community):
     permissions = permissionClient.get_specific_permissions(change_type="concord.communities.state_changes.AddMembersStateChange")
 
     if len(permissions) == 0:
-        return "no new members can join"
+        return "no new members can join", None, None
     
     permission = permissions[0]
-
+    # Check for condition
+    conditionalClient = PermissionConditionalClient(actor=actor)
+    condition = conditionalClient.get_conditions_given_targets(target_pks=[permission.pk])
+    
     if permission.anyone:
-        # Check for condition
-        conditionalClient = PermissionConditionalClient(actor=actor)
-        condition = conditionalClient.get_conditions_given_targets(target_pks=[permission.pk])
+
         if condition:
-            return "anyone can ask"
+            return "anyone can ask", permission, condition[0]
         else:
-            return "anyone can join"
+            return "anyone can join", permission, None
     
     else:
-        return "invite only"
+        return "invite only", permission, condition[0]

@@ -32,8 +32,11 @@ class ConditionModel(PermissionedModel):
         abstract = True
 
     action =  models.IntegerField()
+    condition_template =  models.IntegerField()
     descriptive_name = "condition"
     has_timeout = False
+
+    # TODO: action & template should be globally unique, enforce at DB level?
 
     def get_name(self):
         return "%s (%d)" % (self.descriptive_name, self.pk)

@@ -3839,5 +3839,36 @@ class CommentTest(DataTestCase):
         self.assertEquals(list(comments), [])
 
 
+class CheckConditionPermissionTest(DataTestCase):
 
+    def setUp(self):
 
+        # Create a community with roles
+        self.commClient = CommunityClient(actor=self.users.pinoe)
+        self.instance = self.commClient.create_community(name="USWNT")
+        self.commClient.set_target(self.instance)
+        self.commClient.add_role(role_name="forwards")
+        self.commClient.add_members([self.users.tobin.pk, self.users.rose.pk, self.users.christen.pk])
+        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
+
+        # add permission & condition
+        self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
+        action, permission = self.permClient.add_permission(
+            permission_type=Changes.Communities.AddRole,
+            permission_actors=[self.users.tobin.pk])
+        self.pcc = PermissionConditionalClient(actor=self.users.pinoe)
+        self.pcc.set_target(target=permission)
+        action, self.condition_template = self.pcc.add_condition(condition_type="approvalcondition",
+            permission_data=json.dumps({ "approve_actors": [self.users.christen.pk] }) )
+
+    def test_check_condition_permission(self):
+
+        self.permClient.set_actor(actor=self.users.christen)
+        result = self.permClient.check_condition_permission(permission_type=Changes.Conditionals.Approve,
+            condition_template=self.condition_template)
+        self.assertTrue(result)
+
+        self.permClient.set_actor(actor=self.users.rose)
+        result = self.permClient.check_condition_permission(permission_type=Changes.Conditionals.Approve,
+            condition_template=self.condition_template)
+        self.assertFalse(result)

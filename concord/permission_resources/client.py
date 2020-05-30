@@ -42,6 +42,44 @@ class PermissionResourceClient(BaseClient):
                 matching_permissions.append(permission)
         return matching_permissions
 
+    def check_permission(self, *, target, permission_item=None, permission_type=None):
+        if not permission_item and not permission_type:
+            raise Exception("Either permission item or permission type must be passed to check_permission.")
+        if permission_item:
+            return permission_item.match_actor(self.actor)
+        if not permission_item:
+            content_type = ContentType.objects.get_for_model(target)
+            permission_items = PermissionsItem.objects.filter(change_type=permission_type,
+                permitted_object_content_type=content_type, permitted_object_id=target.id)
+            for permission_item in permission_items:
+                if permission_item.match_actor(self.actor):
+                    return True
+            return False
+
+    def check_condition_permission(self, *, permission_type, condition_template):
+        """This method allows us to check if a user has permission without requiring us to instantiate a permission
+        or even a target for the action, which is useful primarily in the case of conditions, where permission
+        data is stored in the condition template and not instantiated until an action triggers the condition."""
+
+        from concord.permission_resources.utils import create_permissions_outside_pipeline
+        permission_dict = condition_template.condition_data.permission_data
+        owner = condition_template.get_owner()
+        condition = condition_template.condition_data.condition_object
+
+        def get_owner():  # monkey patch so get_owner call in match_actor works
+            return owner
+        setattr(condition, "get_owner", get_owner)
+
+        permissions = create_permissions_outside_pipeline(permission_dict, condition, owner, skip_save=True)
+
+        for permission in permissions:
+            if permission[1].change_type == permission_type:
+                is_match, role = permission[1].match_actor(self.actor)
+                if is_match:
+                    return True
+        
+        return False
+
     def actor_satisfies_permission(self, *, actor, permission: PermissionsItem) -> bool:
         return permission.match_actor(actor)
 

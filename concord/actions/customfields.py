@@ -9,33 +9,25 @@ from django.db import models
 
 
 class Resolution:
-    '''The Resolution object is given the action's status and, optionally,
-    how the action was resolved (if it was resolved), what role was used
-    (if a role was used), the condition (if a condition was used) and whether
-    or not the action in question is provisional.
+    '''The Resolution object is given the action's status and, optionally, how the action was resolved (if it 
+    was resolved), what role was used (if a role was used), condition type and pk (if a condition was used) and 
+    a log. On instantiation, we infer values for whether it's resolved (is_resolved) or approved (is_approved).'''
 
-    On instantiation, we infer values for is_resolved, is_approved, and
-    passed_as.'''
+    def __init__(self, *, status, resolved_through=None, role=None, condition_list=None log=None):
 
-    def __init__(self, *, status, resolved_through=None, role=None, 
-        condition=None, provisional=False, log=None):
-
-        # Store parameters
         self.status = status
         self.resolved_through = resolved_through
         self.role = role
-        self.condition = condition
-        self.provisional = provisional
         self.log = log
-
-        self.is_resolved, self.is_approved, self.passed_as = None, None, None  # Initialize
+        self.condition_list = condition_list if condition_list else []
+        self.condition_pk = condition_pk
+        self.condition_type = condition_type
         self.infer_values()
 
     def infer_values(self):
         self.check_if_resolved()
         self.check_if_approved()
         self.check_resolved_through()
-        self.check_passed_as()
 
     def check_if_resolved(self):
         self.is_resolved = True if self.status in ["approved", "rejected", "implemented"] else False
@@ -43,38 +35,38 @@ class Resolution:
     def check_if_approved(self):
         if self.is_resolved:
             self.is_approved = True if self.status in ["approved", "implemented"] else False
+        else:
+            self.is_approved = None
 
     def check_resolved_through(self):
         if self.is_resolved and self.is_approved:
             if self.resolved_through not in ["foundational", "governing", "specific"]:
                 raise ValueError("resolved_through was ", resolved_through, "; must be 'foundational', 'governing', or 'specific'")
 
-    def check_passed_as(self):
-        if self.is_resolved and self.is_approved:
-            self.passed_as = "role" if self.role else "individual"
-            self.role = self.role if self.role else None
-
     def __str__(self):
-        detailed_passed_as = self.role if self.role else self.passed_as
-        return "Action status %s (resolved through %s; passed as %s; condition %s; provisional %s)" % (self.status, 
-            self.resolved_through, detailed_passed_as, self.condition, self.provisional)
-
-    def approve_action(self, resolved_through, log=None, condition=None, role=None):
+        pass_as_description = self.role if self.role else "individual"
+        conditions = "; ".join(f"{condition['type']} - {condition['pk']}" for condition in self.condition_list)
+        return f"Action status {self.status}: resolved through {self.resolved_through}; 
+            passed as {pass_as_description}; conditions: {conditions}""
+        
+    def approve_action(self, resolved_through=None, log=None, condition_list=None, role=None):
         if log:
             self.add_to_log(log)
         self.status = "approved"
-        self.resolved_through = resolved_through
-        self.condition = condition
+        self.resolved_through = resolved_through if resolved_through else self.resolved_through
+        if not self.resolved_through:
+            raise AttributeError("Approved actions must have 'resolved_through' set.")
         self.role = role
+        self.condition_list = condition_list if condition_list else self.condition_list
         self.infer_values()
 
-    def reject_action(self, resolved_through=None, log=None, condition=None, role=None):
+    def reject_action(self, resolved_through=None, log=None, condition_list=None, role=None):
         if log:
             self.add_to_log(log)
         self.status = "rejected"
         self.resolved_through = resolved_through
-        self.condition = condition
         self.role = role
+        self.condition_list = condition_list if condition_list else self.condition_list
         self.infer_values()
 
     def add_to_log(self, message):
@@ -88,8 +80,7 @@ class Resolution:
 def parse_resolution(resolution_string):
     resolution_dict = json.loads(resolution_string)
     return Resolution(status=resolution_dict['status'], resolved_through=resolution_dict['resolved_through'], 
-        role=resolution_dict['role'], condition=resolution_dict['condition'], 
-        provisional=resolution_dict['provisional'], log=resolution_dict['log'])
+        role=resolution_dict['role'], condition_list=resolution_dict['condition_list'], log=resolution_dict['log'])
 
 
 class ResolutionField(models.Field):
@@ -125,8 +116,7 @@ class ResolutionField(models.Field):
             "status": value.status,
             "resolved_through": value.resolved_through,
             "role": value.role,
-            "condition": value.condition,
-            "provisional": value.provisional,
+            "condition_list": value.condition_list,
             "log": value.log
         })
 

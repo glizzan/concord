@@ -122,6 +122,56 @@ class Action(models.Model):
         self.resolution.status = "implemented"
         return result
 
+    def create_next_condition(self, resolution, create_all_conditions=False):
+        """Takes a resolution object and looks through conditions in the conditions list in order, for
+        conditions with no condition_pk, which means it hasn't been created yet. By default, just creates
+        the next condition in the list, but can run in 'create all conditions' mode."""
+
+        condition_created = False
+        
+        for condition_dict in resolution.condition_list:
+            if condition_dict['condition_pk'] == None:
+
+                # call condition client, need to 
+
+                # Create condition
+                if create_all_conditions:
+                    condition_created = True
+                else:
+                    return True
+
+        return condition_created  
+
+    def check_permission(self):
+        from concord.actions.client_interface import ClientInterface
+        clif = ClientInterface(default_actor=self.actor)
+        foundational_resolution, governing_resolution, specific_resolution = has_permission(action=self, clif=clif)
+
+        if foundational_resolution:
+            # If foundational resolution is returned, just use that - governing and specific will always be None
+            self.resolution = foundational_resolution
+            return
+
+        # If action passed either governing or specific pipeline, use it, prioritizing governing over specific
+        if governing_resolution and governing_resolution.status == "approved":
+            self.resolution = governing_resolution
+            return
+        elif specific_resolution and specific_resolution.status == "approved":
+            self.resolution = specific_resolution
+            return
+
+        # We trigger the next waiting condition 
+        if governing_resolution and governing_resolution.status == "waiting":
+            condition_created = 
+
+
+        # # If nothing is waiting or approved, reject
+        # if specific_resolution and specific_resolution.status == "rejected" and (not governing_resolution or (
+        #     governing_resolution and governing_resolution.status == "rejected"))
+        
+        # If we get to the end, reject      
+
+
     def take_action(self):
         """Take action by checking status and attempt the next step given that status.
 
@@ -133,10 +183,9 @@ class Action(models.Model):
             self.validate_action()
 
         if self.resolution.status in ["sent", "waiting"]:
-            from concord.actions.permissions import has_permission
-            self = has_permission(action=self)
+            self.check_permission()
 
-        if self.resolution.status == "approved" and not self.resolution.provisional:
+        if self.resolution.status == "approved":
             current_result = self.implement_action()
 
         self.save()  # Save action, may not always be needed

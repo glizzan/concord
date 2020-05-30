@@ -176,7 +176,7 @@ class PermissionsItem(PermissionedModel):
             return in_permission, matched_role
 
     def actor_in_permission(self, actor):
-
+        
         actors = self.get_actors()
 
         if actor.pk in actors:

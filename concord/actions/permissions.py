@@ -3,28 +3,33 @@ from collections import namedtuple
 from django.contrib.auth.models import User
 
 from concord.actions.state_changes import foundational_changes
-from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
+from concord.conditionals.client import ConditionalClient
 from concord.communities.client import CommunityClient
 from concord.permission_resources.client import PermissionResourceClient
 from concord.permission_resources.utils import check_configuration
 
 
-def check_conditional(action, condition_template):
-
-    # If condition template is null, no condition set on permission - approve + return.
-    if condition_template is None:
-        return action, "no_template"
+# TODO: need to refactor this so we're not creating conditions in here, or otherwise changing the DB
+# should just *get* the condition and check status, no creating it if it's not already there.
+def check_conditional(action, community_or_permission, leadership_type=None):
 
     # Don't actually create condition if action is a mock
     if hasattr(action, "is_mock") and action.is_mock == True:
-        return action, "waiting"
+        class MockConditionitem(object):
+            def get_model_name(self):
+                return "mock condition"
+            def condition_status(self):
+                return "waiting"
+        return action, MockConditionitem()
 
-    # Does this action already have a condition action instance?  If no, make one.
-    conditionalClient = PermissionConditionalClient(system=True)
-    condition_item = conditionalClient.get_or_create_condition(action=action,
-        condition_template=condition_template)
+    conditionalClient = ConditionalClient(system=True)
 
-    return action, condition_item.condition_status()
+    if hasattr(community_or_permission, "is_community") and community_or_permission.is_community:
+        condition_item = conditionalClient.get_or_create_condition_on_community(action, community_or_permission, leadership_type)
+    else:
+        condition_item = conditionalClient.get_or_create_condition_on_permission(action, community_or_permission)
+
+    return action, condition_item
 
 
 def foundational_permission_pipeline(action):
@@ -33,30 +38,30 @@ def foundational_permission_pipeline(action):
     community = communityClient.get_owner(owned_object=action.target)
     communityClient.set_target(target=community)
     has_authority, matched_role = communityClient.has_foundational_authority(actor=action.actor)
+
     if not has_authority:
         action.resolution.reject_action(resolved_through="foundational", log="actor does not have foundational authority")
         return action
 
-    # Check for conditions
-    conditionalClient = CommunityConditionalClient(system=True, target=community)
-    condition_template = conditionalClient.get_condition_template_for_owner()
-    action, condition_status = check_conditional(action, condition_template)
-
-    # Update action
-    if condition_status == "no_template":
+    if not community.has_owner_condition():
         action.resolution.approve_action(resolved_through="foundational", role=matched_role, 
             log="action approved via foundational pipeline with with no condition set")
-    elif condition_status == "approved":
+        return action
+
+    # Update action based on condition
+    action, condition_item = check_conditional(action, community, "owner")
+
+    if condition_item.condition_status() == "approved":
         action.resolution.approve_action(resolved_through="foundational", role=matched_role, 
-            condition=condition_template.condition_name(),
-            log="action approved via foundational pipeline with condition %s" % str(condition_template))
-    elif condition_status == "rejected": 
+            condition=condition_item.get_model_name(),
+            log=f"action approved via foundational pipeline with condition {condition_item.get_model_name()}")
+    elif condition_item.condition_status() == "rejected": 
         action.resolution.reject_action(resolved_through="foundational", role=matched_role, 
-            condition=condition_template.condition_name(),
-            log="action passed foundational pipeline but was rejected by condition %s" % str(condition_template))
-    elif condition_status == "waiting":
+            condition=condition_item.get_model_name(),
+            log=f"action passed foundational pipeline but was rejected by condition {condition_item.get_model_name()}")
+    elif condition_item.condition_status() == "waiting":
         action.resolution.status = "waiting"
-        action.resolution.log = "action passed foundational pipeline, now waiting on condition " + str(condition_template)
+        action.resolution.log = f"action passed foundational pipeline, now waiting on condition {condition_item.get_model_name()}"
     
     return action
 
@@ -97,7 +102,7 @@ def specific_permission_pipeline(action):
     """
     
     permissionClient = PermissionResourceClient(system=True)
-    conditionalClient = PermissionConditionalClient(system=True)
+    conditionalClient = ConditionalClient(system=True)
 
     # Get and check target level permissions
     permissions = get_permissions(permissionClient, action.target, action)
@@ -106,17 +111,13 @@ def specific_permission_pipeline(action):
         matched, matched_role = permissionClient.actor_satisfies_permission(actor=action.actor, permission=permission)
         if matched:
             matching_permissions.append(PermStore(permission=permission, matched_role=matched_role))
-       
+
     # Go through matching target level permissions and look for any that pass without conditions
     for permission in matching_permissions:
-        conditionalClient.set_target(permission.permission)
-        condition_template = conditionalClient.get_condition_template()
-        if not condition_template:
+        if not permission.permission.has_condition():
             action.resolution.approve_action(resolved_through="specific", role=permission.matched_role,
                 log="action approved via specific pipeline with with no condition set")
             return action
-        else:
-            permission.condition = condition_template
     
     # If we're still here, that means nothing matched without a condition, so now we look for nested permissions
     matching_nested_permissions = []
@@ -129,34 +130,31 @@ def specific_permission_pipeline(action):
 
     # Go through matching nested permissions and look for any that pass without conditions
     for permission in matching_nested_permissions:
-        conditionalClient.set_target(permission.permission)
-        condition_template = conditionalClient.get_condition_template()
-        if not condition_template:
+        if not permission.permission.has_condition():
             action.resolution.approve_action(resolved_through="specific", role=permission.matched_role,
                 log="action approved via specific pipeline with with no condition set")
             return action
-        else:
-            permission.condition = condition_template
 
     # There's no permissions passing without conditions, so now we check conditions, starting with the target level
     waiting_on_permission = False
     temp_log = []
     for permission in matching_permissions + matching_nested_permissions:
 
-        action, conditional_status = check_conditional(action, permission.condition)
+        if not permission.permission.has_condition():
+            continue
 
-        if conditional_status == "approved":
+        action, condition_item = check_conditional(action, permission.permission)
+
+        if condition_item.condition_status() == "approved":
             action.resolution.approve_action(resolved_through="specific", role=permission.matched_role,
-                condition=permission.condition.condition_name(),
-                log="action approved via specific pipeline with with condition %s" % str(permission.condition))
+                condition=condition_item.get_model_name(),
+                log=f"action approved via specific pipeline with with condition {condition_item.get_model_name()}")
             return action
-        elif conditional_status == "waiting":
+        elif condition_item.condition_status() == "waiting":
             waiting_on_permission = True
-            temp_log.append("waiting on condition %s for permission %s (role %s)" % (str(permission.condition),
-                permission.permission, permission.matched_role))
-        elif conditional_status == "rejected":
-            temp_log.append("rejected by condition %s for permission %s (role %s)" % (str(permission.condition),
-                permission.permission, permission.matched_role))
+            temp_log.append(f"waiting on condition {condition_item.get_model_name()} for permission {permission.permission} (role {permission.matched_role})")            
+        elif condition_item.condition_status() == "rejected":
+            temp_log.append(f"rejected by condition {condition_item.get_model_name()} for permission {permission.permission} (role {permission.matched_role})")            
 
     # If after looping through all permissions we're waiting on one or more permissions, set status to waiting.
     if waiting_on_permission:
@@ -182,25 +180,23 @@ def governing_permission_pipeline(action):
     if not has_authority:
         return action  
 
-    # Check for conditions
-    conditionalClient = CommunityConditionalClient(system=True, target=community)
-    condition_template = conditionalClient.get_condition_template_for_governor()
-    action, condition_status =  check_conditional(action, condition_template)
-
-    # Update action
-    if condition_status == "no_template":
+    if not community.has_governor_condition():
         action.resolution.approve_action(resolved_through="governing",  role=matched_role,
             log="action approved via governing pipeline with with no condition set")
-    elif condition_status == "approved":
+        return action
+    
+    action, condition_item = check_conditional(action, community, "governor")
+        
+    if condition_item.condition_status() == "approved":
         action.resolution.approve_action(resolved_through="governing", role=matched_role, 
-            condition=condition_template.condition_name(),
-            log="action approved via governing pipeline with condition %s" % str(condition_template))
-    elif condition_status == "rejected": 
-        message = "action passed governing pipeline but was rejected by condition %s" % str(condition_template)
+            condition=condition_item.get_model_name(),
+            log=f"action approved via governing pipeline with condition {condition_item.get_model_name()}")
+    elif condition_item.condition_status() == "rejected": 
+        message = f"action passed governing pipeline but was rejected by condition {condition_item.get_model_name()}"
         action.resolution.add_to_log(message)
-    elif condition_status == "waiting":
+    elif condition_item.condition_status() == "waiting":
         action.resolution.status = "waiting"
-        message = "action passed governing pipeline, now waiting on condition " + str(condition_template)
+        message = f"action passed governing pipeline, now waiting on condition {condition_item.get_model_name()}"
         action.resolution.add_to_log(message)
     
     return action
@@ -219,6 +215,10 @@ def has_permission(action):
     Note: this structure makes it possible for several conditions to be raised on a single action, which may
     prove confusing or tedious.
     """
+
+    if hasattr(action, "bypass_pipeline"):   # Hack to deal with when the system itself is taking an action
+        action.resolution.approve_action(resolved_through="system", log="Action targets another action, skip pipeline")
+        return action
 
     # Check for criteria indicating we should use the foundational permission pipeline
     if action.change.get_change_type() in foundational_changes() or action.target.foundational_permission_enabled:

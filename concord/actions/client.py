@@ -161,7 +161,7 @@ class ActionClient(BaseClient):
     def create_action_container(self, action_list):
         """Takes in a list of Mock Actions generated using mock mode for this or other clients.  """
         container = ActionContainer.objects.create()
-        container.initialize_action_info(action_list=action_list)
+        container.initialize(action_list=action_list)
         return container
 
     def retry_action_container(self, container_pk, test=True):

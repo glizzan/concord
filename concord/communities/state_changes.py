@@ -1,8 +1,8 @@
 from concord.actions.state_changes import BaseStateChange
 from django.conf import settings
 from django.apps import apps
+from django.core.exceptions import ValidationError
 
-  
 
 ###############################
 ### Community State Changes ###
@@ -535,3 +535,96 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)
         target.save()
         return target
+
+
+class AddLeadershipConditionStateChange(BaseStateChange):
+    description = "Add leadership condition"
+
+    def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
+        self.condition_type = condition_type
+        self.condition_data = condition_data
+        self.permission_data = permission_data
+        self.leadership_type = leadership_type
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"add condition {self.condition_type} to {self.leadership_type}"   
+
+    def description_past_tense(self):
+        return f"added condition {self.condition_type} to {self.leadership_type}"  
+
+    def generate_mock_actions(self, actor, target):
+        """Helper method with template generation logic, since we're using it in both validate and implement."""
+
+        from concord.conditionals.client import ConditionalClient
+        from concord.permission_resources.client import PermissionResourceClient
+
+        cond_client = ConditionalClient(actor=actor)
+        cond_client.mode = "mock"
+        perm_client = PermissionResourceClient(actor=actor)   
+        perm_client.mode = "mock"
+
+        mock_action_list = []
+        action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
+            condition_data=self.condition_data, community_pk=target.pk, leadership_type=self.leadership_type)
+        action_1.add_command_to_dependent_fields(command="REPLACE target WITH trigger_action")
+        mock_action_list.append(action_1)
+
+        perm_client.target = action_1
+        for permission_item_data in self.permission_data:
+            next_action = perm_client.add_permission(**permission_item_data)
+            command= f"REPLACE target WITH previous_action {action_1.unique_id} result"
+            next_action.add_command_to_dependent_fields(command=command)
+            mock_action_list.append(next_action)
+        
+        return mock_action_list
+
+    def apply_actions_to_conditions(self, action_list, target):
+        if self.leadership_type == "owner":
+            target.owner_condition.action_list = action_list
+        elif self.leadership_type == "governor":
+            target.governor_condition.action_list = action_list
+        return target
+
+    def validate(self, actor, target):
+        try:
+            mock_action_list = self.generate_mock_actions(actor, target)    
+            return True
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
+            return False
+        
+    def implement(self, actor, target):
+        action_list = self.generate_mock_actions(actor, target)
+        target = self.apply_actions_to_conditions(action_list, target)
+        target.save()
+
+
+class RemoveLeadershipConditionStateChange(BaseStateChange):
+    description = "Remove leadership condition"
+
+    def __init__(self, *, leadership_type):
+        self.leadership_type = leadership_type
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"remove condition from community {self.community_pk}'s {self.leadership_type}"   
+
+    def description_past_tense(self):
+        return f"removed condition from community {self.community_pk}'s {self.leadership_type}"  
+
+    def validate(self, actor, target):
+        return True
+        
+    def implement(self, actor, target):
+        if self.leadership_type == "owner":
+            target.owner_condition.action_list = []
+        elif self.leadership_type == "governor":
+            target.governor_condition.action_list = []
+        target.save()

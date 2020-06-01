@@ -7,8 +7,8 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
-from concord.permission_resources.customfields import (ActorList, ActorListField, RoleList,
-    RoleListField, TemplateDataField, TemplateData)
+from concord.actions.customfields import Template, TemplateField
+from concord.permission_resources.customfields import ActorList, ActorListField, RoleList, RoleListField
 
 
 class PermissionsItem(PermissionedModel):
@@ -33,9 +33,7 @@ class PermissionsItem(PermissionedModel):
     permitted_object_id = models.PositiveIntegerField()
     permitted_object = GenericForeignKey('permitted_object_content_type', 'permitted_object_id')
 
-    condition = GenericRelation("conditionals.ConditionTemplate", 
-        object_id_field="conditioned_object_id", content_type_field='conditioned_object_content_type',
-        related_query_name="permission")
+    condition = TemplateField(default=Template, system=True)   # Defaults to empty TEmplate object
 
     actors = ActorListField(default=ActorList) # Defaults to empty ActorList object  
     roles = RoleListField(default=RoleList) # Defaults to empty RoleList object
@@ -79,18 +77,17 @@ class PermissionsItem(PermissionedModel):
 
     # Get misc info
 
+    def has_condition(self):
+        if self.condition and self.condition.has_template():
+            return True
+        return False  
+
     def get_target(self):
         # does this get used? what does it do?
         return self.permitted_object
 
     def get_permitted_object(self):
         return self.permitted_object
-
-    def get_condition(self):
-        """Get condition set on permission"""
-        from concord.conditionals.client import PermissionConditionalClient
-        pcc = PermissionConditionalClient(system=True, target=self)
-        return pcc.get_condition_template()
 
     def get_state_change_object(self):
         from concord.actions.utils import get_state_change_object_given_name
@@ -213,11 +210,11 @@ def delete_empty_permission(sender, instance, created, **kwargs):
 post_save.connect(delete_empty_permission, sender=PermissionsItem)
 
 
-class Template(PermissionedModel):
-    """ 
-    Template models allow users to save and edit configurations of communities, owned objects,
-    permissions, and conditionals.  New communities can be generated from these templates, making
-    it easier for users to experiment with new governance structures.
-    """
-    data = TemplateDataField(null=True, default=TemplateData)
-    description = models.CharField(max_length=500)
+# class Template(PermissionedModel):
+#     """ 
+#     Template models allow users to save and edit configurations of communities, owned objects,
+#     permissions, and conditionals.  New communities can be generated from these templates, making
+#     it easier for users to experiment with new governance structures.
+#     """
+#     data = TemplateDataField(null=True, default=TemplateData)
+#     description = models.CharField(max_length=500)

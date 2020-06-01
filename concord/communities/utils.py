@@ -1,6 +1,6 @@
 from concord.actions.state_changes import Changes
 from concord.permission_resources.client import PermissionResourceClient
-from concord.conditionals.client import PermissionConditionalClient
+from concord.conditionals.client import ConditionalClient
 
 
 class MembershipHelper(object):
@@ -14,7 +14,7 @@ class MembershipHelper(object):
         self.permissionClient = PermissionResourceClient(actor=actor, target=community)
         self.permissionClient.mode = "mock"
         self.permission = self.get_add_member_permsision()
-        self.conditionalClient = PermissionConditionalClient(actor=actor)
+        self.conditionalClient = ConditionalClient(actor=actor)
         self.conditionalClient.mode = "mock"
 
         self.previous_setting = previous_setting
@@ -182,7 +182,7 @@ def get_membership_setting(actor, community):
     
     permission = permissions[0]
     # Check for condition
-    conditionalClient = PermissionConditionalClient(actor=actor)
+    conditionalClient = ConditionalClient(actor=actor)
     condition = conditionalClient.get_conditions_given_targets(target_pks=[permission.pk])
     
     if permission.anyone:

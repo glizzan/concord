@@ -1,5 +1,7 @@
 import json
 
+from django.core.exceptions import ValidationError
+
 from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources.utils import get_verb_given_permission_type
@@ -464,6 +466,88 @@ class DisableAnyoneStateChange(PermissionResourceBaseStateChange):
         permission.anyone = False
         permission.save()
         return permission
+
+
+class AddPermissionConditionStateChange(BaseStateChange):
+    description = "Add condition"
+
+    def __init__(self, *, condition_type, condition_data, permission_data):
+        self.condition_type = condition_type
+        self.condition_data = condition_data
+        self.permission_data = permission_data if permission_data else []
+        # self.action_sourced_fields = action_sourced_fields
+
+    @classmethod
+    def get_settable_classes(cls):
+        from concord.permission_resources.models import PermissionsItem
+        return [PermissionsItem]
+
+    def description_present_tense(self):
+        return f"add condition {self.condition_type} to permission"   
+
+    def description_past_tense(self):
+        return f"added condition {self.condition_type} to permission"  
+
+    def generate_mock_actions(self, actor, target):
+        """Helper method with template generation logic, since we're using it in both validate and implement.
+        The actions below are stored within the template, and copied+instantiated when a separate action triggers 
+        the permission to do so."""
+
+        from concord.conditionals.client import ConditionalClient
+        from concord.permission_resources.client import PermissionResourceClient
+
+        cond_client = ConditionalClient(actor=actor)
+        cond_client.mode = "mock"
+        perm_client = PermissionResourceClient(actor=actor)   
+        perm_client.mode = "mock"
+
+        mock_action_list = []
+        action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
+            condition_data=self.condition_data, permission_pk=target.pk)
+        action_1.add_command_to_dependent_fields(command="REPLACE target WITH trigger_action")
+        mock_action_list.append(action_1)
+
+        perm_client.target = action_1
+        for permission_item_data in self.permission_data:
+            next_action = perm_client.add_permission(**permission_item_data)
+            command = f"REPLACE target WITH previous_action {action_1.unique_id} result"
+            next_action.add_command_to_dependent_fields(command=command)
+            mock_action_list.append(next_action)
+        
+        return mock_action_list
+
+    def validate(self, actor, target):
+        try:
+            mock_action_list = self.generate_mock_actions(actor, target)    
+            return True
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
+            return False
+        
+    def implement(self, actor, target):
+        target.condition.action_list = self.generate_mock_actions(actor, target)
+        target.save()
+
+
+class RemovePermissionConditionStateChange(BaseStateChange):
+    description = "Remove leadership condition"
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"remove condition from permission"   
+
+    def description_past_tense(self):
+        return f"removed condition from permission"  
+
+    def validate(self, actor, target):
+        return True
+        
+    def implement(self, actor, target):
+        target.condition.action_list = []
+        target.save()
 
 
 ##############################

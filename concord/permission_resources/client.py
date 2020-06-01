@@ -42,6 +42,10 @@ class PermissionResourceClient(BaseClient):
                 matching_permissions.append(permission)
         return matching_permissions
 
+    def permission_has_condition(self, permission: PermissionsItem) -> bool:
+        # TODO: may need to distinguish between None value vs a an empty template field
+        return permission.condition is not None
+
     def actor_satisfies_permission(self, *, actor, permission: PermissionsItem) -> bool:
         return permission.match_actor(actor)
 
@@ -171,6 +175,14 @@ class PermissionResourceClient(BaseClient):
         change = sc.DisableAnyoneStateChange(permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
+    def add_condition_to_permission(self, *, condition_type, condition_data=None, permission_data=None):
+        change = sc.AddPermissionConditionStateChange(condition_type=condition_type, condition_data=condition_data, 
+            permission_data=permission_data)
+        return self.create_and_take_action(change)
+
+    def remove_condition_from_permission(self):
+        change = sc.RemovePermissionConditionStateChange()
+        return self.create_and_take_action(change)
 
     # Complex/multiple state changes
 

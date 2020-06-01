@@ -7,8 +7,8 @@ from django.contrib.contenttypes.fields import GenericRelation
 
 
 from concord.actions.models import PermissionedModel
-from concord.conditionals.client import CommunityConditionalClient
 from concord.communities.customfields import RoleHandler, RoleField
+from concord.actions.customfields import TemplateField, Template
 
 
 # FIXME: this duplicates stuff in templates.py, maybe templates.py should find a way to reference this?
@@ -27,12 +27,11 @@ class BaseCommunityModel(PermissionedModel):
     logic is contained in customfields.RoleField and customfields.RoleHandler.'''
     is_community = True
 
-    condition = GenericRelation("conditionals.ConditionTemplate", 
-        object_id_field="conditioned_object_id", content_type_field='conditioned_object_content_type',
-        related_query_name="community")
-
     name = models.CharField(max_length=200)    
     roles = RoleField(default=RoleHandler)
+
+    owner_condition = TemplateField(default=Template, system=True)
+    governor_condition = TemplateField(default=Template, system=True)
 
     class Meta:
         abstract = True
@@ -46,15 +45,15 @@ class BaseCommunityModel(PermissionedModel):
         """
         return self
 
-    def owner_condition_display(self):
-        comCondClient = CommunityConditionalClient(system=True, target=self)
-        owner_condition = comCondClient.get_condition_info_for_owner()
-        return owner_condition if owner_condition else "unconditional"
+    def has_owner_condition(self):
+        if self.owner_condition and self.owner_condition.has_template():
+            return True
+        return False
 
-    def governor_condition_display(self):
-        comCondClient = CommunityConditionalClient(system=True, target=self)
-        governor_condition = comCondClient.get_condition_template_for_governor()
-        return governor_condition if governor_condition else "unconditional"
+    def has_governor_condition(self):
+        if self.governor_condition and self.governor_condition.has_template():
+            return True
+        return False
 
     # FIXME: maybe overwrite save method to raise error if there community's rolefield
     # doesn't meet bare minimum valid conditions?

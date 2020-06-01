@@ -113,20 +113,6 @@ class CommunityClient(BaseClient):
     def get_users_given_role(self, *, role_name: str):
         return self.target.roles.get_users_given_role(role_name)
 
-    def get_governance_info_as_text(self):
-        # HACK to make use of template's text utils, need to refactor them to be more general use
-        from concord.conditionals.client import CommunityConditionalClient
-        ccc = CommunityConditionalClient(actor=self.actor, target=self.target)
-        from concord.permission_resources.templates import community_basic_info_to_text, community_governance_info_to_text
-
-        conditions = list(filter(None, [ccc.get_condition_template_for_owner(), 
-            ccc.get_condition_template_for_governor()]))
-        basic_info_string = community_basic_info_to_text(template_model=None, community=self.target)
-        governance_string = community_governance_info_to_text(template_model=None, community=self.target,
-            conditions=conditions)
-
-        return basic_info_string + " " + governance_string
-
     def get_ownership_info(self, shorten_roles=False) -> dict:
         owner_data = self.target.roles.get_owners()
         if shorten_roles:
@@ -218,6 +204,15 @@ class CommunityClient(BaseClient):
 
     def remove_people_from_role(self, *, role_name: str, people_to_remove: list) -> Tuple[int, Any]:
         change = sc.RemovePeopleFromRoleStateChange(role_name=role_name, people_to_remove=people_to_remove)
+        return self.create_and_take_action(change)
+
+    def add_leadership_condition(self, *, condition_type, leadership_type, condition_data=None, permission_data=None):
+        change = sc.AddLeadershipConditionStateChange(condition_type=condition_type, condition_data=condition_data, 
+            permission_data=permission_data, leadership_type=leadership_type)
+        return self.create_and_take_action(change)
+
+    def remove_leadership_condition(self, *, leadership_type):
+        change = sc.RemoveLeadershipConditionStateChange(leadership_type=leadership_type)
         return self.create_and_take_action(change)
 
     # Complex/multiple state changes

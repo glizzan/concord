@@ -32,11 +32,15 @@ class ConditionModel(PermissionedModel):
         abstract = True
 
     action =  models.IntegerField()
+    source_id = models.CharField(max_length=20)
     descriptive_name = "condition"
     has_timeout = False
 
     def get_name(self):
         return "%s (%d)" % (self.descriptive_name, self.pk)
+
+    def get_model_name(self):
+        return self.__class__.__name__.lower()
 
     def get_url(self):
         return reverse('conditionals:condition_detail', kwargs={'action_pk': self.action })

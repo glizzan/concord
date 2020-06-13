@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='permissionsitem',
             name='condition',
-            field=concord.actions.customfields.TemplateField(blank=True, null=True),
+            field=concord.actions.customfields.TemplateField(default=concord.actions.customfields.Template, system=True),
         ),
         migrations.DeleteModel(
             name='Template',

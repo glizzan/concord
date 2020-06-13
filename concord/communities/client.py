@@ -125,6 +125,13 @@ class CommunityClient(BaseClient):
             governor_data["roles"] = [role.split("_")[1] for role in governor_data["roles"]]
         return governor_data
 
+    def get_governance_info_as_text(self):
+        from concord.actions.text_utils import community_basic_info_to_text, community_governance_info_to_text
+        return community_basic_info_to_text(self.target) + " " + community_governance_info_to_text(self.target)
+
+    def get_condition_data(self, leadership_type, info="all") -> dict:
+        return self.target.get_condition_data(leadership_type=leadership_type, info=info)
+
     def has_foundational_authority(self, *, actor) -> bool:  # Also returns role
         return self.target.roles.is_owner(actor.pk) 
 

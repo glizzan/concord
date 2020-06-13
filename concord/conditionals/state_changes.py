@@ -34,6 +34,9 @@ class SetConditionOnActionStateChange(BaseStateChange):
     def get_condition_class(self):
         from concord.conditionals.client import ConditionalClient
         return ConditionalClient(system=True).get_condition_class(condition_type=self.condition_type)
+
+    def get_condition_verb(self):
+        return self.get_condition_class().verb_name
     
     def get_owner(self):
         """The owner of the condition should be the community in which it is created.  For now, this means
@@ -80,11 +83,18 @@ class SetConditionOnActionStateChange(BaseStateChange):
             self.set_validation_error(message=error.message)
             return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         condition_class = self.get_condition_class()
         source_id = self.generate_source_id()
-        condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
-            **self.condition_data)
+        
+        if save:
+            condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
+                **self.condition_data)
+        else:
+            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
+                **self.condition_data)
+        
         return condition_instance
 
 
@@ -240,6 +250,8 @@ class SetConditionOnActionStateChange(BaseStateChange):
 
 class AddVoteStateChange(BaseStateChange):
     description = "Add vote"
+    verb_name = "vote"
+    action_helps_pass_condition = True
 
     def __init__(self, vote):
         self.vote = vote
@@ -272,10 +284,14 @@ class AddVoteStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.add_vote(self.vote)
         target.add_vote_record(actor)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return True
 
 
@@ -287,6 +303,8 @@ class AddVoteStateChange(BaseStateChange):
 class ApproveStateChange(BaseStateChange):
     description = "Approve"
     preposition = ""
+    verb_name = "approve"
+    action_helps_pass_condition = True
 
     @classmethod
     def get_settable_classes(cls):
@@ -313,15 +331,21 @@ class ApproveStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.approve()
-        target.save()
+        
+        if save:
+            target.save()
+        
         return True
 
 
 class RejectStateChange(BaseStateChange):
     description = "Reject"
     preposition = ""
+    verb_name = "reject"
+    action_helps_pass_condition = False
 
     @classmethod
     def get_settable_classes(cls):
@@ -350,7 +374,11 @@ class RejectStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.reject()
-        target.save()
+        
+        if save:
+            target.save()
+        
         return True

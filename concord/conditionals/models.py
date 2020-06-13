@@ -52,14 +52,20 @@ class ConditionModel(PermissionedModel):
         ac = ActionClient(system=True)
         return ac.get_action_given_pk(pk=self.action)
 
-    def user_condition_status(self, user):
-        """User condition status is a shortcut which helps us determine if a user can take an action on a condition
-        without actually creating an action. This is useful in determining what to show the user on the front-end.
-        We assume that by the time user_condition_status is called the user has passed the permissions system, and so
-        this status is to check instance-specific issues, like preventing a person who has already voted from voting
-        again."""
-        # FIXME: this seems like something that could be done better with provisional actions if that gets developed
-        return True, ""
+    def get_configurable_fields_with_data(self, permission_data=None):
+        """Returns form_dict with condition data set as value."""
+
+        form_dict = self.configurable_fields()
+        
+        for field_name, field_dict in form_dict.items():
+
+            if field_dict["type"] in ["PermissionRoleField", "PermissionActorField"]:
+                permission_field_value = permission_data.get(field_dict["field_name"], None)
+                field_dict["value"] = permission_field_value if permission_field_value else field_dict["value"]
+            else:
+                field_dict["value"] = getattr(self, field_name)
+        
+        return form_dict
 
     # Class methods with default implementation
 
@@ -80,7 +86,7 @@ class ConditionModel(PermissionedModel):
     @classmethod
     def get_form_dict_for_field(cls, field):
         return { 
-            'name': field.name, 
+            'field_name': field.name, 
             'type': field.__class__.__name__, 
             'required': "required" if field.blank else "", 
             'value': field.default 
@@ -216,11 +222,6 @@ class VoteCondition(ConditionModel):
         "vote_roles": Changes.Conditionals.AddVote,
         "vote_actors": Changes.Conditionals.AddVote
     }
-
-    def user_condition_status(self, user):
-        if self.has_voted(user):
-            return False, "has voted"
-        return True, "has not voted"
 
     def get_timeout(self):
         return self.voting_deadline()

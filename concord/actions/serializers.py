@@ -114,7 +114,8 @@ def serialize_template(template, dump_to_json=True):
     actions = []
     for action in template.action_list:
         actions.append(serialize_mock_action(action, dump_to_json=False))
-    obj_dict = {"actions": actions, "system": template.system }
+    obj_dict = {"actions": actions, "system": template.system, "description": template.description,
+        "configurable_fields": template.configurable_fields }
     return json.dumps(obj_dict) if dump_to_json else obj_dict
 
 
@@ -124,4 +125,5 @@ def deserialize_template(template_data):
     for action in template_data["actions"]:
         action_list.append(deserialize_mock_action(action))
     from concord.actions.customfields import Template
-    return Template(action_list=action_list, system=template_data["system"])
+    return Template(action_list=action_list, system=template_data["system"], 
+        description=template_data["description"], configurable_fields=template_data["configurable_fields"])

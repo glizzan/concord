@@ -91,6 +91,14 @@ class ConditionalClient(BaseClient):
                 return condition_items[0]
         return None
 
+    def get_condition_items_for_action(self, *, action_pk):
+        all_condition_items = []
+        for condition_class in self.get_possible_conditions():
+            condition_items = condition_class.objects.filter(action=action_pk)
+            if condition_items:
+                all_condition_items = all_condition_items + condition_items
+        return all_condition_items
+
     def get_condition_item_on_permission(self, *, action_pk: int, permission_pk: int):
         source_id = "perm_" + str(permission_pk)
         return self.get_condition_item_given_action_and_source(action_pk=action_pk, source_id=source_id)

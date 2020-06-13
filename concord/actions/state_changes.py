@@ -130,7 +130,7 @@ class BaseStateChange(object):
     def validate(self, actor, target):
         ...
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
         ...
 
     def get_change_data(self):
@@ -176,7 +176,7 @@ class ChangeOwnerStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
 
         # Given the content type and ID, instantiate owner
         ct = ContentType.objects.get_for_id(self.new_owner_content_type)
@@ -184,7 +184,10 @@ class ChangeOwnerStateChange(BaseStateChange):
         new_owner = model_class.objects.get(id=self.new_owner_id)
 
         target.owner = new_owner
-        target.save()
+
+        if save:
+            target.save()
+    
         return target
 
 
@@ -208,9 +211,13 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.foundational_permission_enabled = True
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -234,10 +241,15 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+        
         target.foundational_permission_enabled = False
-        target.save()
+
+        if save:
+            target.save()
+        
         return target
+
 
 class EnableGoverningPermissionStateChange(BaseStateChange):
     description = "Enable the governing permission"
@@ -259,9 +271,13 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+        
         target.governing_permission_enabled = True
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -285,9 +301,13 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.governing_permission_enabled = False
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -354,7 +374,7 @@ class ViewChangelessStateChange(BaseStateChange):
             ", ".join(missing_fields), target))
         return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
         """Gets data from specified fields, or from all fields, and returns as dictionary."""
         
         data_dict = {}
@@ -382,13 +402,12 @@ def foundational_changes():
         'concord.communities.state_changes.AddOwnerRoleStateChange',
         'concord.communities.state_changes.RemoveGovernorRoleStateChange',
         'concord.communities.state_changes.RemoveOwnerRoleStateChange',
+        'concord.communities.state_changes.AddLeadershipConditionStateChange',
+        'concord.communities.state_changes.RemoveLeadershipConditionStateChange',
         'concord.actions.state_changes.EnableFoundationalPermissionStateChange',
         'concord.actions.state_changes.DisableFoundationalPermissionStateChange',
         'concord.actions.state_changes.EnableGoverningPermissionStateChange',
-        'concord.actions.state_changes.DisableGoverningPermissionStateChange',
-        'concord.conditionals.state_changes.AddLeaderConditionStateChange',
-        'concord.conditionals.state_changes.RemoveLeaderConditionStateChange',
-        'concord.conditionals.state_changes.ChangeLeaderCondition'
+        'concord.actions.state_changes.DisableGoverningPermissionStateChange'
     ]
 
 
@@ -421,12 +440,12 @@ class Changes(object):
         RemoveRole = 'concord.communities.state_changes.RemoveRoleStateChange'
         AddPeopleToRole = 'concord.communities.state_changes.AddPeopleToRoleStateChange'
         RemovePeopleFromRole = 'concord.communities.state_changes.RemovePeopleFromRoleStateChange'
+        AddLeadershipCondition = 'concord.communities.state_changes.AddLeadershipConditionStateChange'
+        RemoveLeadershipCondition = 'concord.communities.state_changes.RemoveLeadershipConditionStateChange'
 
     class Conditionals(object):
 
-        AddCondition = 'concord.conditionals.state_changes.AddConditionStateChange'
-        RemoveCondition = 'concord.conditionals.state_changes.RemoveConditionStateChange'
-        ChangeCondition = 'concord.conditionals.state_changes.ChangeConditionStateChange'
+        AddConditionToAction = 'concord.conditionals.state_changes.SetConditionOnActionStateChange'
         AddVote = 'concord.conditionals.state_changes.AddVoteStateChange'
         Approve = 'concord.conditionals.state_changes.ApproveStateChange'
         Reject = 'concord.conditionals.state_changes.RejectStateChange'
@@ -440,7 +459,9 @@ class Changes(object):
         AddRoleToPermission = 'concord.permission_resources.state_changes.AddRoleToPermissionStateChange'        
         RemoveRoleFromPermission = 'concord.permission_resources.state_changes.RemoveRoleFromPermissionStateChange'        
         ChangePermissionConfiguration = 'concord.permission_resources.state_changes.ChangePermissionConfigurationStateChange'        
-        
+        AddConditionToPermission = 'concord.permission_resources.state_changes.AddPermissionConditionStateChange'
+        RemoveConditionFromPermission = 'concord.permission_resources.state_changes.RemovePermissionConditionStateChange'
+
     class Resources(object):
         
         ChangeResourceName = 'concord.resources.state_changes.ChangeResourceNameStateChange'        

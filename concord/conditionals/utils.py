@@ -1,7 +1,41 @@
-'''
-Creating human readable descriptions if often really verbose so I'm hiding away the really annoyingly complicated
-stuff here.
-'''
+
+
+def get_basic_condition_info(condition_object):
+    """Given a condition object, returns basic info about the object in dict form."""
+    return {
+        "type": condition_object.get_condition_type(), 
+        "display_name": condition_object.descriptive_name,
+        "how_to_pass": condition_object.description_for_passing_condition()
+    }
+
+
+def generate_condition_fields_for_form(condition_object, permissions_objects):
+    """Given a condition objects and permission objects set on that condition, returns field
+    data in dict form."""
+
+    permission_data = {}
+    for short_name, full_name in condition_object.permission_map.items():
+        for permission in permissions_objects:
+            if permission.change_type == full_name:
+                if "actors" in short_name:
+                    value = permission.actors.pk_list
+                if "roles" in short_name:
+                    value = permission.roles.role_list
+                permission_data.update({ short_name: value })
+
+    return condition_object.get_configurable_fields_with_data(permission_data)
+
+
+def generate_condition_form(condition_object, permissions_objects):
+    """Given a condition objects and permission objects set on that condition, returns a full
+    dict of basic info & fields."""
+
+    basic_info = get_basic_condition_info(condition_object)
+    basic_info.update({
+        "fields": generate_condition_fields_for_form(condition_object, permissions_objects)
+    })
+    return basic_info
+
 
 def description_for_passing_approval_condition(fill_dict=None):
 

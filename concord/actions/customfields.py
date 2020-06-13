@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, DatabaseError, transaction
 
 from concord.actions.serializers import (serialize_state_change, serialize_resolution, serialize_template,
     deserialize_state_change, deserialize_resolution, deserialize_template)
@@ -164,14 +164,25 @@ class Template(object):
     """Python object associated with the TemplateField CustomField. Contains action data which can be used
     to create an ActionContainer which will generate a set of related, configured objects."""
 
-    def __init__(self, action_list=None, system=False):
+    def __init__(self, action_list=None, configurable_fields=None, description=None, system=False):
         self.system = system
         self.action_list = action_list if action_list else []
+        self.configurable_fields = configurable_fields if configurable_fields else {}
+        self.description = description if description else ""
 
     def has_template(self):
         return True if len(self.action_list) > 0 else False
-        
-    # Container manipulation methods
+
+    def get_unsaved_objects(self):
+        """Runs each action in the action list without saving them to the database, and returns 
+        the results of each action in order."""
+        action_results = {}
+        for action in self.action_list:
+            result = action.change.implement(save=False)
+            action_results.update({ action.unique_id : result })
+        return action_results
+
+    # Action container methods
 
     def generate_action_container(self, trigger_action=None):
         from concord.actions.models import ActionContainer

@@ -1,12 +1,15 @@
 from concord.actions.state_changes import BaseStateChange
 from django.conf import settings
 from django.apps import apps
+from django.core.exceptions import ValidationError
 
-  
+from concord.actions import text_utils
+
 
 ###############################
 ### Community State Changes ###
 ###############################
+
 
 class ChangeNameStateChange(BaseStateChange):
     description = "Change name of community"
@@ -34,9 +37,13 @@ class ChangeNameStateChange(BaseStateChange):
         self.set_validation_error("You must provide provide a new name")
         return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.name = self.new_name
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -85,9 +92,13 @@ class AddMembersStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.roles.add_members(self.member_pk_list) 
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -124,13 +135,17 @@ class RemoveMembersStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         # Remove members from custom roles
         for role_name, role_members in target.roles.get_custom_roles().items():
             target.roles.remove_people_from_role(role_name, self.member_pk_list)
         # Now remove them from members      
         target.roles.remove_members(self.member_pk_list) 
-        target.save()
+
+        if save:
+            target.save()
+    
         return target
 
 
@@ -156,11 +171,13 @@ class AddGovernorStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
+    def implement(self, actor, target, save=True):
+        
         target.roles.add_governor(self.governor_pk) 
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -187,11 +204,13 @@ class RemoveGovernorStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
+    def implement(self, actor, target, save=True):
+
         target.roles.remove_governor(self.governor_pk)  
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -217,12 +236,13 @@ class AddGovernorRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
-        # NOTE: we assume the role added is ALWAYS in the target community
+    def implement(self, actor, target, save=True):
+        
         target.roles.add_governor_role(self.role_name)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -249,12 +269,13 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
-        # NOTE: we assume the role added is ALWAYS in the target community
+    def implement(self, actor, target, save=True):
+
         target.roles.remove_governor_role(self.role_name)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -280,11 +301,13 @@ class AddOwnerStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
+    def implement(self, actor, target, save=True):
+
         target.roles.add_owner(self.owner_pk)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -311,11 +334,13 @@ class RemoveOwnerStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
+    def implement(self, actor, target, save=True):
+
         target.roles.remove_owner(self.owner_pk)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -341,12 +366,13 @@ class AddOwnerRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # FIXME: if we forget to accidentally add this state change to our list of foundational
-        # changes we could have access issues
-        # NOTE: we assume the role added is ALWAYS in the target community
+    def implement(self, actor, target, save=True):
+
         target.roles.add_owner_role(self.role_name)
-        target.save()
+
+        if save:
+            target.save()
+    
         return target
 
 
@@ -373,10 +399,13 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target):
-        # NOTE: we assume the role added is ALWAYS in the target community
+    def implement(self, actor, target, save=True):
+
         target.roles.remove_owner_role(self.role_name)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -406,9 +435,13 @@ class AddRoleStateChange(BaseStateChange):
         # TODO: maybe enforce limits on length, letter content, etc, possibly referencing field validation?
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.roles.add_role(self.role_name)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -432,9 +465,13 @@ class RemoveRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.roles.remove_role(self.role_name)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -504,9 +541,13 @@ class AddPeopleToRoleStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+        
         target.roles.add_people_to_role(self.role_name, self.people_to_add)
-        target.save()
+        
+        if save:
+            target.save()
+        
         return target
 
 
@@ -531,7 +572,119 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)
-        target.save()
+        
+        if save:
+            target.save()
+        
+        return target
+
+
+class AddLeadershipConditionStateChange(BaseStateChange):
+    description = "Add leadership condition"
+
+    def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
+        self.condition_type = condition_type
+        self.condition_data = condition_data
+        self.permission_data = permission_data
+        self.leadership_type = leadership_type
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"add condition {self.condition_type} to {self.leadership_type}"   
+
+    def description_past_tense(self):
+        return f"added condition {self.condition_type} to {self.leadership_type}"  
+
+    def generate_mock_actions(self, actor, target):
+        """Helper method with template generation logic, since we're using it in both validate and implement."""
+
+        from concord.conditionals.client import ConditionalClient
+        from concord.permission_resources.client import PermissionResourceClient
+
+        cond_client = ConditionalClient(actor=actor)
+        cond_client.mode = "mock"
+        perm_client = PermissionResourceClient(actor=actor)   
+        perm_client.mode = "mock"
+
+        mock_action_list = []
+        action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
+            condition_data=self.condition_data, community_pk=target.pk, leadership_type=self.leadership_type)
+        action_1.add_command_to_dependent_fields(command="REPLACE target WITH trigger_action")
+        mock_action_list.append(action_1)
+
+        perm_client.target = action_1
+        for permission_item_data in self.permission_data:
+            next_action = perm_client.add_permission(**permission_item_data)
+            command= f"REPLACE target WITH previous_action {action_1.unique_id} result"
+            next_action.add_command_to_dependent_fields(command=command)
+            mock_action_list.append(next_action)
+        
+        return mock_action_list
+
+    def get_template_description(self, mock_action_list):
+        return text_utils.condition_template_to_text(mock_action_list[0], mock_action_list[1:])
+
+    def apply_actions_to_conditions(self, action_list, target):
+        if self.leadership_type == "owner":
+            target.owner_condition.action_list = action_list
+            target.owner_condition.description = self.get_template_description(action_list)
+        elif self.leadership_type == "governor":
+            target.governor_condition.action_list = action_list
+            target.governor_condition.description = self.get_template_description(action_list)
+        return target
+
+    def validate(self, actor, target):
+        try:
+            mock_action_list = self.generate_mock_actions(actor, target)    
+            return True
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
+            return False
+        
+    def implement(self, actor, target, save=True):
+
+        action_list = self.generate_mock_actions(actor, target)
+        target = self.apply_actions_to_conditions(action_list, target)
+        
+        if save:
+            target.save()
+
+        return target
+
+
+class RemoveLeadershipConditionStateChange(BaseStateChange):
+    description = "Remove leadership condition"
+
+    def __init__(self, *, leadership_type):
+        self.leadership_type = leadership_type
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"remove condition from community {self.community_pk}'s {self.leadership_type}"   
+
+    def description_past_tense(self):
+        return f"removed condition from community {self.community_pk}'s {self.leadership_type}"  
+
+    def validate(self, actor, target):
+        return True
+        
+    def implement(self, actor, target, save=True):
+
+        if self.leadership_type == "owner":
+            target.owner_condition.action_list = []
+        elif self.leadership_type == "governor":
+            target.governor_condition.action_list = []
+        
+        if save:
+            target.save()
+
         return target

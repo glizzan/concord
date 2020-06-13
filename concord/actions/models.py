@@ -7,7 +7,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model
+from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, ClientInterface, replace_fields
 from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
 
 
@@ -80,23 +80,6 @@ class Action(models.Model):
             description, target_preposition = self.change.description_present_tense(), self.change.get_preposition()
             return self.actor.username + " asked to " + description
 
-    def get_condition(self):
-        """Gets condition set on the action, if one exists."""
-        from concord.conditionals.client import PermissionConditionalClient
-        pcc = PermissionConditionalClient(system=True)
-        return pcc.get_condition_item_given_action(action_pk=self.pk)
-
-    def get_condition_link(self):
-        """Gets link to condition set on the action, if one exists.
-
-        Returns link to condition formatted as display if successful;
-        otherwise returns an empty string.
-        """
-        condition = self.get_condition()
-        if condition:
-            return f"<a href={condition.get_url()}>{condition.get_display_string()}</a>"
-        return ""
-
     # Steps of action execution
 
     def validate_action(self):
@@ -148,106 +131,113 @@ class ActionContainer(models.Model):
     """An `ActionContainer` is a tool for helping generate, process, and implement a set of actions
     as a cohesive group.  This is useful for user-facing templates as well as for system actions
     that are closely connected to each other and which users might see as a single action, for
-    example "adding a user with role X to group Y". This might seem like one action to a user but would actually 
-    be three: adding the role to the group, adding the user to the group, and adding the user to the role.
+    example "adding a user with role X to group Y". This might seem like one action to a user but would 
+    actually be three: adding the role to the group, adding the user to the group, and adding the user to 
+    the role.
 
-    The mock action list passed in when initializing (via initialize_action_info, not __init__) is generated
-    by switching the client mode to mock when making state change calls.  Instead of validating and attempting to
-    implement the action, the client simply constructs a Mock Action object (see actions/utils.py) with all the
-    relevant data.  This is not saved to the database - a mock action list not saved to a container will be lost.
+    ActionContainer is often called by TemplateField, which stores lists of Mock Actions to be instantiated
+    and run by ActionContainer.  Mock Actions can be created directly or by switching a client's mode to
+    Mock when making state_change calls.  Instead of creating a DB action and trying to implement it, the 
+    client will make a corresponding Mock action and return it to you.
 
-    Occasionally we get actions that are dependent on the result of a previous action.  In those cases, we
-    replace the missing field with {"action_container_placeholder": "action_x's_unique_id" }.  So our
-    process_actions method handles looking up the previously created object in action_results.  This is not to
-    be confused with action-sourced-fields, which is when a condition has fields which depend on or are sourced
-    from the action which triggers it.  That can happen with any kind of action, not just ones within containers,
-    and is handled within the condition model."""
+    Occasionally we want actions that are dependent on the result of a previous action. These are dependent fields
+    and are defined using a very specific syntax specified in concord.actions.utils's method replace_fields.
+    We call this helper method when getting an action from the DB in process_actions."""
 
     action_info = models.CharField(max_length=2000, null=True, blank=True)  # Probably should be a custom field
     summary_status = models.CharField(max_length=20, default="drafted")
     is_open = models.BooleanField(default=True)
+    is_system = models.BooleanField(default=False)
+    trigger_action = models.PositiveIntegerField(blank=True, null=True) 
 
     action_results = dict()
 
-    def initialize_action_info(self, action_list):
-        """Takes in a list of MockActions, which have typically just been checked using check_permissions_for_action_group.
-        Creates actions in the database, giving them draft status, and records their pks here."""
+    def load_action_info(self):
+        return json.loads(self.action_info)
 
-        action_info = dict()
-
-        for count, action in enumerate(action_list):
-
-            if not hasattr(action.target, "foundational_permission_enabled"):
-                target = None   # if target is fake don't use it
-            else:
-                target = action.target 
-
-            db_action = Action.objects.create(actor=action.actor, target=target, change=action.change,
-                container=self.pk)
-
-            action.generate_dependent_fields()
-
-            action_info.update({ count: { "pk": db_action.pk , "unique_id": action.unique_id,  
-                "dependent_fields": action.dependent_fields, "log": None, "status": {
-                "overall": "draft", "validated": None, "permissions_checked": None, "implemented": None,
-                "committed": None } }})
-
+    def save_action_info(self, action_info):
         self.action_info = json.dumps(action_info)
+
+    def get_trigger_action_from_db(self):
+        if self.trigger_action:
+            return Action.objects.get(pk=self.trigger_action)
+
+    def initialize(self, action_list, system=False, trigger_action=None):
+        """ActionContainers must be created before we can add actions to them, because actions need to know
+        their container's pk."""
+
+        self.is_system = system
+
+        if trigger_action:
+            self.trigger_action = trigger_action.pk
+
+        action_info = {}
+
+        for index, action in enumerate(action_list):
+
+            db_action = action.create_action_object(container_pk=self.pk)
+
+            action_info.update({ index: { "unique_id": action.unique_id, "pk": db_action.pk, "status": None, 
+                "dependent_fields": action.dependent_fields, "log": None }})
+
+        self.save_action_info(action_info)
         self.save()
 
-    def get_or_refresh_action(self, action_info_item):
-        """Helper method needed because I am deeply confused by how Python/Django are copying things."""
-        action = Action.objects.get(pk=action_info_item["pk"])
-        # Replace any missing fields with action results
-        for field_name, action_id in action_info_item["dependent_fields"].items():
-            setattr(action, field_name, self.action_results[action_id])
-        return action
-
+    def get_action_from_db(self, action_dict):
+        """Gets action from DB and replaces dependent fields."""
+        action = Action.objects.get(pk=action_dict["pk"])
+        trigger_action = self.get_trigger_action_from_db()
+        updated_action = replace_fields(action_to_change=action, commands=action_dict["dependent_fields"], 
+            trigger_action=trigger_action, previous_actions_and_results=self.action_results)
+        if self.is_system:
+            setattr(updated_action, "bypass_pipeline", True)
+        return updated_action
+        
     def process_actions(self):
         """Goes through actions in order and implements them, updating action_info with the results of various checks.  
-        (Almost?) always called from within a transaction.atomic() block, so may not actually be committed to DB."""
+        (Almost?) always called from within a transaction.atomic() block, so action implementations may not 
+        actually be committed to database."""
 
         from concord.actions.permissions import has_permission
 
-        action_info = json.loads(self.action_info)
+        action_info = self.load_action_info()
         ok_to_commit = True
 
-        for count in range(0, len(action_info)):
+        for index, action_dict in action_info.items():
 
-            count = str(count)
-
-            action = self.get_or_refresh_action(action_info_item=action_info[count])
+            action = self.get_action_from_db(action_dict=action_dict)
 
             # Check that the action is still valid
             is_valid = action.change.validate(actor=action.actor, target=action.target)  
             if not is_valid:
-                action_info[count]["status"]["validated"] = False
-                action_info[count]["log"] = action.change.validation_error.message
+                action_dict["status"] = "invalid"
+                action_dict["log"] = action.change.validation_error.message
                 ok_to_commit = False
                 continue
-            action_info[count]["validated"] = True 
-
-            action = self.get_or_refresh_action(action_info_item=action_info[count])  # UGH
+            action_dict["status"] = "valid" 
 
             # Check that the action passes permissions
             changed_action = has_permission(action=action)
             if changed_action.resolution.status != "approved":
-                action_info[count]["status"]["permissions_checked"] = False
-                action_info[count]["log"] = action.resolution.log
+                action_dict["status"] = "lacks permission"
+                action_dict["log"] = changed_action.resolution.log
                 ok_to_commit = False
                 continue
-            action_info[count]["status"]["permissions_checked"] = True
+            action_dict["status"] = "has permission"
 
             # Implement action 
             result = action.implement_action()
-            action_info[count]["status"]["implemented"] = True
+            action_dict["status"] = "implemented"
             action.save()
 
-            self.action_results.update({  action_info[count]["unique_id"] : result })   # add result in case later action needs it
-
+            # add result to list of results, in case a later action needs it
+            self.action_results.update({ action_dict["unique_id"] : { "action": action, "result": result }})
+            
         return action_info, ok_to_commit
 
     def commit_actions(self, test=True):
+
+        action_info = None
 
         try:
 
@@ -265,16 +255,17 @@ class ActionContainer(models.Model):
 
             self.summary_status = "okay to commit" if ok_to_commit else "not okay to commit"
 
-        self.action_info = json.dumps(action_info)
+        if action_info:
+            self.save_action_info(action_info)
         self.save()
+
+        return self.summary_status
 
     def get_actions(self):
         actions = []
-        action_info = json.loads(self.action_info)
-        for count in range(0, len(action_info)):
-            count = str(count)
-            action = Action.objects.get(pk=action_info[count]['pk'])
-            actions.append(action)
+        action_info = self.load_action_info()
+        for index, action_info in action_info.items():
+            actions.append(Action.objects.get(action_info['pk']))
         return actions
 
 

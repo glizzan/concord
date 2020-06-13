@@ -217,8 +217,8 @@ def community_basic_info_to_text(template_model, community=None):
 def conditions_to_text(conditions):
     """Takes a list of conditions (condition templates?) and turns them into text."""
 
-    from concord.conditionals.client import PermissionConditionalClient
-    pcc = PermissionConditionalClient(actor="system")
+    from concord.conditionals.client import ConditionalClient
+    pcc = ConditionalClient(actor="system")
 
     condition_strings = [ condition.condition_data.get_condition_description() for condition in conditions ]
 

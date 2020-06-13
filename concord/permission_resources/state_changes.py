@@ -1,8 +1,11 @@
 import json
 
+from django.core.exceptions import ValidationError
+
 from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources.utils import get_verb_given_permission_type
+from concord.actions import text_utils
 
 
 ################################
@@ -10,6 +13,7 @@ from concord.permission_resources.utils import get_verb_given_permission_type
 ################################
 
 class PermissionResourceBaseStateChange(BaseStateChange):
+    instantiated_fields = ['permission']
 
     def look_up_permission(self):
         return PermissionsItem.objects.get(pk=self.permission_pk)
@@ -69,16 +73,19 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         permission = PermissionsItem()
         permission.owner = target.get_owner() # FIXME: should it be the target owner though?
         permission.permitted_object = target
         permission.anyone = self.anyone
         permission.change_type = self.permission_type
         permission.inverse = self.inverse   
+        
         if self.permission_actors:  # FIXME: maybe don't need to check if empty here
             permission.actors.add_actors(actors=self.permission_actors)
         permission.roles.add_roles(role_list=self.permission_roles)
+        
         if self.permission_configuration:
             #FIXME: probably not the place to do this formatting :/
             configuration_dict = {}
@@ -86,7 +93,10 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
                 if value not in [None, [], ""]:
                     configuration_dict[key] = value
             permission.set_configuration(configuration_dict=configuration_dict)
-        permission.save()
+    
+        if save:
+            permission.save()
+    
         return permission
 
 
@@ -118,10 +128,11 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
         self.set_validation_error("Must supply item_pk")
         return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
         try:
             item = PermissionsItem.objects.get(pk=self.item_pk)
-            item.delete()
+            if save:
+                item.delete()
             return True
         except Exception as exception:
             print(exception)
@@ -164,10 +175,14 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+        
         self.instantiate_fields()
         self.permission.actors.add_actors(actors=[self.actor_to_add])
-        self.permission.save()
+
+        if save:
+            self.permission.save()
+    
         return self.permission
 
 
@@ -207,10 +222,14 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         self.instantiate_fields()
         self.permission.actors.remove_actors(actors=[self.actor_to_remove])
-        self.permission.save()
+        
+        if save:
+            self.permission.save()
+        
         return self.permission
 
 
@@ -249,10 +268,14 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         self.instantiate_fields()
         self.permission.add_role_to_permission(role=self.role_name)
-        self.permission.save()
+        
+        if save:
+            self.permission.save()
+        
         return self.permission
 
 
@@ -322,10 +345,14 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         self.instantiate_fields()
         self.permission.remove_role_from_permission(role=self.role_name)
-        self.permission.save()
+        
+        if save:
+            self.permission.save()
+        
         return self.permission
 
 
@@ -360,14 +387,18 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         self.instantiate_fields()
         configuration = self.permission.get_configuration()
         # FIXME: might there be problems with formatting of configurable field value? like, how is a 
         # list of role names formatted?
         configuration[self.configurable_field_name] = self.configurable_field_value
         self.permission.set_configuration(configuration)
-        self.permission.save()
+        
+        if save:
+            self.permission.save()
+        
         return self.permission
 
 
@@ -401,10 +432,14 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         self.instantiate_fields()
         self.permission.inverse = self.change_to
-        self.permission.save()
+        
+        if save:
+            self.permission.save()
+        
         return self.permission
 
 
@@ -430,10 +465,14 @@ class EnableAnyoneStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         permission = self.look_up_permission()
         permission.anyone = True
-        permission.save()
+        
+        if save:
+            permission.save()
+        
         return permission
 
 
@@ -459,10 +498,116 @@ class DisableAnyoneStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         permission = self.look_up_permission()
         permission.anyone = False
-        permission.save()
+        
+        if save:
+            permission.save()
+        
+        return permission
+
+
+class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
+    description = "Add condition"
+
+    def __init__(self, *, permission_pk, condition_type, condition_data, permission_data):
+        self.permission_pk = permission_pk
+        self.condition_type = condition_type
+        self.condition_data = condition_data
+        self.permission_data = permission_data if permission_data else []
+
+    @classmethod
+    def get_settable_classes(cls):
+        from concord.permission_resources.models import PermissionsItem
+        return [PermissionsItem]
+
+    def description_present_tense(self):
+        return f"add condition {self.condition_type} to permission"   
+
+    def description_past_tense(self):
+        return f"added condition {self.condition_type} to permission"  
+
+    def generate_mock_actions(self, actor, permission):
+        """Helper method with template generation logic, since we're using it in both validate and implement.
+        The actions below are stored within the template, and copied+instantiated when a separate action triggers 
+        the permission to do so."""
+
+        from concord.conditionals.client import ConditionalClient
+        from concord.permission_resources.client import PermissionResourceClient
+
+        cond_client = ConditionalClient(actor=actor)
+        cond_client.mode = "mock"
+        perm_client = PermissionResourceClient(actor=actor)   
+        perm_client.mode = "mock"
+
+        mock_action_list = []
+        action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
+            condition_data=self.condition_data, permission_pk=permission.pk)
+        action_1.add_command_to_dependent_fields(command="REPLACE target WITH trigger_action")
+        mock_action_list.append(action_1)
+
+        perm_client.target = action_1
+        for permission_item_data in self.permission_data:
+            next_action = perm_client.add_permission(**permission_item_data)
+            command = f"REPLACE target WITH previous_action {action_1.unique_id} result"
+            next_action.add_command_to_dependent_fields(command=command)
+            mock_action_list.append(next_action)
+        
+        return mock_action_list
+
+    def validate(self, actor, target):
+        permission = self.look_up_permission()
+        try:
+            mock_action_list = self.generate_mock_actions(actor, permission)    
+            return True
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
+            return False
+        
+    def implement(self, actor, target, save=True):
+
+        permission = self.look_up_permission() 
+        
+        permission.condition.action_list = self.generate_mock_actions(actor, permission)
+        condition_action, permissions_actions = permission.condition.action_list[0], permission.condition.action_list[1:]
+        permission.condition.description = text_utils.condition_template_to_text(condition_action, permissions_actions)
+        
+        if save:
+            permission.save()
+
+        return permission
+
+
+class RemovePermissionConditionStateChange(PermissionResourceBaseStateChange):
+    description = "Remove leadership condition"
+
+    def __init__(self, *, permission_pk: int):
+        self.permission_pk = permission_pk
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"remove condition from permission"   
+
+    def description_past_tense(self):
+        return f"removed condition from permission"  
+
+    def validate(self, actor, target):
+        return True
+        
+    def implement(self, actor, target, save=True):
+
+        permission = self.look_up_permission()
+
+        permission.condition.action_list = []
+        
+        if save:
+            permission.save()
+
         return permission
 
 
@@ -502,6 +647,11 @@ class EditTemplateStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, save=True):
+
         target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
-        target.save()
+        
+        if save:
+            target.save()
+
+        return target

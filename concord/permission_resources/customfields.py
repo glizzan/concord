@@ -373,10 +373,9 @@ class TemplateData(object):
         related to the community and any owned objects also passed in."""
 
         from concord.permission_resources.client import PermissionResourceClient
-        from concord.conditionals.client import CommunityConditionalClient, PermissionConditionalClient
+        from concord.communities.client import CommunityClient
         permissionClient = PermissionResourceClient(actor="system")
-        commConditionalClient = CommunityConditionalClient(actor="system")
-        permConditionalClient = PermissionConditionalClient(actor="system")
+        communityClient = CommunityClient(actor="system")
 
         objects_to_check = [self.get_community()] + self.get_owned_objects()
 
@@ -391,12 +390,14 @@ class TemplateData(object):
                 self.permissions.update({ id_count : permission })
                 objects_to_check.append(permission)
 
+            # TODO: started fixing this, remembered templates is out of date anyway, so... um. yeah.
+
             condition_templates = []
             # Check for conditionals set on it
             if current_object.__class__.__name__ == "Community":
                 commConditionalClient.set_target(target=current_object)
-                govConditionTemplate = commConditionalClient.get_condition_template_for_governor()
-                ownerConditionTemplate = commConditionalClient.get_condition_template_for_owner()
+                govConditionTemplate = communityClient.get_condition_template_for_governor()
+                ownerConditionTemplate = communityClient.get_condition_template_for_owner()
                 condition_templates.append(govConditionTemplate, ownerConditionTemplate)
             elif current_object.__class__.__name__ == "PermissionsItem":
                 permConditionalClient.set_target(target=current_object)

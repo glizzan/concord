@@ -5,7 +5,7 @@ from django import forms
 
 from concord.permission_resources.forms import PermissionFormMixin
 from concord.permission_resources.client import PermissionResourceClient
-from concord.conditionals.client import PermissionConditionalClient
+from concord.conditionals.client import ConditionalClient
 from concord.conditionals.models import ApprovalCondition, VoteCondition
 
 
@@ -19,7 +19,7 @@ class ConditionSelectionForm(forms.Form):
         self.request = kwargs.pop('request')
         super().__init__(*args, **kwargs)
 
-        conditionalClient = PermissionConditionalClient(actor=self.request.user)
+        conditionalClient = ConditionalClient(actor=self.request.user)
         CONDITION_CHOICES = []
         for condition in conditionalClient.get_possible_conditions():
             CONDITION_CHOICES.append((condition.get_slug(),condition.descriptive_name))
@@ -90,7 +90,7 @@ class BaseConditionForm(PermissionFormMixin, forms.Form):
         return prClient.get_settable_permissions(return_format="permission_objects")
 
     def save(self):
-        conditionalClient = PermissionConditionalClient(actor=self.request.user, target=self.target_permission)
+        conditionalClient = ConditionalClient(actor=self.request.user, target=self.target_permission)
         if hasattr(self, 'condition_data_dict'):  # Indicates we're updating, not adding, a condition
             # You can only update condition data and permission data
             # FIXME: ownership stuff needs refactoring

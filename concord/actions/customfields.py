@@ -1,6 +1,7 @@
-import json
+from django.db import models, DatabaseError, transaction
 
-from django.db import models
+from concord.actions.serializers import (serialize_state_change, serialize_resolution, serialize_template,
+    deserialize_state_change, deserialize_resolution, deserialize_template)
 
 
 #################################
@@ -46,8 +47,8 @@ class Resolution:
 
     def check_resolved_through(self):
         if self.is_resolved and self.is_approved:
-            if self.resolved_through not in ["foundational", "governing", "specific"]:
-                raise ValueError("resolved_through was ", resolved_through, "; must be 'foundational', 'governing', or 'specific'")
+            if self.resolved_through not in ["foundational", "governing", "specific", "system"]:
+                raise ValueError("resolved_through was ", self.resolved_through, "; must be 'foundational', 'governing', or 'specific'")
 
     def check_passed_as(self):
         if self.is_resolved and self.is_approved:
@@ -85,13 +86,6 @@ class Resolution:
             self.log += "  " + message
 
 
-def parse_resolution(resolution_string):
-    resolution_dict = json.loads(resolution_string)
-    return Resolution(status=resolution_dict['status'], resolved_through=resolution_dict['resolved_through'], 
-        role=resolution_dict['role'], condition=resolution_dict['condition'], 
-        provisional=resolution_dict['provisional'], log=resolution_dict['log'])
-
-
 class ResolutionField(models.Field):
 
     def __init__(self, *args, **kwargs):
@@ -107,49 +101,24 @@ class ResolutionField(models.Field):
     def from_db_value(self, value, expression, connection):
         if value is None:
             return Resolution(status="draft")
-        return parse_resolution(value)
+        return deserialize_resolution(value)
 
     def to_python(self, value):
         if isinstance(value, Resolution):
             return value
         if value is None:
             return Resolution(status="draft")
-        return parse_resolution(value)
+        return deserialize_resolution(value)
 
     def get_prep_value(self, value):
-        # if value == "draft_%_None_%_None_%_None_%_None":   REPLACE with new json version of draft
-        #     return value
         if value is None:
             value = Resolution(status=draft)
-        return json.dumps({
-            "status": value.status,
-            "resolved_through": value.resolved_through,
-            "role": value.role,
-            "condition": value.condition,
-            "provisional": value.provisional,
-            "log": value.log
-        })
+        return serialize_resolution(value)
 
 
 #############################
 ### Change Object & Field ###
 #############################
-
-
-def create_change_object(change_type, change_data):
-    """
-    Finds change object using change_type and instantiates with change_data.
-    """
-    from django.utils.module_loading import import_string
-    changeClass = import_string(change_type)
-    if type(change_data) != dict:
-        change_data = json.loads(change_data)
-    return changeClass(**change_data)
-
-
-def parse_state_change(state_change_string):
-    state_change_dict = json.loads(state_change_string)
-    return create_change_object(state_change_dict["change_type"], state_change_dict["change_data"])
 
 
 class StateChangeField(models.Field):
@@ -165,25 +134,162 @@ class StateChangeField(models.Field):
         return 'varchar'
 
     def from_db_value(self, value, expression, connection):
-        return parse_state_change(value)
+        return deserialize_state_change(value)
 
     def to_python(self, value):
 
         from action.state_changes import BaseStateChange
-        if issubclass(change_class, BaseStateChange):
+        if issubclass(change_class, BaseStateChange):   # BUG: where is change_class coming from????
             return value
-
-        return parse_state_change(value)
+        return deserialize_state_change(value)
 
     def get_prep_value(self, value):
 
         # If actually given a state change, prep:
         from concord.actions.state_changes import BaseStateChange
         if issubclass(value.__class__, BaseStateChange):
-            return json.dumps({
-                "change_type": value.get_change_type(),
-                "change_data": value.get_change_data() })
+            return serialize_state_change(value)
 
         # If already prepped for some reason, return as is:
         if type(value) == dict and "change_type" in value.keys() and "change_data" in value.keys():
             return value
+
+
+###############################
+### Template Object & Field ###
+###############################
+
+
+class Template(object):
+    """Python object associated with the TemplateField CustomField. Contains action data which can be used
+    to create an ActionContainer which will generate a set of related, configured objects."""
+
+    def __init__(self, action_list=None, configurable_fields=None, description=None, system=False):
+        self.system = system
+        self.action_list = action_list if action_list else []
+        self.configurable_fields = configurable_fields if configurable_fields else {}
+        self.description = description if description else ""
+
+    def has_template(self):
+        return True if len(self.action_list) > 0 else False
+
+    def get_unsaved_objects(self):
+        """Runs each action in the action list without saving them to the database, and returns 
+        the results of each action in order."""
+        action_results = {}
+        for action in self.action_list:
+            result = action.change.implement(save=False)
+            action_results.update({ action.unique_id : result })
+        return action_results
+
+    # Action container methods
+
+    def generate_action_container(self, trigger_action=None):
+        from concord.actions.models import ActionContainer
+        container = ActionContainer.objects.create()
+        container.initialize(action_list=self.action_list, trigger_action=trigger_action, system=self.system)
+        return container
+
+    def generate_action_container_if_permitted(self, trigger_action=None):
+        has_permission = self.check_permissions()
+        if has_permission:
+            container = self.generate_action_container(trigger_action)
+            return True, container
+        return False, None
+
+    def generate_and_run_action_container_if_permitted(self, trigger_action=None):
+        """Attempts to generate a container from the template, if permitted, and run said actions.
+        Returns three values - a boolean indicating if a container was created, the container itself (if created),
+        and the result of the run, if run."""
+        container_created, container = self.generate_action_container_if_permitted(trigger_action)
+        if container_created:
+            result = container.commit_actions(test=False)
+            return True, container, result
+        return False, None, None
+
+    def check_permissions(self):
+        """
+        Ideally, there'd be a method to check whether a user can run all the actions without, you know, actually
+        doing it.  But given the existence of conditions, and even more dependent fields, I'm not sure how to check
+        here. Maybe just check for "not straight reject"?  Like, no_auto_reject?  Probably need to wrap in an
+        atomic commit as well if using ActionContainer.      
+        """
+        # FIXME: need to figure out how to implement this
+        return True
+
+    # Simple edit methods
+
+    def add_action(self, action, position=None):
+        if position:
+            if position > len(self.action_list) - 1:
+                raise IndexError(f"Position {position} given when action list is length { len(self.action_list) }")
+            self.action_list.insert(action, position)
+        else:
+            self.action_list.append(action)
+
+    def delete_action(self, action=None, position=None, last=False):
+        if position:
+            if position > len(self.action_list) - 1:
+                raise IndexError(f"Position {position} given when action list is length { len(self.action_list) }")
+            self.action_list.pop(position)
+        elif last:
+            self.action_list.pop(len(self.action_list) - 1)
+        elif action:
+            self.action_list.remove(action)
+        if not action and not position and not last:
+            raise ValueError("Must provide action or position or last = True to delete_action.")
+
+    # Description methods
+
+    def automated_description(self):
+        ...
+
+
+class TemplateField(models.Field):
+
+    def __init__(self, system=False, *args, **kwargs):
+        self.system = system
+        super().__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        # only include kwargs if it's not the default
+        if self.system:
+            kwargs['system'] = self.system
+        return name, path, args, kwargs
+
+    def db_type(self, connection):
+        return 'varchar'
+
+    def from_db_value(self, value, expression, connection):
+
+        if value is None:
+            return Template(system=self.system)  
+
+        return deserialize_template(value)
+
+    def to_python(self, value):
+
+        if value is None:
+            return Template(system=self.system)
+
+        if issubclass(value.__class__, Template):
+            return value
+
+        if type(value) == list and all([item.__class__ == MockAction for item in value]):
+            return Template(action_list=value, system=self.system)
+
+        return deserialize_template(value)
+
+    def get_prep_value(self, value):
+
+        if issubclass(value.__class__, Template):
+            if self.system and not value.system:
+                # This is a system field (likely a condition) that for some reason got initialized without this setting
+                value.system = True
+            return serialize_template(value)
+
+        if type(value) == list and all([item.__class__ == MockAction for item in value]):
+            return serialize_template(Template(action_list=value, system=self.system))
+
+        # If already prepped for some reason, return as is???

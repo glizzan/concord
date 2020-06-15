@@ -89,8 +89,12 @@ class PermissionsItem(PermissionedModel):
 
         from concord.conditionals.utils import generate_condition_form, generate_condition_fields_for_form, get_basic_condition_info
 
+        from concord.actions.utils import MockAction
+        fake_trigger_action = MockAction(actor=None, change=None, target=None)
+        fake_trigger_action.pk = "trigger_action_pk"
+
         if self.has_condition:
-            objects = self.condition.get_unsaved_objects()
+            objects = self.condition.get_unsaved_objects(fake_trigger_action=fake_trigger_action)
             condition = objects.pop(0)
 
             if info == "all":

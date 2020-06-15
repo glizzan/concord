@@ -1,4 +1,5 @@
 from django.db import models, DatabaseError, transaction
+from concord.actions.utils import MockAction, replace_fields
 
 from concord.actions.serializers import (serialize_state_change, serialize_resolution, serialize_template,
     deserialize_state_change, deserialize_resolution, deserialize_template)
@@ -173,14 +174,27 @@ class Template(object):
     def has_template(self):
         return True if len(self.action_list) > 0 else False
 
-    def get_unsaved_objects(self):
+    def get_unsaved_objects(self, fake_trigger_action=None):
         """Runs each action in the action list without saving them to the database, and returns 
-        the results of each action in order."""
+        the results of each action in order.
+
+        # FIXME: this is VERY hacky. I'm still not satisfied with the template system.  For now, though,
+        the issue is that sometimes the trigger_action is used in the implement() method so we need
+        a reasonable fascimile to successfully create our unsaved objects.  Our default fake trigger
+        action cannot stand up to much scrutiny, so we allow the caller to provide a better fake_trigger_action
+        that suits its needs.  For example, when get_condition_data calls fake_trigger_action, it provides
+        a mock with a pk, because it knows that add_condition's implement looks for the trigger_action's pk.      
+        """
         action_results = {}
+        if not fake_trigger_action:
+            fake_trigger_action = MockAction(change=None, actor=None, target=None)
         for action in self.action_list:
-            result = action.change.implement(save=False)
-            action_results.update({ action.unique_id : result })
-        return action_results
+            action = replace_fields(action_to_change=action, commands=action.dependent_fields, 
+                previous_actions_and_results=action_results, trigger_action=fake_trigger_action)
+            result = action.change.implement(actor=action.actor, target=action.target, save=False)
+            action_results.update({ action.unique_id : { "action": action, "result": result} })
+                
+        return [ item["result"] for key, item in action_results.items() ]
 
     # Action container methods
 

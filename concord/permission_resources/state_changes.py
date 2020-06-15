@@ -12,11 +12,17 @@ from concord.actions import text_utils
 ### Permission State Changes ###
 ################################
 
+
 class PermissionResourceBaseStateChange(BaseStateChange):
     instantiated_fields = ['permission']
 
     def look_up_permission(self):
+        if hasattr(self, "permission") and self.permission.pk == self.permission_pk:
+            return self.permission
         return PermissionsItem.objects.get(pk=self.permission_pk)
+
+    def instantiate_fields(self):
+        self.permission = self.look_up_permission()
 
 
 class AddPermissionStateChange(PermissionResourceBaseStateChange):
@@ -149,9 +155,6 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         self.actor_to_add = actor_to_add
         self.permission_pk = permission_pk
 
-    def instantiate_fields(self):
-        self.permission = self.look_up_permission()
-
     @classmethod
     def get_settable_classes(cls):
         return [PermissionsItem]
@@ -197,9 +200,6 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         self.permission_pk = permission_pk
         self.permission = self.look_up_permission()
 
-    def instantiate_fields(self):
-        self.permission = self.look_up_permission()
-
     @classmethod
     def get_settable_classes(cls):
         return [PermissionsItem]
@@ -242,9 +242,6 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
     def __init__(self, *, role_name: str, permission_pk: int):
         self.role_name = role_name
         self.permission_pk = permission_pk
-
-    def instantiate_fields(self):
-        self.permission = self.look_up_permission()
 
     @classmethod
     def get_settable_classes(cls):
@@ -289,9 +286,6 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         self.role_name = role_name
         self.permission_pk = permission_pk
 
-    def instantiate_fields(self):
-        self.permission = self.look_up_permission()
-
     @classmethod
     def get_settable_classes(cls):
         return [PermissionsItem]   
@@ -306,7 +300,7 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         """Takes in an arbitrary number of configuration kwargs and uses them to 
         create a description.  Does not reference fields passed on init."""
         role_name = configuration_kwargs.get("role_name", " ")
-        return "remove role%sfrom permission" % (role_name)
+        return "remove role %s from permission" % (role_name)
 
     def description_present_tense(self):
         if hasattr(self, "permission"):
@@ -368,20 +362,17 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         self.configurable_field_value = configurable_field_value
         self.permission_pk = permission_pk
 
-    def instantiate_fields(self):
-        self.permission = self.look_up_permission()
-
     @classmethod
     def get_settable_classes(cls):
         return [PermissionsItem]   
 
     def description_present_tense(self):
-        return "change configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
-            self.configurable_field_value, self.permission_pk, self.permission.get_change_type())
+        return "change configuration field %s to value %s on permission %d" % (self.configurable_field_name,
+            self.configurable_field_value, self.permission_pk)
     
     def description_past_tense(self):
-        return "changed configuration field %s to value %s on permission %d (%s)" % (self.configurable_field_name,
-            self.configurable_field_value, self.permission_pk, self.permission.get_change_type())
+        return "changed configuration field %s to value %s on permission %d" % (self.configurable_field_name,
+            self.configurable_field_value, self.permission_pk)
 
     def validate(self, actor, target):
         # put real logic here
@@ -412,9 +403,6 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
     def __init__(self, *, change_to: bool, permission_pk: int):
         self.change_to = change_to
         self.permission_pk = permission_pk
-    
-    def instantiate_fields(self):
-        self.permission = self.look_up_permission()
 
     @classmethod
     def get_settable_classes(cls):
@@ -558,6 +546,16 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
         return mock_action_list
 
     def validate(self, actor, target):
+
+        try:
+            int(self.permission_pk)
+        except:
+            self.set_validation_error(message=f"permission_pk must be a value that can be an int, not {self.permission_pk}")
+            return False
+
+        if not self.condition_type:
+            self.set_validation_error(message=f"condition_type cannont be None")
+
         permission = self.look_up_permission()
         try:
             mock_action_list = self.generate_mock_actions(actor, permission)    

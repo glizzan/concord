@@ -67,6 +67,14 @@ class ConditionModel(PermissionedModel):
         
         return form_dict
 
+    def user_condition_status(self, user):
+        """User condition status is a shortcut which helps us determine if a user can take an action on a condition
+        without actually creating an action. This is useful in determining what to show the user on the front-end.
+        We assume that by the time user_condition_status is called the user has passed the permissions system, and so
+        this status is to check instance-specific issues, like preventing a person who has already voted from voting
+        again."""
+        return True, ""
+
     # Class methods with default implementation
 
     @classmethod
@@ -89,16 +97,8 @@ class ConditionModel(PermissionedModel):
             'field_name': field.name, 
             'type': field.__class__.__name__, 
             'required': "required" if field.blank else "", 
-            'value': field.default 
+            'value': field.default
         }
-
-    @classmethod
-    def permission_field_map(cls, field_name):
-        '''All conditions have at least one permission type that's used to update the permission (for instance,
-        'approve' for ApprovalCondition, 'vote' for VoteCondition, etc).  The permission field map maps a short
-        field_name like 'approve_roles' to the role field on the verbose concord.conditionals.statechange.ApprovalStatechange,
-        which is defined in a condition model's permission_map attribute.'''
-        return cls.permission_map[field_name], field_name.split("_")[1]
 
     # Methods models must implement themselves
 
@@ -143,13 +143,6 @@ class ApprovalCondition(ConditionModel):
     approved = models.BooleanField(null=True, blank=True)  # Null by default
     self_approval_allowed = models.BooleanField(default=False)
 
-    permission_map = { 
-        "approve_roles": Changes.Conditionals.Approve,
-        "approve_actors": Changes.Conditionals.Approve,
-        "reject_roles": Changes.Conditionals.Reject,
-        "reject_actors": Changes.Conditionals.Reject
-    }
-
     def approve(self):
         self.approved = True
     
@@ -164,13 +157,13 @@ class ApprovalCondition(ConditionModel):
             "self_approval_allowed": { "display": "Can individuals approve their own actions?",
                 **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))},
             "approve_roles" : { "display": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
-                "value": None, "field_name": "approve_roles" },
+                "value": None, "field_name": "approve_roles", "full_name": Changes.Conditionals.Approve },
             "approve_actors" : { "display": "People who can approve", "type": "PermissionActorField", "required": False, 
-                "value": None, "field_name": "approve_actors" },
+                "value": None, "field_name": "approve_actors", "full_name": Changes.Conditionals.Approve },
             "reject_roles" : { "display": "Roles who can reject", "type": "PermissionRoleField", "required": False, 
-                "value": None, "field_name": "reject_roles" },
+                "value": None, "field_name": "reject_roles", "full_name": Changes.Conditionals.Reject },
             "reject_actors": { "display": "People who can reject", "type": "PermissionActorField", "required": False, 
-                "value": None, "field_name": "reject_actors" }
+                "value": None, "field_name": "reject_actors", "full_name": Changes.Conditionals.Reject }
         }
 
     def display_fields(self):
@@ -218,10 +211,10 @@ class VoteCondition(ConditionModel):
     voting_starts = models.DateTimeField(default=timezone.now)
     voting_period = models.IntegerField(default=168)
 
-    permission_map = {
-        "vote_roles": Changes.Conditionals.AddVote,
-        "vote_actors": Changes.Conditionals.AddVote
-    }
+    def user_condition_status(self, user):
+        if self.has_voted(user):
+            return False, "has voted"
+        return True, "has not voted"
 
     def get_timeout(self):
         return self.voting_deadline()
@@ -311,9 +304,9 @@ class VoteCondition(ConditionModel):
             "voting_period":  { "display": "How long should the vote go on, in hours?",
                 **cls.get_form_dict_for_field(cls._meta.get_field("voting_period")) },
             "vote_roles" : { "display": "Roles who can vote", "type": "PermissionRoleField", 
-                "required": False, "value": None, "field_name": "vote_roles" },
+                "required": False, "value": None, "field_name": "vote_roles", "full_name": Changes.Conditionals.AddVote },
             "vote_actors": { "display": "People who can vote", "type": "PermissionActorField", 
-                "required": False, "value": None, "field_name": "vote_actors" },
+                "required": False, "value": None, "field_name": "vote_actors", "full_name": Changes.Conditionals.AddVote },
         }
 
     def display_fields(self):        

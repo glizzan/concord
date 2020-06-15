@@ -134,7 +134,7 @@ class PermissionResourceClient(BaseClient):
     def add_permission(self, *, permission_type: str, permission_actors: list = None, 
             permission_roles: list = None, permission_configuration: dict = None, anyone=False) -> Tuple[int, Any]:
         if not permission_actors and not permission_roles and anyone is not True:
-            raise Exception("Either actor or role_pair must be supplied when creating a permission")  
+            raise Exception("Either actor or roles must be supplied when creating a permission")  
         change = sc.AddPermissionStateChange(permission_type=permission_type, 
             permission_actors=permission_actors, permission_roles=permission_roles,
             permission_configuration=permission_configuration, anyone=anyone)
@@ -162,6 +162,9 @@ class PermissionResourceClient(BaseClient):
 
     def change_configuration_of_permission(self, *, configurable_field_name: str, 
         configurable_field_value: str, permission_pk: int) -> Tuple[int, Any]:
+        # FIXME: we should be able to change multiple fields at once, and then we can remove
+        # update_configuration - there should be a configurable_fields here so you can limit the 
+        # permission to one field
         change = sc.ChangePermissionConfigurationStateChange(configurable_field_name=configurable_field_name,
             configurable_field_value=configurable_field_value, permission_pk=permission_pk)
         return self.create_and_take_action(change)

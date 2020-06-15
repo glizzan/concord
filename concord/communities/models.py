@@ -60,14 +60,17 @@ class BaseCommunityModel(PermissionedModel):
         with configured data. Assumes that the template creates a condition object followed by
         zero or more permission objects."""
 
+        from concord.actions.utils import MockAction
+        fake_trigger_action = MockAction(actor=None, change=None, target=None)
+        fake_trigger_action.pk = "trigger_action_pk"
+
         if leadership_type == "owner" and self.has_owner_condition():
-            objects = self.owner_condition.get_unsaved_objects()
+            objects = self.owner_condition.get_unsaved_objects(fake_trigger_action=fake_trigger_action)
         elif leadership_type == "governor" and self.has_governor_condition():
-            objects = self.governor_condition.get_unsaved_objects()
+            objects = self.governor_condition.get_unsaved_objects(fake_trigger_action=fake_trigger_action)
         else:
             return
 
-        objects = self.condition.get_unsaved_objects()
         condition = objects.pop(0)
 
         from concord.conditionals.utils import generate_condition_form, generate_condition_fields_for_form, get_basic_condition_info

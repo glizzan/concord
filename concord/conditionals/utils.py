@@ -3,7 +3,7 @@
 def get_basic_condition_info(condition_object):
     """Given a condition object, returns basic info about the object in dict form."""
     return {
-        "type": condition_object.get_condition_type(), 
+        "type": condition_object.__class__.__name__, 
         "display_name": condition_object.descriptive_name,
         "how_to_pass": condition_object.description_for_passing_condition()
     }
@@ -14,14 +14,13 @@ def generate_condition_fields_for_form(condition_object, permissions_objects):
     data in dict form."""
 
     permission_data = {}
-    for short_name, full_name in condition_object.permission_map.items():
+    for short_name, field_dict in condition_object.configurable_fields().items():
         for permission in permissions_objects:
-            if permission.change_type == full_name:
-                if "actors" in short_name:
-                    value = permission.actors.pk_list
-                if "roles" in short_name:
-                    value = permission.roles.role_list
-                permission_data.update({ short_name: value })
+            if "full_name" in field_dict and permission.change_type == field_dict["full_name"]:
+                if field_dict["type"] == "PermissionRoleField":
+                    permission_data.update({ field_dict["field_name"] : permission.roles.role_list })
+                elif field_dict["type"] == "PermissionActorField":
+                    permission_data.update({ field_dict["field_name"] : permission.actors.pk_list })
 
     return condition_object.get_configurable_fields_with_data(permission_data)
 

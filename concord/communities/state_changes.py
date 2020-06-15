@@ -510,7 +510,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     def check_configuration_is_valid(cls, configuration):
         """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
         By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "role_name" in configuration:
+        if "role_name" in configuration and configuration["role_name"] != None:
             if type(configuration["role_name"]) != str:
                 return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
         return True, ""
@@ -640,6 +640,13 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         return target
 
     def validate(self, actor, target):
+
+        if not self.condition_type:
+            self.set_validation_error(message=f"condition_type cannont be None")
+
+        if not self.leadership_type:
+            self.set_validation_error(message=f"leadership_type cannot be None")
+
         try:
             mock_action_list = self.generate_mock_actions(actor, target)    
             return True
@@ -669,10 +676,10 @@ class RemoveLeadershipConditionStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return f"remove condition from community {self.community_pk}'s {self.leadership_type}"   
+        return f"remove {self.leadership_type} condition"   
 
     def description_past_tense(self):
-        return f"removed condition from community {self.community_pk}'s {self.leadership_type}"  
+        return f"removed {self.leadership_type} condition"    
 
     def validate(self, actor, target):
         return True

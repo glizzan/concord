@@ -265,7 +265,7 @@ class ActionContainer(models.Model):
         actions = []
         action_info = self.load_action_info()
         for index, action_info in action_info.items():
-            actions.append(Action.objects.get(action_info['pk']))
+            actions.append(Action.objects.get(pk=action_info['pk']))
         return actions
 
 

@@ -96,7 +96,7 @@ class ConditionalClient(BaseClient):
         for condition_class in self.get_possible_conditions():
             condition_items = condition_class.objects.filter(action=action_pk)
             if condition_items:
-                all_condition_items = all_condition_items + condition_items
+                all_condition_items = all_condition_items + list(condition_items)
         return all_condition_items
 
     def get_condition_item_on_permission(self, *, action_pk: int, permission_pk: int):

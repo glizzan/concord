@@ -43,6 +43,13 @@ class BaseClient(object):
         if not self.target:
             raise BaseException("Target is required")
 
+    def change_is_valid(self, change):
+        # FIXME: we don't call this from anywhere, but we should probably validate the change before creating the
+        # action, not after
+        if change.validate(self.actor, self.target):
+            return True
+        return False
+
     def optionally_overwrite_target(self, target):
         self.target = target if target else self.target
         self.validate_target()
@@ -68,6 +75,7 @@ class BaseClient(object):
 
             action = Action.objects.create(actor=self.actor, target=self.target, 
                     change=change)
+
             return action.take_action()
 
     # Permissioned Reading

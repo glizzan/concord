@@ -21,7 +21,6 @@ class Migration(migrations.Migration):
                 ('owner_object_id', models.PositiveIntegerField(blank=True, null=True)),
                 ('foundational_permission_enabled', models.BooleanField(default=False)),
                 ('governing_permission_enabled', models.BooleanField(default=True)),
-                ('data', concord.permission_resources.customfields.TemplateDataField(default=concord.permission_resources.customfields.TemplateData, null=True)),
                 ('description', models.CharField(max_length=500)),
                 ('owner_content_type', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='permission_resources_template_owned_objects', to='contenttypes.ContentType')),
             ],

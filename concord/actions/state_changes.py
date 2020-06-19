@@ -95,7 +95,7 @@ class BaseStateChange(object):
         from concord.permission_resources import permission_models
         from concord.resources import resource_models
 
-        targets = [community_models.Community, community_models.DefaultCommunity, conditional_models.ConditionTemplate,
+        targets = [community_models.Community, community_models.DefaultCommunity,
         conditional_models.VoteCondition, conditional_models.ApprovalCondition, permission_models.PermissionsItem, 
         permission_models.Template, resource_models.Resource, resource_models.Item]
 

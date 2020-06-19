@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
 from concord.resources.client import ResourceClient, CommentClient
-from concord.permission_resources.client import PermissionResourceClient, TemplateClient
+from concord.permission_resources.client import PermissionResourceClient
 from concord.conditionals.client import (ApprovalConditionClient, VoteConditionClient, 
     ConditionalClient)
 from concord.communities.client import CommunityClient
@@ -23,9 +23,8 @@ from concord.permission_resources.forms import PermissionForm, MetaPermissionFor
 from concord.conditionals.forms import ConditionSelectionForm, conditionFormDict
 from concord.actions.models import Action  # NOTE: For testing action status later, do we want a client?
 from concord.actions.state_changes import Changes
-from concord.permission_resources import templates
-from concord.permission_resources.models import PermissionsItem, Template
-from concord.conditionals.models import ApprovalCondition, ConditionTemplate
+from concord.permission_resources.models import PermissionsItem
+from concord.conditionals.models import ApprovalCondition
 from concord.resources.models import Resource, Item
 
 
@@ -3505,7 +3504,7 @@ class TemplateTest(DataTestCase):
         # Create simple community, generate template, and then generate new set of instances
         self.set_up_simple_community()
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         self.templateClient.set_target(target=template_model)
@@ -3523,7 +3522,7 @@ class TemplateTest(DataTestCase):
         # Create complex community, generate template, and then generate new set of instances
         self.set_up_complex_community()
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         owned_objects = list(Resource.objects.all()) + list(Item.objects.all())
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, owned_objects=owned_objects, description="Complex Community Template")
@@ -3573,7 +3572,7 @@ class TemplateTest(DataTestCase):
         self.set_up_simple_community()
         
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         text = template_model.data.generate_text()
@@ -3592,7 +3591,7 @@ class TemplateTest(DataTestCase):
 
         self.set_up_complex_community()
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         owned_objects = list(Resource.objects.all()) + list(Item.objects.all())
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, owned_objects=owned_objects, description="Complex Community Template")
@@ -3646,7 +3645,7 @@ class TemplateTest(DataTestCase):
 
         self.set_up_simple_community()
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         
@@ -3682,7 +3681,7 @@ class TemplateTest(DataTestCase):
         # Generate a template and get editable fields
         self.set_up_simple_community()
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         self.templateClient.set_target(target=template_model)        
@@ -3729,7 +3728,7 @@ class TemplateTest(DataTestCase):
         # Generate a template and get editable fields
         self.set_up_simple_community()
         permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
+        # conditions = ConditionTemplate.objects.all()
         template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
             conditions=conditions, description="Simple Community Template")
         self.templateClient.set_target(target=template_model)        

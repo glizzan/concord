@@ -12,7 +12,6 @@ from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
 from concord.communities.utils import MembershipHelper, get_membership_setting
-from concord.permission_resources.templates import community_governance_info_to_text
 
 
 ######################

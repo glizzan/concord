@@ -6,7 +6,7 @@ from django.db.models import Model
 from concord.actions.client import BaseClient, ActionClient
 
 from concord.permission_resources.models import PermissionsItem
-from concord.permission_resources import utils, templates, models
+from concord.permission_resources import utils, models
 from concord.permission_resources import state_changes as sc
 
 
@@ -319,67 +319,3 @@ class PermissionResourceClient(BaseClient):
 
         return actions
 
-
-######################
-### TemplateClient ###
-######################
-
-
-class TemplateClient(BaseClient):
-
-    # Get data, no target assumed
-
-    def get_template_given_id(self, *, template_id):
-        return models.Template.objects.get(pk=template_id)
-
-    def get_editable_fields_on_template(self, template_id=None, template_model=None):
-        if not template_id and not template_model:
-            raise Exception("Must provide either template model or template_id.")
-        if template_id:
-            template_model = self.get_template_given_id()
-        return template_model.data.get_editable_fields()
-
-    # Creates
-
-    def make_template(self, *, description=None, community=None, permissions=None, conditions=None, 
-        owned_objects=None, recursive=False):
-        template_model = models.Template(description=description, owner=self.actor.default_community)
-        template_model.data.create_template(community=community, permissions=permissions, 
-            conditions=conditions, owned_objects=owned_objects, recursive=recursive)
-        template_model.save()
-
-        # HACK: is there a better way to "refresh" the model so it's no longer attached to the original
-        # django models?
-        template_model = self.get_template_given_id(template_id=template_model.pk)
-        return template_model 
-
-    def create_from_template(self, *, template_model=None, template_id=None, default_owner=None):
-        if not template_model and not template_id and not self.target:
-            raise Exception("Must provide either template_model or template_id to create_from_template.")
-        if template_id:
-            template_model = self.get_template_given_id(template_id=template_id)
-        if not template_id and not template_model:
-            template_model= self.target
-        default_owner = default_owner if default_owner else self.actor
-        return template_model.data.create_from_template(default_owner=default_owner)
-
-    # State changes
-
-    def edit_template_field(self, *, template_object_id, field_name, new_field_data):
-        change = sc.EditTemplateStateChange(template_object_id=template_object_id, 
-            field_name=field_name, new_field_data=new_field_data)
-        return self.create_and_take_action(change)
-
-    # Helper/complex methods
-
-    def update_field_and_get_new_data(self, *, template_object_id, field_name, new_field_data):
-        action, result = self.edit_template_field(template_object_id=template_object_id, 
-            field_name=field_name, new_field_data=new_field_data)
-        if action.resolution.status == "rejected":
-            return action
-        else:
-            self.refresh_target()
-            return { 
-                "template_text": self.target.data.generate_text(),
-                "editable_fields": self.get_editable_fields_on_template(template_model=self.target)
-                }

@@ -232,13 +232,3 @@ def delete_empty_permission(sender, instance, created, **kwargs):
 
 
 post_save.connect(delete_empty_permission, sender=PermissionsItem)
-
-
-# class Template(PermissionedModel):
-#     """ 
-#     Template models allow users to save and edit configurations of communities, owned objects,
-#     permissions, and conditionals.  New communities can be generated from these templates, making
-#     it easier for users to experiment with new governance structures.
-#     """
-#     data = TemplateDataField(null=True, default=TemplateData)
-#     description = models.CharField(max_length=500)

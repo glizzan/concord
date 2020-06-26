@@ -59,18 +59,44 @@ def actors_to_text(actor_info):
     return actor_string + list_to_text(actor_info)
 
 
+def replaceable_field_check(value):
+    """Checks for replaceable fields and parses & returns their content if found.
+    
+    TODO: possibly make this a decorator for all of the utils above?
+    """
+
+    if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
+        command = value.replace("{{", "").replace("}}", "").strip()
+        tokens = command.split(".")
+    
+        if tokens[0] == "trigger_action" and tokens[1] == "change" and tokens[2] == "member_pk_list":
+            return True, "users added by the action"   # HACK: this isn't workable as is, if for no other reason than
+                                                 # multiple changes have member_pk_list, not just add_members
+                                                 # I GUESS we could change the params to be more unique/descriptive
+
+    return False, value
+
+
 def roles_and_actors(role_and_actor_dict):
 
     text = ""
 
     if len(role_and_actor_dict["roles"]) > 0:
-        text += roles_to_text(role_and_actor_dict["roles"])
+        replaced, response = replaceable_field_check(role_and_actor_dict["roles"])
+        if replaced:
+            text += response
+        else:
+            text += roles_to_text(role_and_actor_dict["roles"])
     
     if len(role_and_actor_dict["roles"]) > 0 and len(role_and_actor_dict["actors"]) > 0:
         text += " and "
 
     if len(role_and_actor_dict["actors"]) > 0:
-        text += actors_to_text(role_and_actor_dict["actors"])
+        replaced, response = replaceable_field_check(role_and_actor_dict["actors"])
+        if replaced:
+            text += response
+        else:
+            text += actors_to_text(role_and_actor_dict["actors"])
 
     if len(role_and_actor_dict["roles"]) == 0 and len(role_and_actor_dict["actors"]) == 0:
         return "no one"

@@ -26,12 +26,20 @@ from concord.conditionals.management.commands.check_condition_status import retr
 
 
 class ConditionModel(PermissionedModel):
+    """
+    Attributes:
+
+    action: integer representing the pk of the action that triggered the creation of this condition
+    source_id : consists of a type and a pk, separated by a _, for example "perm_" + str(permission_pk) or 
+                    "owner_" + str(community_pk)
+    """
 
     class Meta:
         abstract = True
 
     action =  models.IntegerField()
     source_id = models.CharField(max_length=20)
+
     descriptive_name = "condition"
     has_timeout = False
 

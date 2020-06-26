@@ -42,11 +42,15 @@ def deserialize_state_change(state_change_dict):
 
 def serialize_resolution(resolution, dump_to_json=True):
     obj_dict = {
-        "status": resolution.status,
-        "resolved_through": resolution.resolved_through,
-        "role": resolution.role,
-        "condition": resolution.condition,
-        "log": resolution.log       
+        "foundational_status": resolution.foundational_status,
+        "specific_status": resolution.specific_status,
+        "governing_status": resolution.governing_status,
+        "conditions": resolution.conditions,
+        "log": resolution.log,
+        "approved_through": resolution.approved_through,
+        "approved_role": resolution.approved_role,
+        "approved_condition": resolution.approved_condition,
+        "external_status": resolution.external_status
     }
     return json.dumps(obj_dict) if dump_to_json else obj_dict
 
@@ -54,9 +58,11 @@ def serialize_resolution(resolution, dump_to_json=True):
 @load_json_as_needed
 def deserialize_resolution(resolution_data):
     from concord.actions.customfields import Resolution
-    return Resolution(status=resolution_data['status'], resolved_through=resolution_data['resolved_through'], 
-        role=resolution_data['role'], condition=resolution_data['condition'], log=resolution_data['log'])
-
+    return Resolution(foundational_status=resolution_data["foundational_status"], specific_status=resolution_data["specific_status"], 
+        governing_status=resolution_data["governing_status"], conditions=resolution_data["conditions"],
+        log=resolution_data["log"], approved_through=resolution_data["approved_through"], 
+        approved_role=resolution_data["approved_role"], approved_condition=resolution_data["approved_condition"],
+        external_status=resolution_data["external_status"])
 
 
 ### Mock Actions ###
@@ -69,6 +75,7 @@ def serialize_mock_action_target(mock_action_target):
         if hasattr(mock_action_target, "pk"):
             return { "pk": mock_action_target.pk, 
                 "content_type_pk": ContentType.objects.get_for_model(mock_action_target).id}
+        return mock_action_target
     return None
 
 
@@ -77,8 +84,7 @@ def deserialize_mock_action_target(mock_action_target_data):
         if "pk" in mock_action_target_data:
             ct = ContentType.objects.get(pk=mock_action_target_data["content_type_pk"])
             return ct.get_object_for_this_type(pk=mock_action_target_data["pk"])
-    else:
-        return mock_action_target_data
+    return mock_action_target_data
 
 
 def serialize_mock_action(mock_action, dump_to_json=True):
@@ -87,8 +93,7 @@ def serialize_mock_action(mock_action, dump_to_json=True):
         "target": serialize_mock_action_target(mock_action.target),
         "actor": mock_action.actor.pk,
         "resolution": serialize_resolution(mock_action.resolution, dump_to_json=False),
-        "unique_id": mock_action.unique_id,
-        "dependent_fields": mock_action.dependent_fields
+        "unique_id": mock_action.unique_id
     }
     return json.dumps(obj_dict) if dump_to_json else obj_dict
 
@@ -103,7 +108,6 @@ def deserialize_mock_action(mock_action_data):
     resolution = deserialize_resolution(mock_action_data["resolution"])
     mock_action = MockAction(change, actor, target, resolution)
     mock_action.unique_id = mock_action_data["unique_id"]
-    mock_action.dependent_fields = mock_action_data["dependent_fields"]
     return mock_action
 
 
@@ -114,8 +118,7 @@ def serialize_template(template, dump_to_json=True):
     actions = []
     for action in template.action_list:
         actions.append(serialize_mock_action(action, dump_to_json=False))
-    obj_dict = {"actions": actions, "system": template.system, "description": template.description,
-        "configurable_fields": template.configurable_fields }
+    obj_dict = {"actions": actions, "system": template.system, "description": template.description }
     return json.dumps(obj_dict) if dump_to_json else obj_dict
 
 
@@ -126,4 +129,25 @@ def deserialize_template(template_data):
         action_list.append(deserialize_mock_action(action))
     from concord.actions.customfields import Template
     return Template(action_list=action_list, system=template_data["system"], 
-        description=template_data["description"], configurable_fields=template_data["configurable_fields"])
+        description=template_data["description"])
+
+
+def serialize_template_context(template_context, dump_to_json=True):
+    obj_dict = {
+        "trigger_action_pk": template_context.trigger_action_pk,
+        "supplied_fields": template_context.supplied_fields,
+        "actions_and_results": template_context.actions_and_results,
+        "condition_data": template_context.condition_data
+    }
+    return json.dumps(obj_dict) if dump_to_json else obj_dict
+
+
+@load_json_as_needed
+def deserialize_template_context(template_context_data):
+    from concord.actions.customfields import TemplateContext
+    return TemplateContext(trigger_action_pk=template_context_data["trigger_action_pk"],
+        supplied_fields=template_context_data["supplied_fields"], 
+        actions_and_results=template_context_data["actions_and_results"],
+        condition_data=template_context_data["condition_data"])
+
+    

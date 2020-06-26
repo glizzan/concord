@@ -80,8 +80,6 @@ class ActorList(object):
                 raise ValueError("Non-integer found in ActorList")
             self.pk_list = list(set(self.pk_list) | set(actors))
             return
-
-        print("Actors: ", actors)
         
         raise ValueError("Must add actors to actorlist as User or Int, not ", type(actors[0]))
 

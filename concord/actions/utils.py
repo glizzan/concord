@@ -75,50 +75,80 @@ def get_state_change_objects_which_can_be_set_on_model(model_class, app_name):
     return matching_state_changes
 
 
-def replace_fields(*, commands, action_to_change, trigger_action, previous_actions_and_results):
-    """Takes in a set of replacement commands and executes them using the other parameters.  
-    
-    Example command: "REPLACE change PARAMETER 'member_pk_list' WITH previous_action unique_id action PARAMETER actor"
-    
-    Syntax must be exactly correct, so be careful!"""
+def replacer(key, value, context):
+    """Given the value provided by mock_action, looks for fields that need replacing by finding strings with the right
+    format, those that begin and end with {{ }}.  Uses information in context object to replace those fields.
 
-    for command in commands:
+    If the replacer comes across string %% %% replaces it with {{ }}, as it is a nested template (usually a condition).
+    The next time the data is run through a template replacer it will be replaced using that correct context.
+    """
 
-        # Parse command
+    if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
 
-        command = command.replace("REPLACE ", "")  # Initial REPLACE command is just there for readability
-        target_string, source_string = command.split(" WITH ")
+        command = value.replace("{{", "").replace("}}", "").strip()
+        tokens = command.split(".")
 
-        target_tokens = target_string.split(" PARAMETER ")
-        target = target_tokens[0]
-        target_parameter = target_tokens[1] if len(target_tokens) > 1 else None
-    
-        source_tokens = source_string.split(" PARAMETER ")
-        source = source_tokens[0]
-        source_parameter = source_tokens[1] if len(source_tokens) > 1 else None
+        if tokens[0] == "supplied_fields":
+            """Always two tokens long, with format supplied_fields.field_name."""
+            return context.supplied_fields[tokens[1]]
 
-        # Get data to replace with
+        if tokens[0] == "trigger_action":
+            """Variable length - can be just the trigger action itself, an immediate attribute, or the
+            attribute of an attribute, for example trigger_action.change.role_name."""
 
-        if "previous_action" in source:
-            source_type, unique_id, action_or_result = source.split(" ")
-            source_data = previous_actions_and_results[int(unique_id)][action_or_result]
-        elif source == "trigger_action":
-            source_data = trigger_action
+            if len(tokens) == 1:
+                new_value = context.trigger_action
 
-        if source_parameter:
-            source_data = getattr(source_data, source_parameter)
+            if len(tokens) == 2:
+                new_value = getattr(context.trigger_action, tokens[1])
+            
+            if len(tokens) == 3:
+                intermediate = getattr(context.trigger_action, tokens[1])
+                new_value = getattr(intermediate, tokens[2])
+            
+            return new_value
 
-        # Replace on target object
+        if tokens[0] == "previous":
+            """Always three or four tokens long, with format previous.position.action_or_result, for example
+            previous.0.action, or previous.position.action_or_result.attribute, for
+            example previous.1.result.pk """
 
-        if target_parameter:
-            field_to_change = getattr(action_to_change, target)
-            setattr(field_to_change, target_parameter, source_data)
-        else:
-            setattr(action_to_change, target, source_data)
+            position = int(tokens[1])
+            action, result = context.get_action_and_result_for_position(position)
+            source = action if tokens[2] == "action" else result
 
-        # TODO: not 100% sure this will work but I think it will, since Python is all referency?
+            if len(tokens) == 4:
+                return getattr(source, tokens[3])
+            else:
+                return source
 
-    return action_to_change     
+    return ...
+
+
+def replace_fields(*, action_to_change, mock_action, context):
+    """Takes in the action to change and the mock_action, and looks for field on the mock_action which indicate
+    that fields on the action to change need to be replaced.  For the change field, and the change field only,
+    also look for fields to replace within.
+
+    FIXME: we might have an issue when a previous result doesn't exist because it was rejected,
+        but we're continuing on with our mock actions to get more data - need to fail gracefully
+    """
+
+    for key, value in vars(mock_action).items():
+
+        new_value = replacer(key, value, context)
+        if new_value is not ...:
+            setattr(action_to_change, key, new_value)
+        
+        if key == "change":
+
+            for change_key, change_value in vars(value).items():
+                new_value = replacer(change_key, change_value, context)
+                if new_value is not ...:
+                    setattr(value, change_key, new_value)
+
+    action_to_change.fields_replaced = True  # indicates that action has passed through replace_fields and is safe to use
+    return action_to_change
 
 
 class MockAction(object):
@@ -128,24 +158,26 @@ class MockAction(object):
 
     is_mock = True
 
-    def __init__(self, change, actor, target, dependent_fields=None, resolution=None, unique_id=None):
+    def __init__(self, change, actor, target, resolution=None, unique_id=None):
 
         self.change = change
         self.target = target
         self.actor = actor
-        self.dependent_fields = dependent_fields if dependent_fields else []
 
         if not resolution:
             from concord.actions.customfields import Resolution
-            resolution = Resolution(status="draft")
+            resolution = Resolution(external_status="draft")
         self.resolution = resolution
 
         if not unique_id:       
             unique_id = random.randrange(1, 100000)
         self.unique_id = unique_id
 
-    def add_command_to_dependent_fields(self, command):
-        self.dependent_fields.append(command)
+    def __repr__(self):
+        return f"MockAction(change={self.change}, actor={self.actor}, target={self.target})"
+    
+    def __str__(self):
+        return self.__repr__()
 
     def create_action_object(self, container_pk, save=True):
         from concord.actions.models import Action
@@ -166,15 +198,16 @@ def check_permissions_for_action_group(list_of_actions):
     for index, action in enumerate(list_of_actions):
 
         is_valid = action.change.validate(actor=action.actor, target=action.target)
+        action.resolution.external_status = "sent" 
 
         if is_valid:
             from concord.actions.permissions import has_permission
             processed_action = has_permission(action=action)
-            status, log = processed_action.resolution.status, processed_action.resolution.log
+            status, status_log = processed_action.resolution.status, processed_action.resolution.get_status_string()
         else:
-            status, log = "invalid", action.change.validation_error.message
+            status, status_log = "invalid", action.change.validation_error.message
 
-        action_log[index] = { "action": action, "status": status, "log": log }
+        action_log[index] = { "action": action, "status": status, "log": status_log }
 
     status_list = [action["status"] for index, action in action_log.items()]
     if all([status == "approved" for status in status_list]):

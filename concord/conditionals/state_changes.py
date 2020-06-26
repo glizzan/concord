@@ -79,24 +79,23 @@ class SetConditionOnActionStateChange(BaseStateChange):
         try:
             condition_class = self.get_condition_class()
             source_id = self.generate_source_id()
-            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **self.condition_data)
+
+            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(), 
+                **(self.condition_data if self.condition_data else {}))
+
             return True
         except ValidationError as error:
             self.set_validation_error(message=error.message)
             return False
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         condition_class = self.get_condition_class()
         source_id = self.generate_source_id()
 
-        if save:
-            condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **self.condition_data)
-        else:
-            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **self.condition_data)
+        condition_data = self.condition_data if self.condition_data else {} # replaces none so ** doesn't give an error
+        condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
+                **condition_data)
         
         return condition_instance
 
@@ -142,14 +141,10 @@ class AddVoteStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.add_vote(self.vote)
         target.add_vote_record(actor)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return True
 
 
@@ -189,13 +184,9 @@ class ApproveStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.approve()
-        
-        if save:
-            target.save()
-        
+        target.save()
         return True
 
 
@@ -232,11 +223,7 @@ class RejectStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.reject()
-        
-        if save:
-            target.save()
-        
+        target.save()
         return True

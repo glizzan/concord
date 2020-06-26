@@ -209,12 +209,10 @@ class PermissionResourceClient(BaseClient):
 
         return actions
 
-    def update_roles_on_permission(self, *, role_data, permission, return_type="action"):
+    def update_roles_on_permission(self, *, role_data, permission):
         """Given a list of roles, updates the given permission to match those roles."""
-
-        self.mode = "mock"
         
-        mock_action_list = []
+        action_list = []
 
         old_roles = set(permission.get_role_names())
         new_roles = set(role_data)
@@ -222,26 +220,17 @@ class PermissionResourceClient(BaseClient):
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            mock_action_list.append(self.add_role_to_permission(role_name=role, permission_pk=permission.pk))
+            action_list.append(self.add_role_to_permission(role_name=role, permission_pk=permission.pk))
         
         for role in roles_to_remove:
-            mock_action_list.append(self.remove_role_from_permission(role_name=role, permission_pk=permission.pk))
+            action_list.append(self.remove_role_from_permission(role_name=role, permission_pk=permission.pk))
 
-        if return_type == "action":
-            actionClient = ActionClient(actor=self.actor)
-            container = actionClient.create_action_container(action_list=mock_action_list)
-            container = actionClient.retry_action_container(container_pk=container.pk, test=False)
-            return container.get_actions()
-        
-        if return_type == "mock_action_list":
-            return mock_action_list
+        return action_list
 
     def update_actors_on_permission(self, *, actor_data, permission, return_type="action"):
         """Given a list of actors, updates the given permission to match those actors."""
 
-        self.mode = "mock"
-        
-        mock_action_list = []
+        action_list = []
 
         old_actors = set(permission.get_actors())
         new_actors = set(actor_data)
@@ -249,20 +238,12 @@ class PermissionResourceClient(BaseClient):
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            mock_action_list.append(self.add_actor_to_permission(actor=actor, permission_pk=permission.pk))
+            action_list.append(self.add_actor_to_permission(actor=actor, permission_pk=permission.pk))
         
         for actor in actors_to_remove:
-            mock_action_list.append(self.remove_actor_from_permission(actor=actor, permission_pk=permission.pk))
+            action_list.append(self.remove_actor_from_permission(actor=actor, permission_pk=permission.pk))
 
-        if return_type == "action":
-            actionClient = ActionClient(actor=self.actor)
-            container = actionClient.create_action_container(action_list=mock_action_list)
-            container = actionClient.retry_action_container(container_pk=container.pk, test=False)
-            return container.get_actions()
-        
-        if return_type == "mock_action_list":
-            return mock_action_list
-
+        return action_list
 
     # FIXME: this is still too complex
     def update_role_permissions(self, *, role_data, owner):

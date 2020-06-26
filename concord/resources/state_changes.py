@@ -33,15 +33,13 @@ class AddCommentStateChange(BaseStateChange):
         self.set_validation_error(message="Comment text must be a string at least one character long.")
         return False
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         comment = Comment(text=self.text, commentor=actor)
         comment.commented_object = target
         comment.owner = target.get_owner() # FIXME: should it be the target owner though?
         
-        if save:
-            comment.save()
-        
+        comment.save()
         return comment
 
 
@@ -71,14 +69,10 @@ class EditCommentStateChange(BaseStateChange):
         self.set_validation_error(message="Comment text must be a string at least one character long.")
         return False
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         comment = Comment.objects.get(pk=self.pk)
         comment.text = self.text
-        
-        if save:
-            comment.save()
-        
+        comment.save()
         return comment
 
 
@@ -104,13 +98,9 @@ class DeleteCommentStateChange(BaseStateChange):
         # TODO: real validation
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         comment = Comment.objects.get(pk=self.pk)
-        
-        if save:
-            comment.delete()
-        
+        comment.delete()
         return self.pk
 
 
@@ -144,13 +134,9 @@ class ChangeResourceNameStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.name = self.new_name
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -181,15 +167,9 @@ class AddItemResourceStateChange(BaseStateChange):
             return True
         return False
 
-    def implement(self, actor, target, save=True):
-
-        if save:
-            item = Item.objects.create(name=self.item_name, resource=target, 
+    def implement(self, actor, target):
+        item = Item.objects.create(name=self.item_name, resource=target, 
                 owner=actor.default_community)
-        else:
-            item = Item(name=self.item_name, resource=target, 
-                owner=actor.default_community)
-        
         return item
 
 
@@ -221,11 +201,10 @@ class RemoveItemResourceStateChange(BaseStateChange):
             return True
         return False
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
         try:
             item = Item.objects.get(pk=self.item_pk)
-            if save:
-                item.delete()
+            item.delete()
             return True
         except Exception as exception:
             print(exception)

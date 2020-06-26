@@ -37,13 +37,9 @@ class ChangeNameStateChange(BaseStateChange):
         self.set_validation_error("You must provide provide a new name")
         return False
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.name = self.new_name
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -92,13 +88,9 @@ class AddMembersStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.add_members(self.member_pk_list) 
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -135,7 +127,7 @@ class RemoveMembersStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         # Remove members from custom roles
         for role_name, role_members in target.roles.get_custom_roles().items():
@@ -143,9 +135,7 @@ class RemoveMembersStateChange(BaseStateChange):
         # Now remove them from members      
         target.roles.remove_members(self.member_pk_list) 
 
-        if save:
-            target.save()
-    
+        target.save()
         return target
 
 
@@ -171,13 +161,9 @@ class AddGovernorStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-        
+    def implement(self, actor, target):
         target.roles.add_governor(self.governor_pk) 
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -204,13 +190,9 @@ class RemoveGovernorStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.remove_governor(self.governor_pk)  
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -236,13 +218,9 @@ class AddGovernorRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-        
+    def implement(self, actor, target):
         target.roles.add_governor_role(self.role_name)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -269,13 +247,9 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.remove_governor_role(self.role_name)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -301,13 +275,9 @@ class AddOwnerStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.add_owner(self.owner_pk)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -334,13 +304,9 @@ class RemoveOwnerStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.remove_owner(self.owner_pk)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -366,13 +332,9 @@ class AddOwnerRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.add_owner_role(self.role_name)
-
-        if save:
-            target.save()
-    
+        target.save()
         return target
 
 
@@ -399,13 +361,9 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.remove_owner_role(self.role_name)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -435,13 +393,9 @@ class AddRoleStateChange(BaseStateChange):
         # TODO: maybe enforce limits on length, letter content, etc, possibly referencing field validation?
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.add_role(self.role_name)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -465,13 +419,9 @@ class RemoveRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.remove_role(self.role_name)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -541,13 +491,9 @@ class AddPeopleToRoleStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target, save=True):
-        
+    def implement(self, actor, target):
         target.roles.add_people_to_role(self.role_name, self.people_to_add)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -572,13 +518,9 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -615,14 +557,13 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         mock_action_list = []
         action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
             condition_data=self.condition_data, community_pk=target.pk, leadership_type=self.leadership_type)
-        action_1.add_command_to_dependent_fields(command="REPLACE target WITH trigger_action")
+        action_1.target = "{{trigger_action}}"
         mock_action_list.append(action_1)
 
         perm_client.target = action_1
         for permission_item_data in self.permission_data:
             next_action = perm_client.add_permission(**permission_item_data)
-            command= f"REPLACE target WITH previous_action {action_1.unique_id} result"
-            next_action.add_command_to_dependent_fields(command=command)
+            next_action.target = "{{previous.0.result}}"
             mock_action_list.append(next_action)
         
         return mock_action_list
@@ -654,14 +595,10 @@ class AddLeadershipConditionStateChange(BaseStateChange):
             self.set_validation_error(message=error.message)
             return False
         
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         action_list = self.generate_mock_actions(actor, target)
         target = self.apply_actions_to_conditions(action_list, target)
-        
-        if save:
-            target.save()
-
+        target.save()
         return target
 
 
@@ -684,14 +621,12 @@ class RemoveLeadershipConditionStateChange(BaseStateChange):
     def validate(self, actor, target):
         return True
         
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         if self.leadership_type == "owner":
             target.owner_condition.action_list = []
         elif self.leadership_type == "governor":
             target.governor_condition.action_list = []
         
-        if save:
-            target.save()
-
+        target.save()
         return target

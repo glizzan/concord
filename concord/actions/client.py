@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 
 from concord.actions.models import Action, ActionContainer
 from concord.actions import state_changes as sc
+from concord.actions.customfields import Template
 
 
 class BaseClient(object):
@@ -31,7 +32,7 @@ class BaseClient(object):
             self.target = target
         elif target_pk and target_ct:
             ct = ContentType.objects.get_for_id(target_ct)
-            model_class = ct._model_class()
+            model_class = ct.model_class()
             self.target = model_class.objects.get(id=target_pk)
         else:
             raise BaseException("Must supply target or target_pk and target_ct.")
@@ -77,6 +78,10 @@ class BaseClient(object):
                     change=change)
 
             return action.take_action()
+
+    def create_mock_action_from_client(self):
+        """Typically used to create trigger actions"""
+        return Mockaction(actor=self.actor, target=self.target)
 
     # Permissioned Reading
 
@@ -166,17 +171,16 @@ class ActionClient(BaseClient):
 
     # Indirect change of state
 
-    def create_action_container(self, action_list):
+    def create_action_container(self, action_list, trigger_action=None):
         """Takes in a list of Mock Actions generated using mock mode for this or other clients.  """
-        container = ActionContainer.objects.create()
-        container.initialize(action_list=action_list)
-        return container
+        container, log = Template(action_list=action_list).apply_template(trigger_action=trigger_action)
+        return container, log
 
-    def retry_action_container(self, container_pk, test=True):
+    def retry_action_container(self, container_pk, test=False):
         """Retries processing the actions in a given container.  If test is true, does not commit the actions."""
         container = ActionContainer.objects.get(pk=container_pk)
-        container.commit_actions(test=test)
-        return container
+        summary_status, log = container.commit_actions(test=test)
+        return container, log
 
     def take_action(self, action=None, pk=None):
         """Helper method to take an action (or, usually, retry taking an action) from the client."""
@@ -187,3 +191,44 @@ class ActionClient(BaseClient):
         else:
             action = self.get_action_given_pk(pk=pk)
             action.take_action()
+
+
+class TemplateClient(BaseClient):
+
+    # Get
+
+    def get_template(self, pk):
+        ...
+
+    def get_templates(self):
+        ...
+
+    def get_templates_for_scope(self, scope):
+        ...
+
+    def get_templates_for_owner(self, owner):
+        ...
+
+    # Create
+
+    def create_template(self, name, user_description, scopes, template_data):
+        ...
+
+    # State changes
+
+    def apply_template(self, template_model_pk, supplied_fields=None):
+        """This is a weird state change, because it doesn't directly change the state of a permissioned model.
+        Instead it creates an ActionContainer, copying the template field of the template model specified with
+        template_model_pk.  If the Actions in the ActionContainer all successfully pass the permissions/conditions
+        pipeline, only then are the state changes implemented.  So setting this permission doesn't actually
+        give people the ability to apply templates - only prevents it."""
+        change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
+        return self.create_and_take_action(change)
+
+    def edit_template(self, template_pk, name=None, user_description=None, scopes=None, template_data=None):
+        if not Name and not user_description and not scopes and not template_data:
+            raise ValueError("When editing template, must supply some data to change")
+        ...
+
+    def delete_template(self, template_pk):
+        ...

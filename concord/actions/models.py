@@ -8,12 +8,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
 from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, ClientInterface, replace_fields
-from concord.actions.customfields import ResolutionField, Resolution, StateChangeField
-
-
-def get_default_resolution():
-    """Helper function to set default resolution object in database for new actions."""
-    return Resolution(status="draft")
+from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField, 
+    TemplateContextField, Template, TemplateContext)
 
 
 class Action(models.Model):
@@ -36,7 +32,7 @@ class Action(models.Model):
     change = StateChangeField()
 
     # Resolution field stores status & log info as well as details of how the action has been processed
-    resolution = ResolutionField(default=get_default_resolution)
+    resolution = ResolutionField(default=Resolution)
 
     # Regular old attributes
     created_at = models.DateTimeField(auto_now_add=True)
@@ -90,9 +86,9 @@ class Action(models.Model):
         """
         is_valid = self.change.validate(actor=self.actor, target=self.target)
         if is_valid:
-            self.resolution.status = "sent"
+            self.resolution.external_status = "sent"
         else:
-            self.resolution.status = "rejected"
+            self.resolution.external_status = "rejected"
             self.resolution.add_to_log(self.change.validation_error.message)
             delattr(self.change, "validation_error")
 
@@ -101,172 +97,232 @@ class Action(models.Model):
 
         Carries out its custom implementation using the actor and target.
         """
-        result = self.change.implement(actor=self.actor, target=self.target)
-        self.resolution.status = "implemented"
+        if hasattr(self.change, "pass_action") and self.change.pass_action:
+            result = self.change.implement(actor=self.actor, target=self.target, action=self)
+        else:
+            result = self.change.implement(actor=self.actor, target=self.target)
+        self.resolution.external_status = "implemented"
         return result
 
     def take_action(self):
-        """Take action by checking status and attempt the next step given that status.
-
-        Returns result of the action.
+        """Runs the action through the permissions pipeline.  If waiting on a condition,
+        triggers that condition.  If approved, implements action.  
+        
+        Returns itself and, optionally, the result of implementing the action.
         """
-        current_result = None
 
-        if self.resolution.status == "draft":
+        if self.resolution.external_status == "draft":
             self.validate_action()
 
         if self.resolution.status in ["sent", "waiting"]:
             from concord.actions.permissions import has_permission
             self = has_permission(action=self)
 
-        if self.resolution.status == "approved" and not self.resolution.provisional:
-            current_result = self.implement_action()
+            if self.resolution.status == "waiting" and len(self.resolution.conditions) > 0:
+                from concord.conditionals.client import ConditionalClient
+                client = ConditionalClient(system=True)
+                for source_id in self.resolution.conditions:       
+                    client.trigger_condition_creation_from_source_id(action=self, source_id=source_id)
+
+        if self.resolution.status == "approved":
+            result = self.implement_action()
 
         self.save()  # Save action, may not always be needed
 
-        return self, current_result
+        return self, result if 'result' in locals() else None
+
 
 
 class ActionContainer(models.Model):
     """An `ActionContainer` is a tool for helping generate, process, and implement a set of actions
     as a cohesive group.  This is useful for user-facing templates as well as for system actions
     that are closely connected to each other and which users might see as a single action, for
-    example "adding a user with role X to group Y". This might seem like one action to a user but would 
+    example "adding a user with role X to group Y". This might seem like one action to a user but could 
     actually be three: adding the role to the group, adding the user to the group, and adding the user to 
-    the role.
+    the role.  ActionContainers allow us to trigger conditions for all of the actions at once, as well as
+    wait on implementing any of the actions until all of them pass.
+    
+    ActionContainer stores the template information from the template that triggered it as well as context data
+    specific to this particular application/implementation, for instance the pk of the action which triggered
+    apply_template, and actions/results created by implemented the actions templates, as well as data for any
+    user supplied fields.
 
-    ActionContainer is often called by TemplateField, which stores lists of Mock Actions to be instantiated
-    and run by ActionContainer.  Mock Actions can be created directly or by switching a client's mode to
-    Mock when making state_change calls.  Instead of creating a DB action and trying to implement it, the 
-    client will make a corresponding Mock action and return it to you.
+    summary_status tells us the overall status of the ActionContainer.  Acceptable values are:
+        'drafted' - used when first created
+        'invalid' - if any of the actions created are invalid - shouldn't happen, but just in case
+        'rejected' - used if any of the actions within the container are unconditionally rejected
+        'waiting' - used if any of the actions within the container are 'waiting' (if none are rejected)
+        'approved' - used if all actions within the container are approved
+        'implemented' - used if all actions within container are implemented
+    """
 
-    Occasionally we want actions that are dependent on the result of a previous action. These are dependent fields
-    and are defined using a very specific syntax specified in concord.actions.utils's method replace_fields.
-    We call this helper method when getting an action from the DB in process_actions."""
-
-    action_info = models.CharField(max_length=2000, null=True, blank=True)  # Probably should be a custom field
+    template_data = TemplateField(default=Template)
+    context = TemplateContextField(default=TemplateContext)
     summary_status = models.CharField(max_length=20, default="drafted")
-    is_open = models.BooleanField(default=True)
-    is_system = models.BooleanField(default=False)
-    trigger_action = models.PositiveIntegerField(blank=True, null=True) 
 
-    action_results = dict()
+    def __repr__(self):
+        return f"ActionContainer(template_data={repr(self.template_data)}, context={repr(self.context)}, " + \
+            f"summary_status={self.summary_status})"
 
-    def load_action_info(self):
-        return json.loads(self.action_info)
+    def __str__(self):
+        return self.__repr__()
 
-    def save_action_info(self, action_info):
-        self.action_info = json.dumps(action_info)
+    @property
+    def is_open(self):
+        return False if self.summary_status == "committed" else True
 
-    def get_trigger_action_from_db(self):
-        if self.trigger_action:
-            return Action.objects.get(pk=self.trigger_action)
+    def initialize(self, template_object, trigger_action, supplied_fields=None, make_actions_in_db=True):
+        """Saves template object passed in to the template field, and initializes the context field with
+        information passed in via the template."""
+        self.template_data = template_object
+        self.context.initialize(template_object, trigger_action, supplied_fields)
+        if make_actions_in_db:
+            self.context.create_actions_in_db(self.pk, self.template_data)
 
-    def initialize(self, action_list, system=False, trigger_action=None):
-        """ActionContainers must be created before we can add actions to them, because actions need to know
-        their container's pk."""
+    def get_db_action(self, item):   
+        """Gets action from db (or from cache) and, if needed, processes it with replace_fields."""
 
-        self.is_system = system
+        action = self.context.get_action_model_given_unique_id(item["unique_id"])
 
-        if trigger_action:
-            self.trigger_action = trigger_action.pk
+        if not hasattr(action, "fields_replaced"):
+            mock_action = self.template_data.get_mock_action_given_unique_id(unique_id=item["unique_id"])
+            action = replace_fields(action_to_change=action, mock_action=mock_action, context=self.context)
+                       
+        return action
 
-        action_info = {}
+    def validate_action(self, action, index):
+        """Checks that a given action is still valid."""
 
-        for index, action in enumerate(action_list):
+        for field in ["actor", "target", "change"]:
+            if not getattr(action, field):
+                self.action_log[index].update({ "status": "invalid", "log": f"{field} must not be NoneType"})
+                return False
 
-            db_action = action.create_action_object(container_pk=self.pk)
+        is_valid = action.change.validate(actor=action.actor, target=action.target)  
+        if not is_valid:
+            self.action_log[index].update({ "status": "invalid", "log": action.change.validation_error.message })
+        else:
+            self.action_log[index].update({ "status": "valid" })
+        return is_valid
 
-            action_info.update({ index: { "unique_id": action.unique_id, "pk": db_action.pk, "status": None, 
-                "dependent_fields": action.dependent_fields, "log": None }})
+    def check_action_permission(self, action, index):
 
-        self.save_action_info(action_info)
-        self.save()
+        if action.resolution.external_status == "draft":
+            action.resolution.external_status = "sent"
+            # FIXME: this whole external vs internal status thing is hacky :/
 
-    def get_action_from_db(self, action_dict):
-        """Gets action from DB and replaces dependent fields."""
-        action = Action.objects.get(pk=action_dict["pk"])
-        trigger_action = self.get_trigger_action_from_db()
-        updated_action = replace_fields(action_to_change=action, commands=action_dict["dependent_fields"], 
-            trigger_action=trigger_action, previous_actions_and_results=self.action_results)
-        if self.is_system:
-            setattr(updated_action, "bypass_pipeline", True)
-        return updated_action
+        if self.template_data.system:
+            self.action_log[index].update({ "status": "has_permission" })
+            return "approved"
         
+        from concord.actions.permissions import has_permission
+        action = has_permission(action=action)
+
+        if action.resolution.status == "approved":
+            self.action_log[index].update({ "status": "has_permission" })
+            return "approved"
+
+        if action.resolution.status == "waiting":
+
+            condition_items = []
+            for source_id in action.resolution.conditions:
+                condition_items.append(self.context.get_condition(action.unique_id, source_id))
+
+            items = list(filter(None, condition_items))
+            uncreated_conditions = len(items) < len(condition_items)
+
+            if any([item.status == "approved" for item in items]):
+                self.action_log[index].update({ "status": "has_permission", "log": "condition passed",
+                    "conditions": action.resolution.conditions })
+                return "approved"
+            
+            if any([item.status == "waiting" for item in items]) or uncreated_conditions:
+                self.action_log[index].update({ "status": "waiting on conditions", "log": action.resolution.log,
+                    "conditions": action.resolution.conditions })
+                return "waiting"
+
+            self.action_log[index].update({ "status": "lacks permsision", "log": action.resolution.log,
+                "conditions": action.resolution.conditions })
+            return "rejected"
+
+        self.action_log[index].update({ "status": "lacks permission", "log": action.resolution.log })
+        return "rejected"
+
     def process_actions(self):
-        """Goes through actions in order and implements them, updating action_info with the results of various checks.  
-        (Almost?) always called from within a transaction.atomic() block, so action implementations may not 
-        actually be committed to database."""
+        """The heart of ActionContainer functionality - runs through action data, attempting to create
+        actions and, if necessary, managing their conditions.  Typically called by commit_actions and 
+        returns ok_to_commit indicating whether the commit needs to be rolled back or not."""
 
         from concord.actions.permissions import has_permission
-
-        action_info = self.load_action_info()
         ok_to_commit = True
+        self.action_log = {}
 
-        for index, action_dict in action_info.items():
+        for index, item in enumerate(self.context.actions_and_results):
 
-            action = self.get_action_from_db(action_dict=action_dict)
+            self.action_log[index] = {}
+            action = self.get_db_action(item)
 
-            # Check that the action is still valid
-            is_valid = action.change.validate(actor=action.actor, target=action.target)  
-            if not is_valid:
-                action_dict["status"] = "invalid"
-                action_dict["log"] = action.change.validation_error.message
+            # Check if still valid
+            if not self.validate_action(action, index):
                 ok_to_commit = False
                 continue
-            action_dict["status"] = "valid" 
 
-            # Check that the action passes permissions
-            changed_action = has_permission(action=action)
-            if changed_action.resolution.status != "approved":
-                action_dict["status"] = "lacks permission"
-                action_dict["log"] = changed_action.resolution.log
-                ok_to_commit = False
+            # Check if has permission
+            status = self.check_action_permission(action, index)
+            ok_to_commit = True if status == "approved" else False
+            if status == "rejected":    # if status is waiting we're not ok to commit but we can temporarily implement
                 continue
-            action_dict["status"] = "has permission"
 
             # Implement action 
             result = action.implement_action()
-            action_dict["status"] = "implemented"
-            action.save()
+            self.context.add_result(unique_id=item["unique_id"], result=result)  # add to context
+            action.save()  # save changes to action in DB
+            self.action_log[index].update({ "status": "implemented" })
 
-            # add result to list of results, in case a later action needs it
-            self.action_results.update({ action_dict["unique_id"] : { "action": action, "result": result }})
-            
-        return action_info, ok_to_commit
+        return self.action_log, ok_to_commit
 
-    def commit_actions(self, test=True):
+    def determine_summary_status_given_log(self, action_log):
+        """Given an action_log generated by a run of process_actions, determines what the status of the
+        whole container should be."""
 
-        action_info = None
+        if self.summary_status == "implemented":  # if already set to implemented, just return
+            return "implemented"
+        
+        status_list = [ ]
+
+        if any([action["status"] == "lacks permission" for index, action in action_log.items()]):
+            return "rejected"
+
+        if any([action["status"] == "invalid" for index, action in action_log.items()]):
+            return "invalid"
+
+        for index, action in action_log.items():
+            if "conditions" in action and "waiting" in action["log"]:
+                return "waiting"
+        
+        return "approved"
+
+    def commit_actions(self, test=False, generate_conditions=True):  
+
+        action_log = None
 
         try:
-
             with transaction.atomic():
-
-                action_info, ok_to_commit = self.process_actions()
-
+                action_log, ok_to_commit = self.process_actions()
                 if not ok_to_commit or test:
                     raise DatabaseError()
-
-                self.summary_status = "committed"
-                self.is_open = False   # one the actions have all been committed, close container
-
+                self.summary_status = "implemented"
         except DatabaseError as db_error:
+            if generate_conditions:
+                self.context.generate_conditions()
 
-            self.summary_status = "okay to commit" if ok_to_commit else "not okay to commit"
-
-        if action_info:
-            self.save_action_info(action_info)
+        self.summary_status = self.determine_summary_status_given_log(action_log)
         self.save()
-
-        return self.summary_status
+        return self.summary_status, action_log
 
     def get_actions(self):
-        actions = []
-        action_info = self.load_action_info()
-        for index, action_info in action_info.items():
-            actions.append(Action.objects.get(pk=action_info['pk']))
-        return actions
+        """Gets actions in db associated with container, as saved in self.context."""
+        return [item["action"] for item in self.context.actions_and_results]
 
 
 class PermissionedModel(models.Model):
@@ -423,3 +479,32 @@ class PermissionedModel(models.Model):
                 del curframe, caller
                 return super().save(*args, **kwargs)  # Call the "real" save() method.
         raise BaseException("Save called incorrectly")
+
+
+class TemplateModel(PermissionedModel):
+    """The template model allows users to apply sets of actions to their communities."""
+
+    template_data = TemplateField(default=Template, system=False)
+    scopes = models.CharField(max_length=200)
+    name = models.CharField(max_length=90, unique=True)
+    user_description = models.CharField(max_length=500)
+    supplied_fields = models.CharField(max_length=500)
+
+    def __str__(self):
+        return self.name
+
+    def get_scopes(self):
+        return json.loads(self.scopes)
+        
+    def set_scopes(self, scopes):
+        # TODO: possible set a list of allowable scopes and check here for them?
+        if type(scope) != list:
+            raise TypeError(f"Scopes must be type list/array, not type {type(scopes)}")
+        self.scopes = json.dumps(scopes)
+
+    def get_supplied_fields(self):
+        return json.loads(self.supplied_fields)
+
+        
+
+

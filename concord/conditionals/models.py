@@ -16,7 +16,6 @@ from concord.actions.models import PermissionedModel
 from concord.actions.client import ActionClient
 from concord.permission_resources.client import PermissionResourceClient
 from concord.actions.state_changes import Changes
-from concord.conditionals.customfields import UnvalidatedConditionData, ConditionDataField
 from concord.conditionals import utils
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 
@@ -27,12 +26,20 @@ from concord.conditionals.management.commands.check_condition_status import retr
 
 
 class ConditionModel(PermissionedModel):
+    """
+    Attributes:
+
+    action: integer representing the pk of the action that triggered the creation of this condition
+    source_id : consists of a type and a pk, separated by a _, for example "perm_" + str(permission_pk) or 
+                    "owner_" + str(community_pk)
+    """
 
     class Meta:
         abstract = True
 
     action =  models.IntegerField()
     source_id = models.CharField(max_length=20)
+
     descriptive_name = "condition"
     has_timeout = False
 
@@ -361,33 +368,3 @@ def retry_action(sender, instance, created, **kwargs):
 for conditionModel in [ApprovalCondition, VoteCondition]:  # FIXME: should be auto-detected
     post_save.connect(retry_action, sender=conditionModel)
 
-
-##########################
-### ConditionTemplates ###
-##########################
-
-class ConditionTemplate(PermissionedModel):
-    """
-    Conditioned_object is either permission or community, generic relations have been added to those
-    models for ease of reference.
-    """
-
-    conditioned_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    conditioned_object_id = models.PositiveIntegerField()
-    conditioned_object = GenericForeignKey('conditioned_object_content_type', 'conditioned_object_id')
-
-    condition_data = ConditionDataField(default=UnvalidatedConditionData)
-
-    def __str__(self):
-        return "%s condition on %s" % (self.condition_data.describe(), str(self.conditioned_object))
-
-    def get_name(self):
-        return self.__str__()
-
-    def condition_name(self):
-        """Helper method to make it easier to get the condition type."""
-        return self.condition_data.condition_type
-
-    def condition_description(self):
-        """Helper method to make it easier to get the condition description for display."""
-        return self.condition_data.get_condition_description()

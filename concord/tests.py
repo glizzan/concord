@@ -12,21 +12,21 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
 from concord.resources.client import ResourceClient, CommentClient
-from concord.permission_resources.client import PermissionResourceClient, TemplateClient
+from concord.permission_resources.client import PermissionResourceClient
 from concord.conditionals.client import (ApprovalConditionClient, VoteConditionClient, 
     ConditionalClient)
 from concord.communities.client import CommunityClient
-from concord.actions.client import ActionClient
+from concord.actions.client import ActionClient, TemplateClient
 
 from concord.communities.forms import RoleForm
 from concord.permission_resources.forms import PermissionForm, MetaPermissionForm
 from concord.conditionals.forms import ConditionSelectionForm, conditionFormDict
 from concord.actions.models import Action  # NOTE: For testing action status later, do we want a client?
 from concord.actions.state_changes import Changes
-from concord.permission_resources import templates
-from concord.permission_resources.models import PermissionsItem, Template
-from concord.conditionals.models import ApprovalCondition, ConditionTemplate
+from concord.permission_resources.models import PermissionsItem
+from concord.conditionals.models import ApprovalCondition
 from concord.resources.models import Resource, Item
+from concord.actions import template_library
 
 
 class DataTestCase(TestCase):
@@ -386,6 +386,40 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(action.resolution.status, "rejected")
         self.assertEquals(self.instance.name, "USWNT????")
 
+    def test_condition_form_generation(self):
+
+         # Pinoe creates a resource and adds a permission to the resource and a condition to the permission.
+        resource = self.rc.create_resource(name="Go USWNT!")
+        self.prc.set_target(target=resource)
+        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+            permission_actors=[self.users.tobin.pk])
+        permission_data = [
+            { "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
+        ]
+        action, condition = self.prc.add_condition_to_permission(permission_pk=permission.pk,
+            condition_type="approvalcondition", condition_data=None, permission_data=permission_data)
+
+        permission = PermissionsItem.objects.get(pk=permission.pk) #refresh
+        self.assertEquals(permission.get_condition_data(info="basic"),
+            {'type': 'ApprovalCondition', 'display_name': 'Approval Condition', 
+            'how_to_pass': 'one person needs to approve this action'})
+        self.assertEquals(permission.get_condition_data(info="fields"), 
+            {'self_approval_allowed': 
+                {'display': 'Can individuals approve their own actions?', 'field_name': 'self_approval_allowed', 
+                'type': 'BooleanField', 'required': '', 'value': False}, 
+            'approve_roles': 
+                {'display': 'Roles who can approve', 'type': 'PermissionRoleField', 'required': False, 
+                'value': None, 'field_name': 'approve_roles', 'full_name': 'concord.conditionals.state_changes.ApproveStateChange'}, 
+            'approve_actors': 
+                {'display': 'People who can approve', 'type': 'PermissionActorField', 'required': False, 'value': [1], 
+                'field_name': 'approve_actors', 'full_name': 'concord.conditionals.state_changes.ApproveStateChange'}, 
+            'reject_roles': 
+                {'display': 'Roles who can reject', 'type': 'PermissionRoleField', 'required': False, 'value': None, 
+                'field_name': 'reject_roles', 'full_name': 'concord.conditionals.state_changes.RejectStateChange'}, 
+            'reject_actors': 
+                {'display': 'People who can reject', 'type': 'PermissionActorField', 'required': False, 'value': None, 
+                'field_name': 'reject_actors', 'full_name': 'concord.conditionals.state_changes.RejectStateChange'}})
+ 
 
 class ConditionSystemTest(DataTestCase):
 
@@ -400,10 +434,8 @@ class ConditionSystemTest(DataTestCase):
         mock_actions = change.generate_mock_actions(actor=self.users.pinoe, permission=permission)
         self.assertEquals(len(mock_actions), 2)
         self.assertEquals(mock_actions[0].change.get_change_type(), Changes.Conditionals.AddConditionToAction)
-        self.assertEquals(mock_actions[1].change.get_change_type(), Changes.Permissions.AddPermission)        
-        self.assertEquals(mock_actions[0].dependent_fields, ["REPLACE target WITH trigger_action"])
-        new_command = f"REPLACE target WITH previous_action {mock_actions[0].unique_id} result"
-        self.assertEquals(mock_actions[1].dependent_fields, [new_command])
+        self.assertEquals(mock_actions[1].change.get_change_type(), Changes.Permissions.AddPermission)     
+        self.assertEquals(mock_actions[0].target, "{{trigger_action}}")  
         self.assertEquals(mock_actions[1].change.permission_actors, [self.users.crystal.pk, self.users.jmac.pk])
 
     def test_add_leadership_condition_state_change(self):
@@ -416,9 +448,7 @@ class ConditionSystemTest(DataTestCase):
         self.assertEquals(len(mock_actions), 2)
         self.assertEquals(mock_actions[0].change.get_change_type(), Changes.Conditionals.AddConditionToAction)
         self.assertEquals(mock_actions[1].change.get_change_type(), Changes.Permissions.AddPermission)        
-        self.assertEquals(mock_actions[0].dependent_fields, ["REPLACE target WITH trigger_action"])
-        new_command = f"REPLACE target WITH previous_action {mock_actions[0].unique_id} result"
-        self.assertEquals(mock_actions[1].dependent_fields, [new_command])
+        self.assertEquals(mock_actions[0].target, "{{trigger_action}}")  
         self.assertEquals(mock_actions[1].change.permission_roles, ["members"])
 
     def test_condition_template_text_util_with_vote_condition(self):
@@ -1353,6 +1383,7 @@ class RolesetTest(DataTestCase):
         self.resourceClient.set_actor(actor=self.users.pinoe)
         action, result = self.commClient.add_role(role_name="namers")
         self.assertEquals(Action.objects.get(pk=action.pk).resolution.status, "implemented")
+        self.commClient.refresh_target()
         roles = self.commClient.get_custom_roles()
         self.assertEquals(roles, {'namers': []})
 
@@ -2328,8 +2359,8 @@ class ResolutionFieldTest(DataTestCase):
         # Inspect action's resolution field
         self.assertTrue(action.resolution.is_resolved)
         self.assertTrue(action.resolution.is_approved)
-        self.assertEquals(action.resolution.resolved_through, "specific")
-        self.assertFalse(action.resolution.condition)
+        self.assertEquals(action.resolution.approved_through, "specific")
+        self.assertFalse(action.resolution.conditions)
 
     def test_resolution_field_correct_for_rejected_action(self):
 
@@ -2345,24 +2376,23 @@ class ResolutionFieldTest(DataTestCase):
         # Inspect action's resolution field
         self.assertTrue(action.resolution.is_resolved)
         self.assertFalse(action.resolution.is_approved)
-        # self.assertEquals(action.resolution.resolved_through, "specific") refactored so rejections don't save 'resolved_through', alas
-        self.assertFalse(action.resolution.condition)
+        self.assertFalse(action.resolution.conditions)
 
-    def test_resolution_field_resolved_through(self):
+    def test_resolution_field_approved_through(self):
         
         # Pinoe can make JJ a governor because she has a foundational permission
         action, result = self.commClient.add_governor(governor_pk=self.users.jj.pk)
         self.assertEquals(action.resolution.status, "implemented")
         self.assertTrue(action.resolution.is_resolved)
         self.assertTrue(action.resolution.is_approved)
-        self.assertEquals(action.resolution.resolved_through, "foundational")
+        self.assertEquals(action.resolution.approved_through, "foundational")
 
-        # JJ can change the name of the group because he has a governing permission.        
+        # JJ can change the name of the group because she has a governing permission.        
         action, result = self.jjClient.change_name(new_name="Julie Ertz and Her Sidekicks")
         self.assertEquals(action.resolution.status, "implemented")
         self.assertTrue(action.resolution.is_resolved)
         self.assertTrue(action.resolution.is_approved)
-        self.assertEquals(action.resolution.resolved_through, "governing")
+        self.assertEquals(action.resolution.approved_through, "governing")
 
         # Crystal can change the name of the group because she has a specific permission.
         self.prc.add_permission(permission_actors=[self.users.crystal.pk],
@@ -2371,7 +2401,7 @@ class ResolutionFieldTest(DataTestCase):
         self.assertEquals(action.resolution.status, "implemented")
         self.assertTrue(action.resolution.is_resolved)
         self.assertTrue(action.resolution.is_approved)
-        self.assertEquals(action.resolution.resolved_through, "specific")
+        self.assertEquals(action.resolution.approved_through, "specific")
 
     def test_resolution_field_for_role_for_specific_permission(self):
 
@@ -2382,18 +2412,20 @@ class ResolutionFieldTest(DataTestCase):
         # When they change the name, the resolution role field shows the role
         action, result = self.roseClient.change_name(new_name="Best Team")
         self.assertTrue(action.resolution.is_approved)
-        self.assertEquals(action.resolution.resolved_through, "specific")
-        self.assertEquals(action.resolution.role, "members")
+        self.assertEquals(action.resolution.specific_status, "approved")
+        self.assertEquals(action.resolution.approved_through, "specific")
+        self.assertEquals(action.resolution.approved_role, "members")
 
     def test_resolution_field_for_role_for_governing_permission(self):
 
         # Pinoe makes a governing role
         action, result = self.commClient.add_governor_role(governor_role="midfielders")
         action, result = self.roseClient.change_name(new_name="Best Team")
-        self.assertEquals(action.resolution.resolved_through, "governing")
-        self.assertEquals(action.resolution.role, "midfielders")
+        self.assertEquals(action.resolution.approved_through, "governing")
+        self.assertEquals(action.resolution.governing_status, "approved")
+        self.assertEquals(action.resolution.approved_role, "midfielders")
 
-    def test_resolution_field_for_individual(self):
+    def test_resolution_field_for_individual_with_specific_permission(self):
 
         # Add permission so a specific person can change the name of the group
         self.prc.add_permission(permission_actors=[self.users.rose.pk],
@@ -2402,8 +2434,8 @@ class ResolutionFieldTest(DataTestCase):
         # When they change the name, the resolution role field shows no role
         action, result = self.roseClient.change_name(new_name="Best Team")
         self.assertTrue(action.resolution.is_approved)
-        self.assertEquals(action.resolution.resolved_through, "specific")
-        self.assertFalse(action.resolution.role)
+        self.assertEquals(action.resolution.approved_through, "specific")
+        self.assertFalse(action.resolution.approved_role)
 
     def test_resolution_field_captures_conditional_info(self):
 
@@ -2425,15 +2457,15 @@ class ResolutionFieldTest(DataTestCase):
         self.assertEquals(action.resolution.status, "rejected")
         self.assertTrue(action.resolution.is_resolved)
         self.assertFalse(action.resolution.is_approved)
-        # self.assertEquals(action.resolution.resolved_through, "specific") refactored so rejections don't save 'resolved_through', alas
-        self.assertFalse(action.resolution.condition)
+        self.assertFalse(action.resolution.conditions)
 
         # Rose tries to change the name and has to wait for approval.
         rose_action, result = self.roseClient.change_name(new_name="Friends <3")
         self.assertEquals(rose_action.resolution.status, "waiting")
+        self.assertEquals(rose_action.resolution.specific_status, "waiting")
         self.assertFalse(rose_action.resolution.is_resolved)
         self.assertFalse(rose_action.resolution.is_approved)
-        self.assertFalse(rose_action.resolution.condition)
+        self.assertTrue(rose_action.resolution.conditions)
 
         # Pinoe approves Rose's name change.
         condition_item = self.cc.get_condition_item_given_action_and_source(
@@ -2447,7 +2479,7 @@ class ResolutionFieldTest(DataTestCase):
         self.assertEquals(rose_action.resolution.status, "implemented")
         self.assertTrue(rose_action.resolution.is_resolved)
         self.assertTrue(rose_action.resolution.is_approved)
-        self.assertEquals(rose_action.resolution.condition, "approvalcondition")
+        self.assertEquals(rose_action.resolution.approved_condition, "approvalcondition")
         self.instance = self.commClient.get_community(community_pk=str(self.instance.pk))
         self.assertEquals(self.instance.name, "Friends <3")
 
@@ -2462,8 +2494,6 @@ class ResolutionFieldTest(DataTestCase):
         self.assertEquals(self.instance.name, "Friends <3")
         self.assertTrue(rose_action.resolution.is_resolved)
         self.assertFalse(rose_action.resolution.is_approved)
-        # self.assertEquals(rose_action.resolution.condition, "approvalcondition") refactored so rejections 
-            # don't save 'resolved_through', condition -- alas
 
         
 class ConfigurablePermissionTest(DataTestCase):
@@ -2687,9 +2717,9 @@ class MockActionTest(DataTestCase):
 
         self.assertEquals(summary_status, "approved")
         self.assertEquals(log[0]["status"], "approved")
-        self.assertEquals(log[0]["log"], "action approved via governing pipeline with with no condition set")
+        self.assertEquals(log[0]["log"], "approved through governing with role None and condition None")
         self.assertEquals(log[1]["status"], "approved")
-        self.assertEquals(log[1]["log"], "action approved via governing pipeline with with no condition set")
+        self.assertEquals(log[1]["log"], "approved through governing with role None and condition None")
 
     def test_check_permissions_for_action_group_when_user_does_not_have_permission(self):
 
@@ -2736,9 +2766,9 @@ class MockActionTest(DataTestCase):
 
         self.assertEquals(summary_status, "waiting")
         self.assertEquals(log[0]["status"], "waiting")
-        self.assertTrue("waiting on condition mock condition" in log[0]["log"])
+        self.assertTrue("waiting on condition(s) for governing, specific" in log[0]["log"])
         self.assertEquals(log[1]["status"], "waiting")
-        self.assertTrue("waiting on condition mock condition" in log[1]["log"])
+        self.assertTrue("waiting on condition(s) for governing, specific" in log[1]["log"])
 
 
 class ActionContainerTest(DataTestCase):
@@ -2774,98 +2804,77 @@ class ActionContainerTest(DataTestCase):
         self.mock_action_list.append(self.commClient.add_people_to_role(role_name="spirit players", 
             people_to_add=[self.users.rose.pk, self.users.aubrey.pk]))
 
-    def test_initialize_container(self):
+        self.commClient.mode = "default"
+
+        from concord.actions.utils import MockAction
+        self.mock_trigger_action = MockAction(actor=self.users.pinoe, target=self.instance, change="fake")
+        self.mock_trigger_action.pk = 10000
+
+    def test_create_and_apply_container(self):
 
         actions = Action.objects.all()   # before container is created, no actions in db
         self.assertEquals(len(actions), 0)
         
-        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
+        container, log = self.actionClient.create_action_container(action_list=self.mock_action_list,
+            trigger_action=self.mock_trigger_action)
 
         actions = Action.objects.all()   # refresh
         self.assertEquals(len(actions), 5)
-
-        self.assertEquals(container.summary_status, "drafted")
-        self.assertEquals(json.loads(container.action_info)['0']['log'], None)
+        self.assertEquals(container.summary_status, "implemented")
         self.assertEquals(actions[0].container, container.pk)
 
-    def test_process_actions_with_and_without_commiting(self):
+        self.assertCountEqual(self.instance.roles.get_custom_roles(), {'forwards': [self.users.christen.pk, self.users.tobin.pk], 
+            'spirit players': [self.users.rose.pk, self.users.aubrey.pk]})
 
-        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
-        action_statuses = [action.resolution.status for action in Action.objects.all()]
-        self.assertEquals(action_statuses, ['draft', 'draft', 'draft', 'draft', 'draft'])
-
-        # by default, we assume you *don't* want to commit, so with no test=False passed in, we won't commit
-        container = self.actionClient.retry_action_container(container_pk=container.pk)
-        action_statuses = [action.resolution.status for action in Action.objects.all()]
-        self.assertEquals(action_statuses, ['draft', 'draft', 'draft', 'draft', 'draft'])
-        self.assertEquals(container.summary_status, "okay to commit")
-        self.assertEquals(self.commClient.get_members(), [self.users.pinoe])
-        self.assertEquals(self.commClient.get_custom_roles(), {})
-
-        # now we pass test=False in
-        container = self.actionClient.retry_action_container(container_pk=container.pk, test=False)
-        action_statuses = [action.resolution.status for action in Action.objects.all()]
-        self.assertEquals(action_statuses, ['implemented', 'implemented', 'implemented', 'implemented', 'implemented'])
-        self.assertEquals(container.summary_status, "committed")
-        self.commClient.refresh_target()
-        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.rose, self.users.tobin,
-            self.users.christen, self.users.aubrey])
-        self.assertEquals(self.commClient.get_custom_roles(), {'forwards': [3, 4], 'spirit players': [2, 10]})
+    def test_container_rejects_when_an_action_is_rejected(self):
         
-    def test_cant_commit_actions_without_permission(self):
+        # remove pinoe as governor so she no longer has permission to take the mock actions
+        action, result = self.commClient.remove_governor(governor_pk=self.users.pinoe.pk)
 
-        # give pinoe specific permissions, but leave one out so container fails
-        self.commClient.mode = "default"
-        self.permClient.add_permission(permission_type=Changes.Communities.AddMembers, 
-            permission_actors=[self.users.pinoe.pk]) 
-        self.permClient.add_permission(permission_type=Changes.Communities.AddRole, 
-            permission_actors=[self.users.pinoe.pk]) 
-        self.permClient.add_permission(permission_type=Changes.Communities.AddPeopleToRole, 
-            permission_actors=[self.users.rose.pk])   # NOT PINOE
-        # then remove Pinoe as governor so she doesn't automatically pass all the actions
-        self.commClient.remove_governor(governor_pk=self.users.pinoe.pk)
+        # container is rejected
+        container, log = self.actionClient.create_action_container(action_list=self.mock_action_list,
+            trigger_action=self.mock_trigger_action)
+        self.assertEquals(container.summary_status, "rejected")
 
-        # now try again process actions
-        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
-        container = self.actionClient.retry_action_container(container_pk=container.pk, test=False)
-        self.assertEquals(container.summary_status, "not okay to commit")
-        action_statuses = [action.resolution.status for action in Action.objects.all()]
-        self.assertEquals(action_statuses[4:], ['draft', 'draft', 'draft', 'draft', 'draft'])
-        action_info = json.loads(container.action_info)
-        # The last two actions should be the ones that fail
-        status = [action["status"] for index, action in action_info.items()]
-        self.assertEquals(status, ["implemented", "implemented", "implemented", "lacks permission", "lacks permission"])
+        # changes are not made
+        self.assertEquals(self.instance.roles.get_custom_roles(), {})
 
-    def test_cant_commit_actions_until_condition_is_resolved(self):
+    def test_container_creates_conditions_for_actions(self):
 
-        # give pinoe specific permissions
-        self.commClient.mode = "default"
-        self.permClient.add_permission(permission_type=Changes.Communities.AddMembers, 
-            permission_actors=[self.users.pinoe.pk]) 
-        self.permClient.add_permission(permission_type=Changes.Communities.AddRole, 
-            permission_actors=[self.users.pinoe.pk]) 
-        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddPeopleToRole, 
-            permission_actors=[self.users.pinoe.pk])   
-        # add condition to permission
+        # swap governors so Pinoe doesn't just automatically pass everything
+        self.commClient.add_members([self.users.crystal.pk])
+        self.commClient.add_governor(governor_pk=self.users.crystal.pk)
+        action, result = self.commClient.remove_governor(governor_pk=self.users.pinoe.pk)
+        self.permClient.set_actor(actor=self.users.crystal)
+
+        # new governor, Crystal, adds specific permissions for Pinoe to take the five actions
+        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddMembers,
+            permission_actors=[self.users.pinoe.pk])
+        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddRole,
+            permission_actors=[self.users.pinoe.pk])
+        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddPeopleToRole,
+            permission_actors=[self.users.pinoe.pk])
+        # add condition to one of the permissions
         permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk] }]
         action, result = self.permClient.add_condition_to_permission(permission_pk=permission.pk, 
             condition_type="approvalcondition", condition_data={"self_approval_allowed": True}, 
             permission_data=permission_data)
-        # then remove Pinoe as governor so she doesn't automatically pass all the actions
-        self.commClient.remove_governor(governor_pk=self.users.pinoe.pk)
+        
+        # now apply container/template containing Pinoe's actions
+        container, log = self.actionClient.create_action_container(action_list=self.mock_action_list,
+            trigger_action=self.mock_trigger_action)
+        self.assertEquals(container.summary_status, "waiting")
 
-        # now try again process actions
-        container = self.actionClient.create_action_container(action_list=self.mock_action_list)
-        container = self.actionClient.retry_action_container(container_pk=container.pk, test=False)
-        self.assertEquals(container.summary_status, "not okay to commit")
-        action_statuses = [action.resolution.status for action in Action.objects.all()]
-        self.assertEquals(action_statuses[5:], ['draft', 'draft', 'draft', 'draft', 'draft'])
-        action_info = json.loads(container.action_info)
-        self.assertTrue("waiting on condition approvalcondition" in action_info["3"]["log"])
-        self.assertTrue("waiting on condition approvalcondition" in action_info["4"]["log"])
-        # The last two actions should be the ones that fail
-        status = [action["status"] for index, action in action_info.items()]
-        self.assertEquals(status, ["implemented", "implemented", "implemented", "lacks permission", "lacks permission"])
+        # crystal gets conditions from container and approves them
+        for condition in container.context.get_conditions():
+            approvalClient = ApprovalConditionClient(actor=self.users.crystal, target=condition)
+            approvalClient.approve()
+
+        # retry Pinoe's actions
+        container, log = self.actionClient.retry_action_container(container_pk=container.pk)
+        self.assertEquals(container.summary_status, "implemented")
+        self.assertCountEqual(self.instance.roles.get_custom_roles(), {'forwards': [self.users.christen.pk, self.users.tobin.pk], 
+            'spirit players': [self.users.rose.pk, self.users.aubrey.pk]})        
 
 
 @skip("Rethinking how membership settings are done")
@@ -3243,7 +3252,6 @@ class MembershipSettingsTest(DataTestCase):
         self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.christen, self.users.crystal])
 
 
-@skip("Refactoring templates, pause for now")
 class TemplateTest(DataTestCase):
 
     def setUp(self):
@@ -3253,500 +3261,48 @@ class TemplateTest(DataTestCase):
         self.instance = self.commClient.create_community(name="USWNT")
         self.commClient.set_target(self.instance)
         self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
-        self.templateClient = TemplateClient(actor=self.users.pinoe)
-
-    def set_up_simple_community(self):
-
-        # Set up community
         self.commClient.add_role(role_name="forwards")
-        self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk])
-        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk,
-            self.users.christen.pk])
-        # Add permission
-        self.permClient.add_permission(permission_type=Changes.Communities.ChangeName, 
-            permission_actors=[self.users.aubrey.pk], permission_roles=["forwards"])
-        permission = self.permClient.get_permissions_on_object(object=self.instance)[0]
-        # Add condition on permission
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.christen.pk] }]
-        action, result = self.permClient.add_condition_to_permission(permission_pk=permission.pk,
-            condition_type="approvalcondition", permission_data=permission_data)
-      
-        # Add condition on community
-        self.condClient = ConditionalClient(actor=self.users.pinoe, target=self.instance)
-        permission_data = [{"permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk] }]
-        action, result = self.condClient.add_leadership_condition(
-            condition_type="approvalcondition", leadership_type="owner", permission_data=permission_data)
-
-    def set_up_complex_community(self):
-        
-        # Set up community
-        self.commClient.add_role(role_name="forwards")
-        self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk])
-        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk,
-            self.users.christen.pk])
-
-        # Add some owned objects
-        self.resourceClient = ResourceClient(actor=self.users.pinoe)
-        self.resource = self.resourceClient.create_resource(name="WoSo Forum")
-        self.resourceClient.set_target(target=self.resource)
-        self.resource2 = self.resourceClient.create_resource(name="Ticker Tape Parade Pictures")
-
-        # Change owners so resources so community it self-contained
-        self.resourceClient.change_owner_of_target(new_owner=self.instance)
-        self.resourceClient.set_target(target=self.resource2)
-        self.resourceClient.change_owner_of_target(new_owner=self.instance)
-
-        # Add permission
-        self.permClient.add_permission(permission_type=Changes.Communities.ChangeName, 
-            permission_actors=[self.users.aubrey.pk], permission_roles=["forwards"])
-        permission = self.permClient.get_permissions_on_object(object=self.instance)[0]
- 
-        # Add condition on permission
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.christen.pk] }]
-        action, result = self.permClient.add_condition_to_permission(permission_pk=permission.pk,
-            condition_type="approvalcondition", permission_data=permission_data)
- 
-        # Add permission on resource
-        self.permClient.set_target(self.resource2)
-        result, perm = self.permClient.add_permission(permission_type=Changes.Resources.AddItem, 
-            permission_roles=["members"])
-        self.permission_level_one = self.permClient.get_permissions_on_object(object=self.resource2)[0]
-
-        # Add nested permission
-        self.permClient.set_target(self.permission_level_one)
-        self.permClient.add_permission(permission_type=Changes.Permissions.RemoveRoleFromPermission,
-            permission_actors=[self.users.aubrey.pk])
-        self.permission_level_two = self.permClient.get_permissions_on_object(object=self.permission_level_one)[0]
-
-       # Add condition on community
-        self.condClient = ConditionalClient(actor=self.users.pinoe, target=self.instance)
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}]
-        action, result = self.condClient.add_leadership_condition(
-            leadership_type="owner", condition_type="approvalcondition", permission_data=permission_data)
-
-    def test_make_template_from_community(self):
-
-        # create template from community
-        template_model = self.templateClient.make_template(community=self.instance, 
-            description="My new template")
-        self.assertEqual(template_model.description, "My new template")
-        self.assertEqual(template_model.data.get_community().name, "USWNT")
-        self.assertEqual(template_model.data.get_community().pk, None)
-        self.assertEqual(template_model.data.get_community().roles.members, [1])
-        self.assertEqual(template_model.data.get_community().roles.owners["actors"], [1])
-
-        # try again with more things in community
-        self.commClient.add_role(role_name="forwards")
-        self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk])
-        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk,
-            self.users.christen.pk])
-
-        template_model = self.templateClient.make_template(community=self.instance, 
-            description="An even better template")
-        self.assertEqual(template_model.description, "An even better template")
-        self.assertEqual(template_model.data.get_community().roles.custom_roles["forwards"], [3,4])
-        self.assertEqual(template_model.data.get_community().roles.members, [1,3,4])
-
-    def test_make_template_from_condition(self):
-        
-        # Set condition on an action so we can templatize it
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}]
-        action, result = self.commClient.add_leadership_condition(
-            leadership_type="governor", condition_type="approvalcondition", permission_data=permission_data)
-        ct = self.condClient.get_condition_template_for_governor()
-
-        # convert instance to template model using client
-        template_model = self.templateClient.make_template(community=self.instance, conditions=[ct], 
-            description="Pinoe must approve condition template")
-        self.assertEquals(template_model.description, "Pinoe must approve condition template")
-        template_of_condition = template_model.data.get_conditions()[0]
-        self.assertEquals(template_of_condition.condition_data.condition_type, "approvalcondition")
-        self.assertEquals(template_of_condition.condition_data.permission_data["approve_actors"], [1])
-
-    def test_make_template_from_permission(self):
-        """Template model version of test_templatize_permissions"""
-
-        # Set up permission
-        self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk, self.users.aubrey.pk])
-        self.commClient.add_role(role_name="forwards")
-        self.permClient.add_permission(permission_type=Changes.Communities.ChangeName, 
-            permission_actors=[self.users.aubrey.pk], permission_roles=["forwards"])
-        permission = self.permClient.get_permissions_on_object(object=self.instance)[0]
-
-        # Test template
-        template_model = self.templateClient.make_template(community=self.instance, permissions=[permission],
-            description="Forwards and Aubrey can change name permission template")
-        self.assertEquals(template_model.description, "Forwards and Aubrey can change name permission template")
-        permission_template = template_model.data.get_permissions()[0]
-        self.assertEquals(permission_template.inverse, False)
-        self.assertEquals(permission_template.roles.get_roles()[0], "forwards")
-
-    def test_make_template_from_resource_and_item(self):
-
-        # Create
-        self.rc = ResourceClient(actor=self.users.pinoe)
-        resource = self.rc.create_resource(name="Go USWNT!")
-        self.rc.set_target(target=resource)
-        self.rc.change_owner_of_target(new_owner=self.instance)
-        action, item = self.rc.add_item(item_name="Equal Pay")
-        self.rc.set_target(target=item)
-        self.rc.change_owner_of_target(new_owner=self.instance)
-
-        # Templatize resource & item
-        template_model = self.templateClient.make_template(community=self.instance, 
-            owned_objects=[resource, item], description="USWNT Resource & Item")
-        self.assertEquals(template_model.description, "USWNT Resource & Item")
-        template_resource = template_model.data.get_owned_objects()[0]
-        self.assertEquals(template_resource.name, "Go USWNT!")
-        template_item = template_model.data.get_owned_objects()[1]
-        self.assertEquals(template_item.name, "Equal Pay")
-
-    def test_create_new_community_instances_from_templates(self):
-
-        # make template from community
-        template_model = self.templateClient.make_template(community=self.instance, 
-            description="My new template")
-        self.templateClient.set_target(target=template_model)
-
-        # make community from template
-        created_objects = self.templateClient.create_from_template()
-        self.assertEqual(len(created_objects), 1)
-        self.assertEqual(created_objects[0].__class__.__name__, "Community")
-        self.assertEqual(created_objects[0].name, "USWNT")
-        self.assertNotEqual(created_objects[0].pk, self.instance.pk)
-
-        # try again with more things in community
-        self.commClient.add_role(role_name="forwards")
-        self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk])
-        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk,
-            self.users.christen.pk])
-        template_model = self.templateClient.make_template(community=self.instance, 
-            description="An even better template")
-        self.templateClient.set_target(target=template_model)
-        
-        # make new community from new template
-        created_objects = self.templateClient.create_from_template()
-        self.assertEqual(len(created_objects), 1)
-        self.assertEqual(created_objects[0].__class__.__name__, "Community")
-        self.assertEqual(created_objects[0].roles.custom_roles["forwards"], [3,4])
-        self.assertEqual(created_objects[0].roles.members, [1,3,4])
-
-    def test_create_new_conditional_instances_from_templates(self):
-
-        # Set condition and make template of it
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}]
-        action, result = self.commClient.add_leadership_condition(
-            leadership_type="governor", condition_type="approvalcondition", permission_data=permission_data
-        )
-        ct = self.condClient.get_condition_template_for_governor()
-        template_model = self.templateClient.make_template(community=self.instance, conditions=[ct], 
-            description="Pinoe must approve condition template")
-        self.templateClient.set_target(target=template_model)
-
-        # Create condition from template
-        created_objects = self.templateClient.create_from_template()
-        self.assertEquals(len(created_objects), 2)
-        self.assertEquals(created_objects[1].condition_data.condition_type, "approvalcondition")
-        self.assertEquals(created_objects[1].condition_data.permission_data["approve_actors"], [1])
-
-        # Original condition is set on original community, new condition set on new community
-        self.assertNotEqual(ct.pk, created_objects[1].pk)
-        self.assertNotEquals(self.instance.pk, created_objects[0].pk)
-        self.assertEquals(ct.conditioned_object, self.instance)
-        self.assertEquals(created_objects[1].conditioned_object, created_objects[0])
-
-    def test_create_new_permission_instances_from_templates(self):
-
-        # Create new permission & template of permission
-        self.commClient.add_members([self.users.tobin.pk, self.users.christen.pk, self.users.aubrey.pk])
-        self.commClient.add_role(role_name="forwards")
-        self.permClient.add_permission(permission_type=Changes.Communities.ChangeName, 
-            permission_actors=[self.users.aubrey.pk], permission_roles=["forwards"])
-        permission = self.permClient.get_permissions_on_object(object=self.instance)[0]
-        template_model = self.templateClient.make_template(community=self.instance, permissions=[permission], 
-            description="Forwards and Aubrey can change name permission template")
-        self.templateClient.set_target(target=template_model)
-
-        # Create new permission from template
-        created_objects = self.templateClient.create_from_template()
-        self.assertEquals(created_objects[1].permitted_object, created_objects[0])
-        self.assertTrue("ChangeName" in created_objects[1].change_type)
-        self.assertEquals(created_objects[1].roles.get_roles()[0], "forwards")
-        self.assertEquals(created_objects[1].actors.as_pks(), [self.users.aubrey.pk])
-
-    def test_create_new_resource_and_item_instances_from_templates(self):
-        # Note - we need to pass in both resource and item since our templating system does
-        # not recursively map related fields that are not conditions/permissions.  Also note
-        # that we need to change owners for the templates to actually be created.
-
-        # Create & templatize resource and item
-        self.rc = ResourceClient(actor=self.users.pinoe)
-        resource = self.rc.create_resource(name="Go USWNT!")
-        self.rc.set_target(target=resource)
-        self.rc.change_owner_of_target(new_owner=self.instance)
-        action, item = self.rc.add_item(item_name="Equal Pay")
-        self.rc.set_target(target=item)
-        self.rc.change_owner_of_target(new_owner=self.instance)
-        template_model = self.templateClient.make_template(community=self.instance, 
-            owned_objects=[resource, item], description="Resource & item")
-        self.templateClient.set_target(target=template_model)
-
-        # Create resource & item from template
-        created_objects = self.templateClient.create_from_template()
-        self.assertEquals(created_objects[0].__class__.__name__, "Community")
-        self.assertEquals(created_objects[1].name, "Go USWNT!")
-        self.assertEquals(created_objects[2].name, "Equal Pay")
-        self.assertEquals(created_objects[1].owner, created_objects[0])
-        self.assertEquals(created_objects[2].owner, created_objects[0])
-        self.assertEquals(created_objects[2].resource, created_objects[1])
-
-    def test_create_from_template_of_simple_community(self):
-
-        # Create simple community, generate template, and then generate new set of instances
-        self.set_up_simple_community()
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, description="Simple Community Template")
-        self.templateClient.set_target(target=template_model)
-        created_objects = self.templateClient.create_from_template()
-        self.assertEquals(len(created_objects), 4)
-        community, permission, permission_condition, community_condition = created_objects
-
-        self.assertEquals(permission.permitted_object, community)
-        self.assertEquals(permission.roles.get_roles()[0], "forwards")
-        self.assertEquals(permission_condition.conditioned_object, permission)
-        self.assertEquals(community_condition.conditioned_object, community)
-
-    def test_create_from_template_of_complex_community(self):
-
-        # Create complex community, generate template, and then generate new set of instances
-        self.set_up_complex_community()
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        owned_objects = list(Resource.objects.all()) + list(Item.objects.all())
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, owned_objects=owned_objects, description="Complex Community Template")
-        created_objects = self.templateClient.create_from_template(template_model=template_model)
-        self.assertEquals(len(created_objects), 8)
-        community, perm1, perm_condition, com_condition, resource1, resource2, perm2, perm3 = created_objects
-        
-        # test community
-        self.assertEquals(list(community.roles.get_custom_role_names()), ["forwards"])
-        self.assertEquals(community.roles.members, 
-            [self.users.pinoe.pk, self.users.tobin.pk, self.users.christen.pk])
-        self.assertEquals(community.roles.get_users_given_role("forwards"), 
-            [self.users.tobin.pk, self.users.christen.pk])
-
-        # test conditions
-        data = perm_condition.condition_data
-        self.assertEquals(perm_condition.conditioned_object, perm1)
-        self.assertEquals(data.condition_type, "approvalcondition")
-        self.assertEquals(data.permission_data["approve_actors"], [self.users.christen.pk])
-
-        data = com_condition.condition_data
-        self.assertEquals(com_condition.conditioned_object, community)
-        self.assertEquals(data.condition_type, "approvalcondition")
-        self.assertEquals(data.target_type, "own")
-        self.assertEquals(data.permission_data["approve_actors"], [self.users.pinoe.pk])
-
-        # test permissions
-        self.assertEquals(perm1.permitted_object, community)
-        self.assertEquals(perm1.change_type, Changes.Communities.ChangeName)
-        self.assertEquals(perm1.actors.as_pks(), [self.users.aubrey.pk])
-        self.assertEquals(perm1.roles.role_list, ["forwards"])
-        self.assertEquals(perm2.permitted_object, resource2)
-        self.assertEquals(perm2.change_type, Changes.Resources.AddItem)
-        self.assertEquals(perm2.roles.role_list, ["members"])
-        self.assertEquals(perm3.permitted_object, perm2)
-        self.assertEquals(perm3.change_type, Changes.Permissions.RemoveRoleFromPermission)
-        self.assertEquals(perm3.actors.as_pks(), [self.users.aubrey.pk])
-
-        # test resources
-        self.assertEquals(resource1.owner, community)
-        self.assertEquals(resource1.name, "WoSo Forum")
-        self.assertEquals(resource2.owner, community)
-        self.assertEquals(resource2.name, "Ticker Tape Parade Pictures")
-      
-    def test_generate_text_from_template_of_simple_community(self):
-
-        self.set_up_simple_community()
-        
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, description="Simple Community Template")
-        text = template_model.data.generate_text()
-
-        self.assertEquals(len(text), 6)
-        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1. It is governed by individual 1. ")
-        self.assertEquals(text["community_governance_info"], 
-            "By default, the owners do not need to approve actions in the community, on the condition that one person in list of individuals (1) needs to approve. Unless otherwise specified, the governors of the community can take any action. ")
-        self.assertEquals(text["community_members_info"], 'The members of this community are 1, 3 and 4. ')
-        self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
-        self.assertEquals(text["community_permissions_info"], 
-            "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that one person in list of individuals (4) needs to approve. ")
-        self.assertEquals(text["owned_objects_basic_info"], "")
-        
-    def test_generate_text_from_template_of_complex_community(self):
-
-        self.set_up_complex_community()
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        owned_objects = list(Resource.objects.all()) + list(Item.objects.all())
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, owned_objects=owned_objects, description="Complex Community Template")
-        text = template_model.data.generate_text()
-
-        self.assertEquals(len(text), 8)
-        self.assertEquals(text["community_basic_info"], "Community USWNT is owned by individual 1. It is governed by individual 1. ")
-        self.assertEquals(text["community_governance_info"], 
-            "By default, the owners do not need to approve actions in the community, on the condition that one person in list of individuals (1) needs to approve. Unless otherwise specified, the governors of the community can take any action. ")
-        self.assertEquals(text["community_members_info"], 'The members of this community are 1, 3 and 4. ')
-        self.assertEquals(text["community_roles_info"], "There is 1 custom role in the community, forwards. Individuals 3 and 4 are 'forwards'. ")
-        self.assertEquals(text["community_permissions_info"], 
-            "Everyone with role forwards and individual 10 can change name of community for USWNT, on the condition that one person in list of individuals (4) needs to approve. ")
-        self.assertEquals(text["owned_objects_basic_info"], "The community owns 2 objects, Resource WoSo Forum and Resource Ticker Tape Parade Pictures. ") 
-        self.assertEquals(text["owned_object_8"], "Everyone with role members can add item to resource for Ticker Tape Parade Pictures. Individual 10 can remove role from permission for AddItemResourceStateChange. ")
-        self.assertEquals(text["owned_object_7"], "")
-
-    def test_get_text_for_configured_permissions(self):
-        """Tests text display for configured permissions."""
-
-        # 'addpeopletorole' is a configured state change, so we create a community
-        # where we can assign this permission
-
-        self.commClient.add_role(role_name="forwards")
-        self.commClient.add_role(role_name="backs")
-        self.commClient.add_members([self.users.tobin.pk, self.users.sonny.pk, self.users.rose.pk])
+        self.commClient.add_members([self.users.tobin.pk])
         self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
-        self.commClient.add_people_to_role(role_name="backs", people_to_add=[self.users.sonny.pk])
 
-        self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
-            permission_actors=[self.users.sonny.pk],
-            permission_configuration={"role_name": "forwards"})
+        self.templateClient = TemplateClient(actor=self.users.pinoe, target=self.instance)
 
-        # test this works - sonny should be able to add people to role "forwards" but not "backs"
-        self.commClient.set_actor(actor=self.users.sonny)
-        self.commClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.rose.pk])
-        self.commClient.add_people_to_role(role_name="backs", people_to_add=[self.users.rose.pk])
-        rose_roles = self.instance.roles.get_roles_given_user(pk=self.users.rose.pk)
-        self.assertEquals(rose_roles, ["forwards", "members"])
+    def test_create_invite_only_template_creates_template(self):
+        template_model = template_library.create_invite_only_template()
+        self.assertEquals(template_model.name, "Invite Only")
 
-        # okay, now let's test we can make a template, and that this shows up in the template
-        permissions = PermissionsItem.objects.all()
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            description="Testing permission configuration")
-        text = template_model.data.generate_text()
-        self.assertEquals(text["community_permissions_info"], 
-            "Individual 7 can add people to role 'forwards' for USWNT. ")
-
-    def test_get_editable_fields(self):
-
-        self.set_up_simple_community()
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, description="Simple Community Template")
+    def test_apply_invite_only_template_to_community(self):
         
-        editable_fields = self.templateClient.get_editable_fields_on_template(template_model=template_model)
+        # Before applying template, Tobin (with role Forward) cannot add members
+        self.commClient.set_actor(actor=self.users.tobin)
+        action, result = self.commClient.add_members([self.users.christen.pk])
+        self.assertEquals(action.resolution.status, "rejected")
+        self.assertEquals(self.commClient.get_members(), [self.users.pinoe, self.users.tobin])
 
-        # FIXME: temporarily removed condition as editable field, but it should be editable
+        # Pinoe applies template model to community
+        supplied_fields = { "addmembers_permission_roles": ["forwards"], 
+            "addmembers_permission_actors": [] }
+        template_model = template_library.create_invite_only_template()
+        action, container = self.templateClient.apply_template(template_model_pk=template_model.pk,
+            supplied_fields=supplied_fields)
+        self.assertEquals(container.summary_status, "implemented")
 
-        # test we have the correct number of fields given the above structure
-        self.assertEquals(len(editable_fields), 17)
+        # now Tobin can add members AND it triggers a condition & permissions set on it
+        action, result = self.commClient.add_members([self.users.christen.pk])
+        self.assertEquals(action.resolution.status, "waiting")
+        self.assertEquals(ApprovalCondition.objects.count(), 1)
 
-        # test we have successfully removed relationship fields and autofields
-        list_of_field_names = [field_dict["field_name"] for field_dict in editable_fields]
-        self.assertNotIn("owner", list_of_field_names)
-        self.assertNotIn("owner_object_id", list_of_field_names)
-        self.assertNotIn("owner_content_type", list_of_field_names)
-        self.assertNotIn("permitted_object_id", list_of_field_names)
-        self.assertNotIn("conditioned_object_id", list_of_field_names)
-        self.assertNotIn("id", list_of_field_names)
-
-        # test we have correct structure for rolefield, rolelist field, actorlistfield
-        editable_role_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "Community")][0]
-        editable_role_list_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "PermissionsItem")][0]
-        editable_actor_list_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "actors" and field_dict["object_model"] == "PermissionsItem")][0]
-        self.assertEquals(editable_role_field["field_value"], self.instance.roles.get_roles())
-        self.assertEquals(editable_role_list_field["field_value"], permissions[0].roles.role_list)
-        self.assertEquals(editable_actor_list_field["field_value"], permissions[0].actors.as_pks())
-
-    def test_update_template_field(self):
-
-        # Generate a template and get editable fields
-        self.set_up_simple_community()
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, description="Simple Community Template")
-        self.templateClient.set_target(target=template_model)        
-        editable_fields = self.templateClient.get_editable_fields_on_template(template_model=template_model)
-
-        # Editing a simple field using valid data successfully updates template
-        community_name_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0]       
-        result = self.templateClient.edit_template_field(
-            template_object_id=community_name_field["template_object_id"], field_name="name", 
-            new_field_data="United States Women's National Team")
-        self.templateClient.refresh_target()
+        # Tobin can't approve invite, only Christen can
+        approval_client = ApprovalConditionClient(actor=self.users.tobin, target=ApprovalCondition.objects.first())
+        action, result = approval_client.approve()
+        self.assertEquals(action.resolution.status, "rejected")
+        approval_client.set_actor(actor=self.users.christen)
+        action, result = approval_client.approve()
+        self.assertEquals(action.resolution.status, "implemented")
+        self.commClient.refresh_target()
+        self.assertEquals(self.commClient.get_members(), 
+            [self.users.pinoe, self.users.tobin, self.users.christen])
         
-        """FIXME: this causes a temporary issue with the data, it can be cleared via refresh_target below
-        but if you don't the permission actors in the condition data are overwritten as strings not ints, this
-        is likely to do with some kind of shallow copying happening when we need a deep copy."""
-        self.assertEquals(self.templateClient.target.data.generate_text()["community_basic_info"],
-            "Community United States Women's National Team is owned by individual 1. It is governed by individual 1. ")
-        self.templateClient.refresh_target()
-
-        # Editing a custom field using valid data successfully updates template
-        community_role_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "Community")][0] 
-        new_role_value = {'forwards': [3, 4], 'mids': [1, 4], 'governors': {'actors': [1], 'roles': []}, 'owners': {'actors': [1], 'roles': []}, 'members': [1, 3, 4]}    
-        result = self.templateClient.edit_template_field(
-            template_object_id=community_name_field["template_object_id"], field_name="roles", 
-            new_field_data=new_role_value)
-        self.templateClient.refresh_target()
-        self.assertEquals(self.templateClient.target.data.generate_text()["community_roles_info"],
-            "There are 2 custom roles in the community: forwards and mids. Individuals 3 and 4 are 'forwards'. Individuals 1 and 4 are 'mids'. ")
-
-        # Editing a custom field using invalid data does not update data, and returns error
-        community_role_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "roles" and field_dict["object_model"] == "Community")][0] 
-        new_role_value = 4
-        action, result = self.templateClient.edit_template_field(
-            template_object_id=community_name_field["template_object_id"], field_name="roles", 
-            new_field_data=new_role_value)
-        self.assertEquals(action.resolution.log,
-            "Data supplied (4) is incorrectly formatted for RoleHandler field")
-
-    def test_edit_field_and_get_new_data(self):
-        
-        # Generate a template and get editable fields
-        self.set_up_simple_community()
-        permissions = PermissionsItem.objects.all()
-        conditions = ConditionTemplate.objects.all()
-        template_model = self.templateClient.make_template(community=self.instance, permissions=permissions,
-            conditions=conditions, description="Simple Community Template")
-        self.templateClient.set_target(target=template_model)        
-        editable_fields = self.templateClient.get_editable_fields_on_template(template_model=template_model)
-
-        # Editing a simple field using the helper method "update_field_and_get_new_data"
-        community_name_field = [field_dict for field_dict in editable_fields
-            if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0]       
-        result = self.templateClient.update_field_and_get_new_data(
-            template_object_id=community_name_field["template_object_id"], field_name="name",
-            new_field_data="United States Women's National Team")
-        self.assertEquals(result["template_text"]["community_basic_info"], 
-            "Community United States Women's National Team is owned by individual 1. It is governed by individual 1. ")
-        community_name_field = [field_dict for field_dict in result["editable_fields"]
-            if (field_dict["field_name"] == "name" and field_dict["object_model"] == "Community")][0] 
-        self.assertEquals(community_name_field["field_value"], "United States Women's National Team")
-
 
 class PermissionedReadTest(DataTestCase):
 
@@ -3907,7 +3463,5 @@ class CommentTest(DataTestCase):
         self.commentClient.delete_comment(pk=comments.first().pk)
         comments = self.commentClient.get_all_comments_on_target()  # refresh
         self.assertEquals(list(comments), [])
-
-
 
 

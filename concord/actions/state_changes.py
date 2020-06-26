@@ -95,7 +95,7 @@ class BaseStateChange(object):
         from concord.permission_resources import permission_models
         from concord.resources import resource_models
 
-        targets = [community_models.Community, community_models.DefaultCommunity, conditional_models.ConditionTemplate,
+        targets = [community_models.Community, community_models.DefaultCommunity,
         conditional_models.VoteCondition, conditional_models.ApprovalCondition, permission_models.PermissionsItem, 
         permission_models.Template, resource_models.Resource, resource_models.Item]
 
@@ -142,6 +142,8 @@ class BaseStateChange(object):
         for field in self.instantiated_fields:
             if field in new_vars:
                 del(new_vars)[field]
+        if "validation_error" in new_vars:
+            del(new_vars)["validation_error"]
         return json.dumps(new_vars)
 
     @classmethod 
@@ -184,10 +186,8 @@ class ChangeOwnerStateChange(BaseStateChange):
         new_owner = model_class.objects.get(id=self.new_owner_id)
 
         target.owner = new_owner
+        target.save()
 
-        if save:
-            target.save()
-    
         return target
 
 
@@ -212,12 +212,8 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, save=True):
-
         target.foundational_permission_enabled = True
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -242,12 +238,8 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, save=True):
-        
         target.foundational_permission_enabled = False
-
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -272,12 +264,8 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, save=True):
-        
         target.governing_permission_enabled = True
-        
-        if save:
-            target.save()
-        
+        target.save()
         return target
 
 
@@ -302,12 +290,8 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, save=True):
-
-        target.governing_permission_enabled = False
-        
-        if save:
-            target.save()
-        
+        target.governing_permission_enabled = False    
+        target.save()    
         return target
 
 
@@ -389,6 +373,44 @@ class ViewChangelessStateChange(BaseStateChange):
             limited_data.update({ field : target_data[field] })
 
         return limited_data
+
+
+class ApplyTemplateStateChange(BaseStateChange):
+    description = "Apply template"
+    preposition = "to"
+    pass_action = True
+
+    def __init__(self, template_model_pk, supplied_fields=None):
+        self.template_model_pk = template_model_pk
+        self.supplied_fields = supplied_fields if supplied_fields else {}
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_all_possible_targets()
+
+    def description_present_tense(self):
+        return "apply template"  
+
+    def description_past_tense(self):
+        return "applied template"
+
+    def validate(self, actor, target):
+        """
+        Put real logic here
+        """
+        return True
+
+    def implement(self, actor, target, action=None):
+        # FIXME: I don't like that this is the only implement with a different signature :/
+        # but I can't figure out a low-hack way to get the action this change is set on
+
+        # Get the template model
+        from concord.actions.models import TemplateModel
+        template_model = TemplateModel.objects.get(pk=self.template_model_pk)
+
+        container, log = template_model.template_data.apply_template(trigger_action=action, 
+            supplied_fields=self.supplied_fields)
+        return container
 
 
 # FIXME: must be a better approach than just listing these

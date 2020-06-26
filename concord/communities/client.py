@@ -12,7 +12,6 @@ from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
 from concord.communities.utils import MembershipHelper, get_membership_setting
-from concord.permission_resources.templates import community_governance_info_to_text
 
 
 ######################
@@ -224,20 +223,20 @@ class CommunityClient(BaseClient):
 
     # Complex/multiple state changes
 
-    def change_membership_setting(self, new_setting, extra_data=None):
-        """Changes membership setting.  Doing so always creates a new AddMemberPermission in the database, so we always
-        pass back the new permission pk, with optional additional data."""
+    # def change_membership_setting(self, new_setting, extra_data=None):
+    #     """Changes membership setting.  Doing so always creates a new AddMemberPermission in the database, so we always
+    #     pass back the new permission pk, with optional additional data."""
 
-        previous_setting = self.get_membership_setting()
-        membership_helper = MembershipHelper(actor=self.actor, community=self.target, previous_setting=previous_setting,
-            new_setting=new_setting, extra_data=extra_data)
-        mock_action_list = membership_helper.generate_actions_to_switch_settings()
+    #     previous_setting = self.get_membership_setting()
+    #     membership_helper = MembershipHelper(actor=self.actor, community=self.target, previous_setting=previous_setting,
+    #         new_setting=new_setting, extra_data=extra_data)
+    #     mock_action_list = membership_helper.generate_actions_to_switch_settings()
 
-        from concord.actions.client import ActionClient
-        actionClient = ActionClient(actor=self.actor)
-        container = actionClient.create_action_container(action_list=mock_action_list)
-        container = actionClient.retry_action_container(container_pk=container.pk, test=False)
-        return container
+    #     from concord.actions.client import ActionClient
+    #     actionClient = ActionClient(actor=self.actor)
+    #     container = actionClient.create_action_container(action_list=mock_action_list)
+    #     container = actionClient.retry_action_container(container_pk=container.pk, test=False)
+    #     return container
 
     def update_owners(self, *, new_owner_data):
         """Takes in a list of owners, adds those that are missing and removes those that

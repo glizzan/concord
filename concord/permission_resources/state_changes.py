@@ -79,30 +79,20 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         permission = PermissionsItem()
-        permission.owner = target.get_owner() # FIXME: should it be the target owner though?
-        permission.permitted_object = target
-        permission.anyone = self.anyone
-        permission.change_type = self.permission_type
-        permission.inverse = self.inverse   
-        
-        if self.permission_actors:  # FIXME: maybe don't need to check if empty here
-            permission.actors.add_actors(actors=self.permission_actors)
-        permission.roles.add_roles(role_list=self.permission_roles)
-        
-        if self.permission_configuration:
-            #FIXME: probably not the place to do this formatting :/
-            configuration_dict = {}
-            for key, value in self.permission_configuration.items():
-                if value not in [None, [], ""]:
-                    configuration_dict[key] = value
-            permission.set_configuration(configuration_dict=configuration_dict)
-    
-        if save:
-            permission.save()
-    
+        permission.set_fields(
+            owner = target.get_owner(),
+            permitted_object = target, 
+            anyone = self.anyone, 
+            change_type = self.permission_type, 
+            inverse = self.inverse, 
+            actors = self.permission_actors, 
+            roles = self.permission_roles, 
+            configuration = self.permission_configuration
+        )
+        permission.save()
         return permission
 
 
@@ -137,8 +127,7 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
     def implement(self, actor, target, save=True):
         try:
             item = PermissionsItem.objects.get(pk=self.item_pk)
-            if save:
-                item.delete()
+            item.delete()
             return True
         except Exception as exception:
             print(exception)
@@ -179,13 +168,9 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target, save=True):
-        
         self.instantiate_fields()
         self.permission.actors.add_actors(actors=[self.actor_to_add])
-
-        if save:
-            self.permission.save()
-    
+        self.permission.save()
         return self.permission
 
 
@@ -223,13 +208,9 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target, save=True):
-
         self.instantiate_fields()
         self.permission.actors.remove_actors(actors=[self.actor_to_remove])
-        
-        if save:
-            self.permission.save()
-        
+        self.permission.save()
         return self.permission
 
 
@@ -266,13 +247,9 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target, save=True):
-
         self.instantiate_fields()
         self.permission.add_role_to_permission(role=self.role_name)
-        
-        if save:
-            self.permission.save()
-        
+        self.permission.save()
         return self.permission
 
 
@@ -339,14 +316,10 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         self.instantiate_fields()
         self.permission.remove_role_from_permission(role=self.role_name)
-        
-        if save:
-            self.permission.save()
-        
+        self.permission.save()
         return self.permission
 
 
@@ -378,7 +351,7 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         # put real logic here
         return True
     
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         self.instantiate_fields()
         configuration = self.permission.get_configuration()
@@ -387,9 +360,7 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         configuration[self.configurable_field_name] = self.configurable_field_value
         self.permission.set_configuration(configuration)
         
-        if save:
-            self.permission.save()
-        
+        self.permission.save()
         return self.permission
 
 
@@ -421,13 +392,9 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
         return True
     
     def implement(self, actor, target, save=True):
-
         self.instantiate_fields()
         self.permission.inverse = self.change_to
-        
-        if save:
-            self.permission.save()
-        
+        self.permission.save()
         return self.permission
 
 
@@ -453,14 +420,10 @@ class EnableAnyoneStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         permission = self.look_up_permission()
         permission.anyone = True
-        
-        if save:
-            permission.save()
-        
+        permission.save()
         return permission
 
 
@@ -486,14 +449,10 @@ class DisableAnyoneStateChange(PermissionResourceBaseStateChange):
         # put real logic here
         return True
     
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         permission = self.look_up_permission()
         permission.anyone = False
-        
-        if save:
-            permission.save()
-        
+        permission.save()
         return permission
 
 
@@ -533,16 +492,15 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
         mock_action_list = []
         action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
             condition_data=self.condition_data, permission_pk=permission.pk)
-        action_1.add_command_to_dependent_fields(command="REPLACE target WITH trigger_action")
+        action_1.target = "{{trigger_action}}"
         mock_action_list.append(action_1)
 
         perm_client.target = action_1
         for permission_item_data in self.permission_data:
             next_action = perm_client.add_permission(**permission_item_data)
-            command = f"REPLACE target WITH previous_action {action_1.unique_id} result"
-            next_action.add_command_to_dependent_fields(command=command)
+            next_action.target = "{{previous.0.result}}"
             mock_action_list.append(next_action)
-        
+
         return mock_action_list
 
     def validate(self, actor, target):
@@ -564,7 +522,7 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
             self.set_validation_error(message=error.message)
             return False
         
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         permission = self.look_up_permission() 
         
@@ -572,9 +530,7 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
         condition_action, permissions_actions = permission.condition.action_list[0], permission.condition.action_list[1:]
         permission.condition.description = text_utils.condition_template_to_text(condition_action, permissions_actions)
         
-        if save:
-            permission.save()
-
+        permission.save()
         return permission
 
 
@@ -597,15 +553,10 @@ class RemovePermissionConditionStateChange(PermissionResourceBaseStateChange):
     def validate(self, actor, target):
         return True
         
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         permission = self.look_up_permission()
-
         permission.condition.action_list = []
-        
-        if save:
-            permission.save()
-
+        permission.save()
         return permission
 
 
@@ -645,11 +596,9 @@ class EditTemplateStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
-        
-        if save:
-            target.save()
+        target.save()
 
         return target

@@ -36,6 +36,46 @@ def generate_condition_form(condition_object, permissions_objects):
     return basic_info
 
 
+def parse_action_list_into_condition_and_permission_objects(action_list):
+
+    # get condition object
+    from concord.conditionals.client import ConditionalClient
+    condition_model = ConditionalClient(system=True).get_condition_class(condition_type=action_list[0].change.condition_type)
+    condition_object = condition_model(**action_list[0].change.condition_data)
+
+    # get permissions objects
+    from concord.permission_resources.models import PermissionsItem
+    permission_objects = []
+    for action in action_list[1:]:
+        permission = PermissionsItem()
+        permission.set_fields(
+            change_type = action.change.permission_type,
+            actors = action.change.permission_actors,
+            roles = action.change.permission_roles,
+            inverse = action.change.inverse,
+            anyone = action.change.anyone,
+            configuration = action.change.permission_configuration
+        )
+        permission_objects.append(permission)
+
+    return condition_object, permission_objects
+
+
+def generate_condition_form_from_action_list(action_list, info):
+
+    condition, permissions = parse_action_list_into_condition_and_permission_objects(action_list)
+
+    if info == "all":
+        return generate_condition_form(condition, permissions)
+    if info == "fields":
+        return generate_condition_fields_for_form(condition, permissions)
+    if info == "basic":
+        return get_basic_condition_info(condition)
+
+    return generate_condition_form(condition, permissions)
+
+
+
 def description_for_passing_approval_condition(fill_dict=None):
 
     # HACK to prevent key errors & fix formatting :/   FIXME actors should be usernames not pks too

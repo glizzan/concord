@@ -5,8 +5,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange
-from concord.conditionals.models import ConditionTemplate
-from concord.conditionals.customfields import ConditionData
 
 
 ###################################
@@ -81,171 +79,25 @@ class SetConditionOnActionStateChange(BaseStateChange):
         try:
             condition_class = self.get_condition_class()
             source_id = self.generate_source_id()
-            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **self.condition_data)
+
+            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(), 
+                **(self.condition_data if self.condition_data else {}))
+
             return True
         except ValidationError as error:
             self.set_validation_error(message=error.message)
             return False
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         condition_class = self.get_condition_class()
         source_id = self.generate_source_id()
 
-        if save:
-            condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **self.condition_data)
-        else:
-            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **self.condition_data)
+        condition_data = self.condition_data if self.condition_data else {} # replaces none so ** doesn't give an error
+        condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
+                **condition_data)
         
         return condition_instance
-
-
-# class AddConditionStateChange(BaseStateChange):
-#     description = "Add condition"
-
-#     def __init__(self, *, condition_type: str, permission_data: Dict, condition_data: Dict, 
-#         action_sourced_fields=None, target_type=None):
-#         self.condition_type = condition_type
-#         self.condition_data = condition_data if condition_data else "{}"
-#         self.permission_data = permission_data
-#         self.action_sourced_fields = action_sourced_fields
-#         self.target_type = target_type
-
-#     @classmethod
-#     def get_settable_classes(cls):
-#         from concord.permission_resources.models import PermissionsItem
-#         return [PermissionsItem]
-
-#     def description_present_tense(self):
-#         return "add condition %s" % (self.condition_type)  
-
-#     def description_past_tense(self):
-#         return "added condition %s" % (self.condition_type)
-
-#     def validate(self, actor, target):
-#         try:
-#             ConditionData(condition_type=self.condition_type, condition_data=self.condition_data,
-#                 permission_data=self.permission_data, target_type=self.target_type, 
-#                 action_sourced_fields=self.action_sourced_fields, validate=True)
-#             return True
-#         except ValidationError as error:
-#             self.set_validation_error(message=error.message)
-#             return False
-        
-#     def implement(self, actor, target):
-#         condition_data = ConditionData(condition_type=self.condition_type, condition_data=self.condition_data,
-#             permission_data=self.permission_data, action_sourced_fields=self.action_sourced_fields, 
-#             target_type=self.target_type, validate=True)
-#         return ConditionTemplate.objects.create(
-#             owner = target.get_owner(), 
-#             condition_data = condition_data,
-#             conditioned_object_content_type = ContentType.objects.get_for_model(target),
-#             conditioned_object_id=target.pk)
-
-
-# class RemoveConditionStateChange(BaseStateChange):
-#     description = "Remove condition"
-#     preposition = "from"
-
-#     def __init__(self, condition_pk):
-#         self.condition_pk = condition_pk
-
-#     @classmethod
-#     def get_settable_classes(cls):
-#         from concord.permission_resources.models import PermissionsItem
-#         return [PermissionsItem]
-
-#     def description_present_tense(self):
-#         return "remove condition with id %s" % (self.condition_pk)  
-
-#     def description_past_tense(self):
-#         return "removed condition with id %s" % (self.condition_pk)  
-
-#     def validate(self, actor, target):
-#         # If we add ability to remove by giving target, check that target == conditioned object
-#         return True
-
-#     def implement(self, actor, target):
-#         template = ConditionTemplate.objects.get(pk=self.condition_pk)
-#         template.delete()
-#         return True
-
-
-# class ChangeConditionStateChange(BaseStateChange):
-#     description = "Change condition"
-#     preposition = "on"
-
-#     def __init__(self, condition_pk, permission_data: Dict, condition_data: Dict):
-#         # For now only permission data and condition data are changeable, if you want to switch
-#         # the condition type, owner, etc, you'll have to remove and add another.
-#         self.condition_pk = condition_pk
-#         self.condition_data = condition_data if condition_data else "{}"
-#         self.permission_data = permission_data
-
-#     @classmethod
-#     def get_settable_classes(cls):
-#         from concord.permission_resources.models import PermissionsItem
-#         return [PermissionsItem] 
-
-#     def description_present_tense(self):
-#         return "change condition %s" % (self.condition_pk)  
-
-#     def description_past_tense(self):
-#         return "changed condition %s" % (self.condition_pk)  
-
-#     def validate(self, actor, target):
-
-#         template = ConditionTemplate.objects.get(pk=self.condition_pk)
-#         error_log = ""
-        
-#         try:
-#             template.condition_data.update_condition_data(self.condition_data)
-#         except ValidationError as error:
-#             for key, value in error.message_dict.items():
-#                 error_log += key + " : " + value[0]
-        
-#         try:
-#             template.condition_data.update_permission_data(self.permission_data)
-#         except ValidationError as error:
-#             for key, value in error.message_dict.items():
-#                 error_log += key + " : " + value[0]
-
-#         if error_log:
-#             self.set_validation_error(message=error_log)
-#             return False
-#         return True
-
-#     def implement(self, actor, target):
-#         template = ConditionTemplate.objects.get(pk=self.condition_pk)
-#         template.condition_data.update_condition_data(self.condition_data)
-#         template.condition_data.update_permission_data(self.permission_data)
-#         template.save()
-#         return template
-
-
-# class AddLeaderConditionStateChange(AddConditionStateChange):
-
-#     @classmethod
-#     def get_settable_classes(cls):
-#         return cls.get_community_models()
-
-
-# class RemoveLeaderConditionStateChange(RemoveConditionStateChange):
-
-#     @classmethod
-#     def get_settable_classes(cls):
-#         return cls.get_community_models()
-
-
-# class ChangeLeaderCondition(ChangeConditionStateChange):
-
-#     @classmethod
-#     def get_settable_classes(cls):
-#         return cls.get_community_models()
-
 
 
 ####################################
@@ -289,14 +141,10 @@ class AddVoteStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.add_vote(self.vote)
         target.add_vote_record(actor)
-        
-        if save:
-            target.save()
-        
+        target.save()
         return True
 
 
@@ -336,13 +184,9 @@ class ApproveStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.approve()
-        
-        if save:
-            target.save()
-        
+        target.save()
         return True
 
 
@@ -379,11 +223,7 @@ class RejectStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target, save=True):
-
+    def implement(self, actor, target):
         target.reject()
-        
-        if save:
-            target.save()
-        
+        target.save()
         return True

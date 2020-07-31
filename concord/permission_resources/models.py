@@ -108,7 +108,7 @@ class PermissionsItem(PermissionedModel):
         return generate_condition_form_from_action_list(self.condition.action_list, info)
 
     def get_target(self):
-        # does this get used? what does it do?
+        # FIXME: does this get used? what does it do?
         return self.permitted_object
 
     def get_permitted_object(self):
@@ -140,9 +140,6 @@ class PermissionsItem(PermissionedModel):
     def get_configured_field_data(self):
         # Returns (possibly empty) dict with format { permissionfieldname : permissionfieldvalue }
         return self.get_configuration()  # is it this simple?
-        # configuration = self.get_configuration()
-        # for field_name, field_data in configuration.items():
-
 
     # Activation & deactivation
 
@@ -214,6 +211,9 @@ class PermissionsItem(PermissionedModel):
                 return True, role
 
         return False, None
+
+    def get_nested_objects(self):
+        return [self.get_owner(), self.permitted_object]
 
 
 def delete_empty_permission(sender, instance, created, **kwargs):

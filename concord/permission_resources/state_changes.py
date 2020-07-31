@@ -41,9 +41,8 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.communities.models import Community
         from concord.resources.models import Resource, Item
-        return [Community, Resource, Item, PermissionsItem]    
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]     
 
     def description_present_tense(self):        
         permission_string = "add permission '%s'" % get_verb_given_permission_type(self.permission_type)
@@ -105,9 +104,8 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.communities.models import Community
         from concord.resources.models import Resource, Item
-        return [Community, Resource, Item]    
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]  
 
     def description_present_tense(self):
         return "remove permission with id %d" % (self.item_pk)  
@@ -146,7 +144,8 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         if hasattr(self, "permission"):
@@ -187,7 +186,8 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         if hasattr(self, "permission"):
@@ -226,7 +226,8 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]   
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         if hasattr(self, "permission"):
@@ -265,7 +266,8 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]   
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     @classmethod 
     def get_configurable_fields(self):
@@ -337,7 +339,8 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]   
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         return "change configuration field %s to value %s on permission %d" % (self.configurable_field_name,
@@ -377,7 +380,8 @@ class ChangeInverseStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]   
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         return "change inverse field to value %s on permission %d (%s)" % (self.change_to, 
@@ -408,7 +412,8 @@ class EnableAnyoneStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         return f"give anyone permission {self.permission_pk}" 
@@ -437,7 +442,8 @@ class DisableAnyoneStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [PermissionsItem]
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         return f"remove anyone from permission {self.permission_pk}" 
@@ -457,7 +463,7 @@ class DisableAnyoneStateChange(PermissionResourceBaseStateChange):
 
 
 class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
-    description = "Add condition"
+    description = "Add condition to permission"
 
     def __init__(self, *, permission_pk, condition_type, condition_data, permission_data):
         self.permission_pk = permission_pk
@@ -467,8 +473,8 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.permission_resources.models import PermissionsItem
-        return [PermissionsItem]
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         return f"add condition {self.condition_type} to permission"   
@@ -535,14 +541,15 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
 
 
 class RemovePermissionConditionStateChange(PermissionResourceBaseStateChange):
-    description = "Remove leadership condition"
+    description = "Remove condition from permission"
 
     def __init__(self, *, permission_pk: int):
         self.permission_pk = permission_pk
 
     @classmethod
     def get_settable_classes(cls):
-        return cls.get_community_models()
+        from concord.resources.models import Resource, Item
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
         return f"remove condition from permission"   

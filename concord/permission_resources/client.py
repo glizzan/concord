@@ -68,6 +68,20 @@ class PermissionResourceClient(BaseClient):
         plus all of its owned objects but for now, this is what we have."""
         return PermissionsItem.objects.all()
 
+    def has_permission(self, client, method_name, parameters, exclude_conditional=False):
+        """Checks results of running a given (mock) action through the permissions pipeline.  Note that this
+        says nothing about whether the given action is valid, as the validate step is called separately."""
+        from concord.actions.permissions import has_permission
+        client.mode = "mock"
+        mock_action = getattr(client, method_name)(**parameters)
+        mock_action.resolution.external_status = "sent"  # FIXME: ugh this should not be necessary
+        mock_action = has_permission(mock_action)
+        if mock_action.resolution.status == "approved":
+            return True
+        if not exclude_conditional and mock_action.resolution.status == "waiting":
+            return True
+        return False
+
     # Read methods which require target to be set
 
     def get_all_permissions(self) -> PermissionsItem:

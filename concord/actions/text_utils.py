@@ -24,6 +24,7 @@ def capitalize_first_letter(text):
 def list_to_text(list_to_convert):
     """Given a list with items that can be turned into strings, return them as text in format 
     'apple, banana and carrot'."""
+    
     list_to_convert = copy.deepcopy(list_to_convert)   # since we're mutating the list, need to deep copy it
 
     if len(list_to_convert) == 0:

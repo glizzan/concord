@@ -34,10 +34,20 @@ def get_state_change_object_given_name(state_change_name):
 
 
 def get_possible_state_changes(app_name):
-    """Get all state changes in a given app."""
+    """Get all state changes in a given app, plus core state changes."""
+
+    # Get core state changes
+    state_changes = []
+    for core_app_name in ["permission_resources", "actions", "conditionals"]:
+        app_config = apps.get_app_config(core_app_name)
+        state_changes_module = app_config.get_state_changes_module()
+        state_changes += inspect.getmembers(state_changes_module)
+
+    # Get state changes from calling app
     app_config = apps.get_app_config(app_name)
     state_changes_module = app_config.get_state_changes_module()
-    state_changes = inspect.getmembers(state_changes_module) 
+    state_changes += inspect.getmembers(state_changes_module) 
+
     return state_changes
 
 
@@ -65,23 +75,21 @@ def get_parent_matches(model_to_match, model_to_get_parent_of):
 def get_state_change_objects_which_can_be_set_on_model(model_class, app_name):
     """When given a model and its containing app, returns all state changes that apply to that model."""
     
-    # Find the app_name & import its state_changes module, then get the actual statate change objects
+    # Find the app_name & import its state_changes module, then get the actual state change objects
     state_changes = get_possible_state_changes(app_name)
     matching_state_changes = get_matching_state_changes(model_class.__name__, state_changes)
 
     # Get parent matches
     matching_state_changes += get_parent_matches(model_class, model_class)
 
-    return matching_state_changes
+    return list(set(matching_state_changes)) # Make sure there are no duplicates
 
 
 def replacer(key, value, context):
     """Given the value provided by mock_action, looks for fields that need replacing by finding strings with the right
-    format, those that begin and end with {{ }}.  Uses information in context object to replace those fields.
-
-    If the replacer comes across string %% %% replaces it with {{ }}, as it is a nested template (usually a condition).
-    The next time the data is run through a template replacer it will be replaced using that correct context.
-    """
+    format, those that begin and end with {{ }}.  Uses information in context object to replace those fields. In
+    the special case of finding something referencing nested_trigger_action (always(?) in the context of a 
+    condition being set) it replaces nested_trigger_action with trigger_action."""
 
     if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
 
@@ -122,6 +130,12 @@ def replacer(key, value, context):
             else:
                 return source
 
+        if tokens[0] == "nested_trigger_action":
+            """In this special case, we merely replace nested_trigger_action with trigger_action
+            so that when this object is passed through replace_fields again, later, it will
+            *then* replace with *that* trigger_action.  (Yes, it's a HACK, don't judge me.)"""
+            return value.replace("nested_trigger_action", "trigger_action")
+
     return ...
 
 
@@ -136,16 +150,32 @@ def replace_fields(*, action_to_change, mock_action, context):
 
     for key, value in vars(mock_action).items():
 
+        # for all attributes on the mock_action, check if they need to be replaced
         new_value = replacer(key, value, context)
         if new_value is not ...:
             setattr(action_to_change, key, new_value)
         
+        # if the attribute is the change object, check the parameters to change obj to see if they need to be replaced
         if key == "change":
 
             for change_key, change_value in vars(value).items():
+
                 new_value = replacer(change_key, change_value, context)
                 if new_value is not ...:
-                    setattr(value, change_key, new_value)
+                    # set parameter of change object to new value
+                    change_obj_on_action_to_change = getattr(action_to_change, key)
+                    setattr(change_obj_on_action_to_change, change_key, new_value)  
+
+                # if change obj parameter is permission_data check the elements to see if *they* need to be replaced
+                if change_key == "permission_data":
+
+                    for index, permission_dict in enumerate(change_value): # permission data is list of dicts
+                        for dict_key, dict_value in permission_dict.items():
+                            new_value = replacer(dict_key, dict_value, context)
+                            if new_value is not ...:
+                                change_obj_on_action_to_change = getattr(action_to_change, key)
+                                permission_data_on_change_obj = getattr(change_obj_on_action_to_change, "permission_data")
+                                permission_data_on_change_obj[index][dict_key] = new_value # set keyed value of dict parameter of change object to new value
 
     action_to_change.fields_replaced = True  # indicates that action has passed through replace_fields and is safe to use
     return action_to_change

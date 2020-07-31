@@ -173,7 +173,7 @@ def governing_permission_pipeline(action):
 
     has_authority, matched_role = communityClient.has_governing_authority(actor=action.actor)
     if not has_authority:
-        action.resolution.reject_action(pipeline="governing")
+        action.resolution.reject_action(pipeline="governing", log="user does not have governing permission")
         return action   
 
     if not community.has_governor_condition():

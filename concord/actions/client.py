@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 from django.contrib.auth.models import User
 
-from concord.actions.models import Action, ActionContainer
+from concord.actions.models import Action, ActionContainer, TemplateModel
 from concord.actions import state_changes as sc
 from concord.actions.customfields import Template
 
@@ -132,6 +132,24 @@ class ActionClient(BaseClient):
         print(f"Warning: tried to get container {pk} that wasn't in database")
         return None
 
+    def get_container_given_trigger_action(self, action=None, action_pk=None):
+        """Given the apply_template trigger action that created a container, get the associated container."""
+        if not action and not action_pk:
+            raise ValueError("Must supply action or action_pk parameter")
+        action_pk = action_pk if action_pk else action.pk
+        containers = ActionContainer.objects.filter(trigger_action_pk=action_pk)
+        if containers:
+            return containers[0]
+
+    def get_container_data(self, container_pk=None, container=None):
+        """Gets data associated with actions inside a container. Note that this is not strictly read only.
+        FIXME: reformat Container model to save most recent action data, so we don't need to re-run 
+        process_actions"""
+        if not container_pk and not container:
+            raise ValueError("Must supply container_pk or container to get_container_data")
+        container = container if container else self.get_container_given_pk(pk=container_pk)
+        return container.get_action_data()
+
     def get_action_history_given_target(self, target=None) -> QuerySet:
         self.optionally_overwrite_target(target=target)
         content_type = ContentType.objects.get_for_model(self.target)
@@ -179,8 +197,8 @@ class ActionClient(BaseClient):
     def retry_action_container(self, container_pk, test=False):
         """Retries processing the actions in a given container.  If test is true, does not commit the actions."""
         container = ActionContainer.objects.get(pk=container_pk)
-        summary_status, log = container.commit_actions(test=test)
-        return container, log
+        status = container.commit_actions(test=test)
+        return container, status
 
     def take_action(self, action=None, pk=None):
         """Helper method to take an action (or, usually, retry taking an action) from the client."""
@@ -198,13 +216,24 @@ class TemplateClient(BaseClient):
     # Get
 
     def get_template(self, pk):
-        ...
+        """Gets template with supplied pk or returns None."""
+        queryset = TemplateModel.objects.filter(pk=pk)
+        if queryset:
+            return queryset[0]
 
     def get_templates(self):
-        ...
+        """Gets all templates in DB."""
+        return TemplateModel.objects.all()
 
     def get_templates_for_scope(self, scope):
-        ...
+        """Gets template in the given scope."""
+        # FIXME: need to make scopes an arrayfield (which requires switching Concord default backend to postgres)
+        # or find a way to more easily search for scope (I guess maybe could have models only have one scope?)
+        templates = []
+        for template in TemplateModel.objects.all():
+            if scope in template.get_scopes():
+                templates.append(template)
+        return templates
 
     def get_templates_for_owner(self, owner):
         ...
@@ -221,9 +250,20 @@ class TemplateClient(BaseClient):
         Instead it creates an ActionContainer, copying the template field of the template model specified with
         template_model_pk.  If the Actions in the ActionContainer all successfully pass the permissions/conditions
         pipeline, only then are the state changes implemented.  So setting this permission doesn't actually
-        give people the ability to apply templates - only prevents it."""
+        give people the ability to apply templates - only prevents it.
+        
+        To minimize frustration for users, we circumvent the pipeline and automatically allow anyone to try to apply
+        templates (since they still need to pass the individual actions that make up the template.)
+
+        # TODO: refactor - should this be a state change at all?
+        """
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
-        return self.create_and_take_action(change)
+        action, result = self.create_and_take_action(change)
+        if action.resolution.foundational_status == "not tested" and action.resolution.status == "rejected":
+            # ^^ don't want to override a foundational rejection
+            result = action.implement_action()
+            action.resolution.log = "Overrode permissions pipeline"
+        return action, result
 
     def edit_template(self, template_pk, name=None, user_description=None, scopes=None, template_data=None):
         if not Name and not user_description and not scopes and not template_data:

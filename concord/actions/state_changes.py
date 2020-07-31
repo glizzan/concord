@@ -410,6 +410,7 @@ class ApplyTemplateStateChange(BaseStateChange):
 
         container, log = template_model.template_data.apply_template(trigger_action=action, 
             supplied_fields=self.supplied_fields)
+
         return container
 
 
@@ -444,6 +445,7 @@ class Changes(object):
         EnableGoverningPermission = 'concord.actions.state_changes.EnableGoverningPermissionStateChange'
         DisableGoverningPermission = 'concord.actions.state_changes.DisableGoverningPermissionStateChange'
         ViewPermission = 'concord.actions.state_changes.ViewChangelessStateChange'
+        ApplyTemplate = 'concord.actions.state_changes.ApplyTemplateStateChange'
 
     class Communities(object):
 

@@ -65,8 +65,11 @@ class ActorList(object):
         add only to pk_list."""
 
         if not actors:
-            print("Warning: empty list of actors passed to actorlist.add_actors.")
+            print(f"Warning: falsy value for actors passed to actorlist.add_actors (value: {actors}, type: {type(actors)}).")
             return
+
+        if type(actors) != list:
+            raise ValueError(f"Must pass actors as list, not {type(actors)} (value: {actors})")
         
         if type(actors[0]) == User:
             if any(not isinstance(actor, User) for actor in actors):
@@ -81,7 +84,7 @@ class ActorList(object):
             self.pk_list = list(set(self.pk_list) | set(actors))
             return
         
-        raise ValueError("Must add actors to actorlist as User or Int, not ", type(actors[0]))
+        raise ValueError(f"Must add actors to actorlist as User or Int, not {type(actors[0])} (value of actors: {actors})")
 
     def remove_actors(self, actors, strict=True):
         """If actors are user instances, remove from instance_list and pk_list; if

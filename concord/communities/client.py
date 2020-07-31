@@ -85,6 +85,8 @@ class CommunityClient(BaseClient):
         return owned_object.get_owner()
 
     def create_community(self, *, name: str) -> Community:
+        """Creates a Community (or class descended from Community model) with actor as creator.
+        Creates some additional structures by default but this can be overriden with bare=True."""
         roles = RoleHandler()
         roles.initialize_with_creator(creator=self.actor.pk)
         community = self.community_model.objects.create(name=name, roles=roles)

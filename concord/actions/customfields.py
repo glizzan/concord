@@ -225,8 +225,9 @@ class Template(object):
         from concord.actions.models import ActionContainer
         container = ActionContainer.objects.create()
         container.initialize(template_object=self, trigger_action=trigger_action, supplied_fields=supplied_fields)
-        summary_status, log = container.commit_actions()
-        return container, log
+        container.save()
+        status = container.commit_actions()
+        return container, status
 
     def get_mock_action_given_unique_id(self, unique_id):  
         for mock_action in self.action_list:
@@ -384,6 +385,15 @@ class TemplateContext(object):
                 self.cache["generic_objects"][ct] = {}
             self.cache["generic_objects"][ct][pk] = object_to_add
 
+    def get_action_and_result_data_from_cache(self, data_dict):
+        """Given a dict with action and result data, returns models or None (if no pks etc specified."""
+        action = self.get_action_model_given_unique_id(data_dict["unique_id"]) if data_dict["db_action_pk"] else None
+        result = None
+        if data_dict["result_pk"] and data_dict["result_ct"]:
+            print("Getting result for ", data_dict["result_pk"], data_dict["result_ct"])
+            result = self.get_generic_obj_from_cache_or_db(data_dict["result_pk"], data_dict["result_ct"])
+        return action, result
+
     # Action and result methods
 
     @property
@@ -490,6 +500,16 @@ class TemplateContext(object):
             for source_id, condition_dict in data.items():
                 condition = self.get_generic_obj_from_cache_or_db(condition_dict["pk"], condition_dict["ct"])
                 conditions.append(condition)
+        return conditions
+
+    def get_conditions_for_action(self, unique_action_id):
+        conditions = []
+        if unique_action_id in self.condition_data:
+            for source_id, condition_dict in self.condition_data[unique_action_id]:
+                if condition_dict["pk"] and condition_dict["ct"]:
+                    conditions.append(self.get_generic_obj_from_cache_or_db(condition_dict["pk"], condition_dict["ct"]))
+                else:
+                    conditions.append("Uncreated Condition")
         return conditions
 
     def generate_conditions(self):

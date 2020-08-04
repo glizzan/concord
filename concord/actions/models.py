@@ -1,6 +1,7 @@
 """Django models for Actions and Permissioned Models."""
 
 import json
+import logging
 
 from django.db import models, DatabaseError, transaction
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -10,6 +11,9 @@ from django.contrib.auth.models import User
 from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, ClientInterface, replace_fields
 from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField, 
     TemplateContextField, Template, TemplateContext)
+
+
+logger = logging.getLogger(__name__)
 
 
 class Action(models.Model):
@@ -37,30 +41,29 @@ class Action(models.Model):
     # Regular old attributes
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(max_length=15, default="created")
+    is_draft = models.BooleanField(default=False)
 
     # Basics
 
     def __str__(self):
-        """Provides string describing the Action."""
-        return f"{self.resolution.status} action {self.change.get_change_type()} by {self.actor} on {self.target} "
+        return f"{self.status} action {self.change.description} by {self.actor} on {self.target} "
+
+    def get_status(self):
+        return "draft" if self.is_draft else self.status
 
     def save(self, *args, override_check=False, **kwargs):
         """
-        We turned off required fields so that drafts don't need to have them, so now we need to check for those fields
-        in save.  ( NOTE: this may also help with archived actions where the target has been deleted)
-        
-        # TODO: I'm worried that there may not be a save in between when draft gets changed to 'sent' and then 'approved'
-        and then 'implemented', and the call to implement(). Make sure we're not getting into a funky situation? Maybe
-        always save after switch to sent()?
+        If action is live (is_draft is False) check that target and actor are set.
         """
-        if self.resolution.status != "draft":
+        if not self.is_draft:
             if self.target is None or self.actor is None:
                 raise DatabaseError("Must set target and actor before sending or implementing an Action")
         return super().save(*args, **kwargs)  # Call the "real" save() method.     
 
     def get_description(self):
         """Gets description of the action by reference to `change_types` set via change field, including the target."""
-        if self.resolution.status == "implemented":
+        if self.status == "implemented":
             description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
             return self.actor.username + " " + description + " " + target_preposition + " " + self.target.get_name()
         else:
@@ -69,7 +72,7 @@ class Action(models.Model):
 
     def get_targetless_description(self):
         """Gets description of the action by reference to `change_types` set via change field, without the target."""
-        if self.resolution.status == "implemented":
+        if self.status == "implemented":
             description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
             return self.actor.username + " " + description
         else:
@@ -78,30 +81,18 @@ class Action(models.Model):
 
     # Steps of action execution
 
-    def validate_action(self):
-        """Checks that an action is valid.
-
-        Validation check is done by providing actor and target to the change
-        itself, which implements its own custom logic.
-        """
-        is_valid = self.change.validate(actor=self.actor, target=self.target)
-        if is_valid:
-            self.resolution.external_status = "sent"
-        else:
-            self.resolution.external_status = "rejected"
-            self.resolution.add_to_log(self.change.validation_error.message)
-            delattr(self.change, "validation_error")
-
     def implement_action(self):
         """Perform an action by the change object.
 
         Carries out its custom implementation using the actor and target.
         """
         if hasattr(self.change, "pass_action") and self.change.pass_action:
+            logger.debug("Implementing action through pass_action workaround")
             result = self.change.implement(actor=self.actor, target=self.target, action=self)
         else:
             result = self.change.implement(actor=self.actor, target=self.target)
-        self.resolution.external_status = "implemented"
+        self.status = "implemented"
+        logger.debug(f"Action {self.pk} implemented")
         return result
 
     def take_action(self):
@@ -111,27 +102,29 @@ class Action(models.Model):
         Returns itself and, optionally, the result of implementing the action.
         """
 
-        if self.resolution.external_status == "draft":
-            self.validate_action()
+        logger.info(f"Taking action {self.pk}: ({self.actor} {self.change.description} on {self.target})")
 
-        if self.resolution.status in ["sent", "waiting"]:
+        if self.status in ["created", "waiting"]:
 
             from concord.actions.permissions import has_permission
             self = has_permission(action=self)
+            self.status = self.resolution.generate_status()
 
-            if self.resolution.status == "waiting" and len(self.resolution.conditions) > 0:
+            if self.status == "waiting" and len(self.resolution.conditions) > 0:
                 from concord.conditionals.client import ConditionalClient
                 client = ConditionalClient(system=True)
-                for source_id in self.resolution.conditions:       
+                for source_id in self.resolution.conditions:
+                    logger.info(f"Creating condition on action {self.pk} with source_id {source_id}")
                     client.trigger_condition_creation_from_source_id(action=self, source_id=source_id)
 
-        if self.resolution.status == "approved":
+        if self.status == "approved":
             result = self.implement_action()
+            logger.debug(f"Result of action implementation {result}")
 
-        self.save()  # Save action, may not always be needed
+        logger.debug(f"Saving action {self.pk} with status {self.status}")
+        self.save()
 
         return self, result if 'result' in locals() else None
-
 
 
 class ActionContainer(models.Model):
@@ -156,54 +149,21 @@ class ActionContainer(models.Model):
 
     def __repr__(self):
         return f"ActionContainer(template_data={repr(self.template_data)}, context={repr(self.context)}, " + \
-            f"status={self.get_status})"
+            f"status={self.status})"
 
     def __str__(self):
         return self.__repr__()
 
-    # Status & log related methods
-
-    @property
-    def get_status(self):
-        return json.loads(self.status) if self.status else { 'overall_status': None, 'log': None, "conditions": None }
-
-    def set_status(self, status):
-        self.status = json.dumps(status)
-
-    def get_overall_status(self):
-        return self.get_status["overall_status"] if self.get_status["overall_status"] else "drafted"
-
-    def set_overall_status(self, overall_status):
-        status = self.get_status
-        status["overall_status"] = overall_status
-        self.status = json.dumps(status)
-
-    @property
-    def log(self):
-        return self.get_status["log"]
-
-    def set_log(self, log):
-        status = self.get_status
-        status["log"] = log
-        self.status = json.dumps(status)
-
-    def get_conditions(self):
-        return self.get_status["conditions"]
-
-    def set_conditions(self, conditions):
-        status = self.get_status
-        status["conditions"] = conditions
-        self.status = json.dumps(status)
-
     @property
     def is_open(self):
-        return False if self.get_overall_status() == "committed" else True
+        return False if self.status == "implemented" else True
 
     # Action processing methods
 
     def initialize(self, template_object, trigger_action, supplied_fields=None, make_actions_in_db=True):
         """Saves template object passed in to the template field, and initializes the context field with
         information passed in via the template."""
+        logger.debug(f"Initializing container {self.pk}: trigger {trigger_action}, suppliedfields: {supplied_fields}")
         self.template_data = template_object
         self.context.initialize(template_object, trigger_action, supplied_fields)
         self.trigger_action_pk = trigger_action.pk
@@ -211,14 +171,10 @@ class ActionContainer(models.Model):
             self.context.create_actions_in_db(self.pk, self.template_data)
 
     def get_db_action(self, item):   
-        """Gets action from db (or from cache) and, if needed, processes it with replace_fields."""
-
+        """Gets action from db and processes it with replace_fields."""
         action = self.context.get_action_model_given_unique_id(item["unique_id"])
-
-        if not hasattr(action, "fields_replaced"):
-            mock_action = self.template_data.get_mock_action_given_unique_id(unique_id=item["unique_id"])
-            action = replace_fields(action_to_change=action, mock_action=mock_action, context=self.context)
-                       
+        mock_action = self.template_data.get_mock_action_given_unique_id(unique_id=item["unique_id"])
+        action = replace_fields(action_to_change=action, mock_action=mock_action, context=self.context)  
         return action
 
     def validate_action(self, action, index):
@@ -226,59 +182,49 @@ class ActionContainer(models.Model):
 
         for field in ["actor", "target", "change"]:
             if not getattr(action, field):
-                self.action_log[index].update({ "status": "invalid", "log": f"{field} must not be NoneType"})
+                logging.debug(f"Action {action} is invalid - field {field} cannot be None")
                 return False
 
-        is_valid = action.change.validate(actor=action.actor, target=action.target)  
-        if not is_valid:
-            self.action_log[index].update({ "status": "invalid", "log": action.change.validation_error.message })
+        is_valid = action.change.validate(actor=action.actor, target=action.target)
+        if is_valid:
+            logging.debug(f"Action {action} is valid")
         else:
-            self.action_log[index].update({ "status": "valid" })
+            logging.debug(f"Action {action} is invalid due to: {action.change.validation_error.message}")
         return is_valid
 
     def check_action_permission(self, action, index):
 
-        if action.resolution.external_status == "draft":
-            action.resolution.external_status = "sent"
-            # FIXME: this whole external vs internal status thing is hacky :/
+        logging.debug(f"Checking permission for action {action}")
+
+        action.is_draft = False   # Remove from draft state
 
         if self.template_data.system:
-            self.action_log[index].update({ "status": "has_permission" })
+            logging.debug("Approved as system action")
             return "approved"
         
         from concord.actions.permissions import has_permission
         action = has_permission(action=action)
+        action.status = action.resolution.generate_status()
+        logging.debug(f"Action {action} has status {action.status}")
 
-        if action.resolution.status == "approved":
-            self.action_log[index].update({ "status": "has_permission" })
+        if action.status == "approved":
             return "approved"
 
-        if action.resolution.status == "waiting":
+        if action.status == "waiting":
 
             condition_items = []
             for source_id in action.resolution.conditions:
+                self.context.add_condition_data(action.unique_id, source_id)
                 condition_items.append(self.context.get_condition(action.unique_id, source_id))
 
-            items = list(filter(None, condition_items))
-            uncreated_conditions = len(items) < len(condition_items)
+            for item in condition_items:
+                if item is None or item.status == "waiting":
+                    return "waiting"
+                elif item.status == "approved":
+                    return "approved"
 
-            if any([item.status == "approved" for item in items]):
-                self.action_log[index].update({ "status": "has_permission", "log": "condition passed",
-                    "conditions": action.resolution.conditions })
-                return "approved"
-            
-            if any([item.status == "waiting" for item in items]) or uncreated_conditions:
-                self.action_log[index].update({ "status": "waiting on conditions", "log": action.resolution.log,
-                    "conditions": action.resolution.conditions })
-                return "waiting"
-
-            self.action_log[index].update({ "status": "lacks permsision", "log": action.resolution.log,
-                "conditions": action.resolution.conditions })
-            return "rejected"
-
-        self.action_log[index].update({ "status": "lacks permission", "log": action.resolution.log })
         return "rejected"
-
+            
     def process_actions(self):
         """The heart of ActionContainer functionality - runs through action data, attempting to create
         actions and, if necessary, managing their conditions.  Typically called by commit_actions and 
@@ -286,12 +232,13 @@ class ActionContainer(models.Model):
 
         from concord.actions.permissions import has_permission
         ok_to_commit = True
-        self.action_log = {}
+        actions = []   # not saved to DB, store of actions
 
         for index, item in enumerate(self.context.actions_and_results):
 
-            self.action_log[index] = {}
+            logging.debug(f"Processing item {item}")
             action = self.get_db_action(item)
+            actions.append(action)
 
             # Check if still valid
             if not self.validate_action(action, index):
@@ -300,72 +247,89 @@ class ActionContainer(models.Model):
 
             # Check if has permission
             status = self.check_action_permission(action, index)
+            logging.debug(f"Action {action} has permission {status}")
             ok_to_commit = False if status != "approved" else ok_to_commit
-            if status == "rejected":    # if status is waiting we're not ok to commit but we can temporarily implement
+            if status == "rejected":  # if status is rejected, skip implementing
                 continue
 
             # Implement action 
             result = action.implement_action()
             self.context.add_result(unique_id=item["unique_id"], result=result)  # add to context
+            if status == "waiting":  # roll back status change that comes with implement_action()
+                action.status = "waiting"
+
             action.save()  # save changes to action in DB
-            self.action_log[index].update({ "status": "implemented" })
 
-        return self.action_log, ok_to_commit
+        return actions, ok_to_commit
 
-    def determine_overall_status(self, action_log):
-        """Given an action_log generated by a run of process_actions, determines what the status of the
+    def determine_overall_status(self, actions):
+        """Given actions generated by a run of process_actions, determines what the status of the
         whole container should be.
         
         'drafted' - used when first created
         'invalid' - if any of the actions created are invalid - shouldn't happen, but just in case
         'rejected' - used if any of the actions within the container are unconditionally rejected
-        'waiting' - used if any of the actions within the container are 'waiting' (if none are rejected)
+        'waiting' - used if any of the actions within the container are 'waiting' or if any are missing
         'approved' - used if all actions within the container are approved
         'implemented' - used if all actions within container are implemented
-        
         """
 
-        if self.get_overall_status() == "implemented": 
-            ... # if already set to implemented, no need to do anything
-        elif any([action["status"] == "lacks permission" for index, action in action_log.items()]):
-            self.set_overall_status(overall_status="rejected")
-        elif any([action["status"] == "invalid" for index, action in action_log.items()]):
-            self.set_overall_status(overall_status="invalid")
-        elif any(["conditions" in action and "waiting" in action["log"] for index, action in action_log.items()]):
-            self.set_overall_status(overall_status="waiting")
-        else:
-            self.set_overall_status(overall_status="approved")
+        if self.status == "implemented": 
+            return "implemented"
+
+        if any([action.status == "rejected" for action in actions]):
+            return "rejected"
+        if any([action.status == "waiting" for action in actions]): 
+            return "waiting"
+        if any([action.status == "invalid" for action in actions]):
+            return "invalid"
+
+        return "approved"
 
     def commit_actions(self, test=False, generate_conditions=True):  
 
-        action_log = None
+        if self.status == "implemented":
+            logging.warn(f"Attempted to commit actions of implemented container {self.pk}")
+            return "implemented"
 
         try:
             with transaction.atomic():
-                action_log, ok_to_commit = self.process_actions()
+                actions, ok_to_commit = self.process_actions()
+                self.status = self.determine_overall_status(actions)
                 if not ok_to_commit or test:
+                    logging.info(f"Container {self.pk} not ok to commit, reverting (test = {test})")
                     raise DatabaseError()
-                self.set_overall_status(overall_status="implemented")                
+                self.status = "implemented"            
         except DatabaseError as db_error:
             if generate_conditions:
                 self.context.generate_conditions()
-                self.set_conditions(self.context.condition_data)
 
-        self.set_log(action_log)
-        self.determine_overall_status(action_log)
-        self.save(update_fields=["status"])
-        return self.get_status
+        if self.status is not "implemented":
+            logging.debug(f"Reseting actions and results in context data, was {self.context.actions_and_results}")
+            self.context.refresh_from_db()
+
+        self.save()
+
+        logging.debug(f"Saved container {self.pk} with overall status {self.status}")
+        return self.status
 
     def get_action_data(self):
         """Gets a list of dicts with action, result and condition data for each action."""
+
         actions = []
-        for action_dict in self.context.actions_and_results:
-            action, result = self.context.get_action_and_result_data_from_cache(action_dict)
-            conditions = self.context.get_conditions_for_action(action_dict["unique_id"])
-            if not conditions and str(action_dict["unique_id"]) in self.get_conditions():
-                conditions = self.get_conditions()[str(action_dict["unique_id"])]
-                conditions = [ cond_data for source_id, cond_data in conditions.items() ]
-            actions.append({"action": action, "result": result, "conditions": conditions})
+
+        if self.status == "implemented":
+            for action_dict in self.context.actions_and_results:
+                action, result = self.context.get_action_and_result_data_from_cache(action_dict)
+                conditions = self.context.get_condition_dicts_for_action(action_dict["unique_id"])
+                actions.append({"action": action, "result": result, "conditions": conditions, "mock_action": None})
+                logging.debug(f"Getting implemented actions: {actions}")
+        else:
+            for mock_action in self.template_data.action_list:
+                conditions = self.context.get_condition_dicts_for_action(str(mock_action.unique_id))
+                actions.append({"action": None, "mock_action": mock_action, "result": None, "conditions": conditions})
+                logging.debug(f"Getting un-implemented actions: {actions}")
+  
         return actions
 
     def get_actions(self):

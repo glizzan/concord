@@ -1,4 +1,5 @@
 from typing import Tuple, Any
+from collections import namedtuple
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
@@ -67,17 +68,19 @@ class BaseClient(object):
             from concord.actions.utils import MockAction
             return MockAction(change=change, actor=self.actor, target=self.target)
 
-        elif self.mode == "draft":  # typically used in Action Container
+        elif self.mode == "draft":  # typically used in Action Container  FIXME: is this being used
             return Action.objects.create(actor=self.actor, target=self.target, 
                     change=change)
         else:
             
             self.validate_target()
-
-            action = Action.objects.create(actor=self.actor, target=self.target, 
+            if self.change_is_valid(change):
+                action = Action.objects.create(actor=self.actor, target=self.target, 
                     change=change)
-
-            return action.take_action()
+                return action.take_action()
+            else:
+                InvalidAction = namedtuple('InvalidAction', ['error_message', 'pk'])
+                return InvalidAction(error_message=change.validation_error.message, pk="Invalid Action"), None
 
     def create_mock_action_from_client(self):
         """Typically used to create trigger actions"""
@@ -259,7 +262,7 @@ class TemplateClient(BaseClient):
         """
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
         action, result = self.create_and_take_action(change)
-        if action.resolution.foundational_status == "not tested" and action.resolution.status == "rejected":
+        if action.resolution.foundational_status == "not tested" and action.status == "rejected":
             # ^^ don't want to override a foundational rejection
             result = action.implement_action()
             action.resolution.log = "Overrode permissions pipeline"

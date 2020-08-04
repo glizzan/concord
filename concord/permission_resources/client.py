@@ -74,11 +74,11 @@ class PermissionResourceClient(BaseClient):
         from concord.actions.permissions import has_permission
         client.mode = "mock"
         mock_action = getattr(client, method_name)(**parameters)
-        mock_action.resolution.external_status = "sent"  # FIXME: ugh this should not be necessary
         mock_action = has_permission(mock_action)
-        if mock_action.resolution.status == "approved":
+        mock_action.status = mock_action.resolution.generate_status()  # FIXME: code smell (also elsewhere in Concord)
+        if mock_action.status == "approved":
             return True
-        if not exclude_conditional and mock_action.resolution.status == "waiting":
+        if not exclude_conditional and mock_action.status == "waiting":
             return True
         return False
 

@@ -1,5 +1,8 @@
-import json, inspect, random
+import json, inspect, random, logging
 from django.apps import apps
+
+
+logger = logging.getLogger(__name__)
 
 
 def can_jsonify(obj):
@@ -91,6 +94,8 @@ def replacer(key, value, context):
     the special case of finding something referencing nested_trigger_action (always(?) in the context of a 
     condition being set) it replaces nested_trigger_action with trigger_action."""
 
+    logging.debug(f"Replacing {key} with placeholder value: {value}")
+
     if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
 
         command = value.replace("{{", "").replace("}}", "").strip()
@@ -98,6 +103,7 @@ def replacer(key, value, context):
 
         if tokens[0] == "supplied_fields":
             """Always two tokens long, with format supplied_fields.field_name."""
+            logging.debug(f"Supplied Fields: Replacing {key} {value} with {context.supplied_fields[tokens[1]]}")
             return context.supplied_fields[tokens[1]]
 
         if tokens[0] == "trigger_action":
@@ -114,6 +120,7 @@ def replacer(key, value, context):
                 intermediate = getattr(context.trigger_action, tokens[1])
                 new_value = getattr(intermediate, tokens[2])
             
+            logging.debug(f"trigger_action: Replacing {key} {value} with {new_value}")
             return new_value
 
         if tokens[0] == "previous":
@@ -124,16 +131,16 @@ def replacer(key, value, context):
             position = int(tokens[1])
             action, result = context.get_action_and_result_for_position(position)
             source = action if tokens[2] == "action" else result
+            new_value = getattr(source, tokens[3]) if len(tokens) == 4 else source
 
-            if len(tokens) == 4:
-                return getattr(source, tokens[3])
-            else:
-                return source
+            logging.debug(f"previous: Replacing {key} {value} with {new_value}")
+            return new_value
 
         if tokens[0] == "nested_trigger_action":
             """In this special case, we merely replace nested_trigger_action with trigger_action
             so that when this object is passed through replace_fields again, later, it will
             *then* replace with *that* trigger_action.  (Yes, it's a HACK, don't judge me.)"""
+            logging.debug(f"nested_trigger_action: Replacing {key} {value} with 'trigger_action'")
             return value.replace("nested_trigger_action", "trigger_action")
 
     return ...
@@ -148,12 +155,15 @@ def replace_fields(*, action_to_change, mock_action, context):
         but we're continuing on with our mock actions to get more data - need to fail gracefully
     """
 
+    logger.debug(f"Replacing fields on {action_to_change} with {mock_action}")
+
     for key, value in vars(mock_action).items():
 
         # for all attributes on the mock_action, check if they need to be replaced
         new_value = replacer(key, value, context)
         if new_value is not ...:
             setattr(action_to_change, key, new_value)
+            logger.debug(f"Replaced {key} on {action_to_change} with {new_value}")
         
         # if the attribute is the change object, check the parameters to change obj to see if they need to be replaced
         if key == "change":
@@ -165,6 +175,7 @@ def replace_fields(*, action_to_change, mock_action, context):
                     # set parameter of change object to new value
                     change_obj_on_action_to_change = getattr(action_to_change, key)
                     setattr(change_obj_on_action_to_change, change_key, new_value)  
+                    logger.debug(f"Replaced change obj attr {change_key} on {action_to_change} with {new_value}")
 
                 # if change obj parameter is permission_data check the elements to see if *they* need to be replaced
                 if change_key == "permission_data":
@@ -176,6 +187,7 @@ def replace_fields(*, action_to_change, mock_action, context):
                                 change_obj_on_action_to_change = getattr(action_to_change, key)
                                 permission_data_on_change_obj = getattr(change_obj_on_action_to_change, "permission_data")
                                 permission_data_on_change_obj[index][dict_key] = new_value # set keyed value of dict parameter of change object to new value
+                                logger.debug(f"Replaced {dict_key} with {new_value} in permdata on {action_to_change}")
 
     action_to_change.fields_replaced = True  # indicates that action has passed through replace_fields and is safe to use
     return action_to_change
@@ -193,10 +205,11 @@ class MockAction(object):
         self.change = change
         self.target = target
         self.actor = actor
+        self.status = "created"
 
         if not resolution:
             from concord.actions.customfields import Resolution
-            resolution = Resolution(external_status="draft")
+            resolution = Resolution()
         self.resolution = resolution
 
         if not unique_id:       
@@ -228,12 +241,13 @@ def check_permissions_for_action_group(list_of_actions):
     for index, action in enumerate(list_of_actions):
 
         is_valid = action.change.validate(actor=action.actor, target=action.target)
-        action.resolution.external_status = "sent" 
+        action.status = "created"
 
         if is_valid:
             from concord.actions.permissions import has_permission
             processed_action = has_permission(action=action)
-            status, status_log = processed_action.resolution.status, processed_action.resolution.get_status_string()
+            processed_action.status = processed_action.resolution.generate_status()
+            status, status_log = processed_action.status, processed_action.resolution.get_status_string()
         else:
             status, status_log = "invalid", action.change.validation_error.message
 

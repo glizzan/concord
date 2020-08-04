@@ -19,6 +19,12 @@ class RoleHandler(object):
     custom_roles = {}
     protected_roles = ["owners", "governors", "members"]
 
+    def __str__(self):
+        return f"RoleHandler {str(self.get_roles())}"
+
+    def __repr__(self):
+        self.__str__()
+
     def __init__(self, *, members=None, owners=None, governors=None, custom_roles=None):
 
         if members:

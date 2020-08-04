@@ -49,8 +49,7 @@ def serialize_resolution(resolution, dump_to_json=True):
         "log": resolution.log,
         "approved_through": resolution.approved_through,
         "approved_role": resolution.approved_role,
-        "approved_condition": resolution.approved_condition,
-        "external_status": resolution.external_status
+        "approved_condition": resolution.approved_condition
     }
     return json.dumps(obj_dict) if dump_to_json else obj_dict
 
@@ -61,8 +60,7 @@ def deserialize_resolution(resolution_data):
     return Resolution(foundational_status=resolution_data["foundational_status"], specific_status=resolution_data["specific_status"], 
         governing_status=resolution_data["governing_status"], conditions=resolution_data["conditions"],
         log=resolution_data["log"], approved_through=resolution_data["approved_through"], 
-        approved_role=resolution_data["approved_role"], approved_condition=resolution_data["approved_condition"],
-        external_status=resolution_data["external_status"])
+        approved_role=resolution_data["approved_role"], approved_condition=resolution_data["approved_condition"])
 
 
 ### Mock Actions ###

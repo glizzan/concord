@@ -36,8 +36,15 @@ class BaseCommunityModel(PermissionedModel):
     class Meta:
         abstract = True
 
-    def get_name(self):
+    def __str__(self):
         return self.name
+
+    def __repr__(self):
+        return f"CommunityModel(pk={self.pk}, name={self.name}, roles={self.roles}, " + \
+               f"owner_condition={self.has_condition('owner')}, governor_condition={self.has_condition('governor')}"
+
+    def get_name(self):
+        return self.__str__()
 
     def get_owner(self):
         """

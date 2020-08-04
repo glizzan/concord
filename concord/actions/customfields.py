@@ -1,3 +1,5 @@
+import logging
+
 from django.db import models, DatabaseError, transaction
 from concord.actions.utils import MockAction, replace_fields
 from django.contrib.contenttypes.models import ContentType
@@ -5,6 +7,9 @@ from django.contrib.contenttypes.models import ContentType
 from concord.actions.serializers import (serialize_state_change, serialize_resolution, serialize_template,
     deserialize_state_change, deserialize_resolution, deserialize_template, serialize_template_context,
     deserialize_template_context)
+
+
+logger = logging.getLogger(__name__)
 
 
 #################################
@@ -16,17 +21,10 @@ class Resolution:
     '''The Resolution object stores information about the Action's passage through the permissions
     pipeline.  It has an overall status, as well as status information for each of the three pipelines
     (foundational, governing and specific) along with log information, condition information, and details
-    about how the action was approved (if it was approved).
-    
-    external status: can be draft, implemented, withdrawn or sent - only "sent" can go through permissions pipeline
-        (NOTE: currently also accepts rejected, but will change when we move validation out of action)
-    
-    '''
+    about how the action was approved (if it was approved).'''
 
     def __init__(self, *, foundational_status="not tested", specific_status="not tested", governing_status="not tested",
-        conditions=None, log=None, approved_through=None, approved_role=None, approved_condition=None, 
-        external_status="draft"):  
-        self.external_status = external_status
+        conditions=None, log=None, approved_through=None, approved_role=None, approved_condition=None):
         self.foundational_status = foundational_status
         self.specific_status = specific_status
         self.governing_status = governing_status
@@ -40,12 +38,8 @@ class Resolution:
         # over and storing them in the log, probably need to move most of the logging behavior to the actual
         # logging system, but I want some of it accessible to the front end dev who gets the action.
     
-    @property
-    def status(self):
-
-        # If the resolution is implemented or draft, we can skip the rest of the logic
-        if self.external_status in ["implemented", "draft", "withdrawn", "rejected"]:
-            return self.external_status
+    def generate_status(self):
+        """Generates an overall status given the three sub-statuses."""
         
         # Action only needs to be approved by one pipeline to be approved
         if "approved" in [self.foundational_status, self.governing_status, self.specific_status]:
@@ -59,15 +53,15 @@ class Resolution:
         if "rejected" in [self.foundational_status, self.governing_status, self.specific_status]:
             return "rejected"
         
-        return "sent"  # We haven't actually run the permissions pipeline yet, so return 'sent' 
+        return "created"  # We haven't actually run the permissions pipeline yet 
 
     @property
     def is_resolved(self):
-        return True if self.status in ["approved", "rejected", "implemented"] else False
+        return True if self.generate_status() in ["approved", "rejected", "implemented"] else False
         
     @property
     def is_approved(self):
-        return True if self.status in ["approved", "implemented"] else False
+        return True if self.generate_status() in ["approved", "implemented"] else False
 
     @property
     def passed_as(self):
@@ -76,26 +70,26 @@ class Resolution:
         return None
     
     def __str__(self):
-        return f"Action status {self.status} - {self.get_status_string()}"
+        return f"Action status {self.generate_status()} - {self.get_status_string()}"
         
     def __repr__(self):
         return f"Action Resolution(foundational_status={self.foundational_status}, specific_status={self.specific_status}, " + \
             f"governing_status={self.governing_status}, conditions={self.conditions}, log={self.log}, " + \
             f"approved_through={self.approved_through}, approved_role={self.approved_role}, " + \
-            f"approved_condition={self.approved_condition}, external_status={self.external_status})"
+            f"approved_condition={self.approved_condition})"
 
     def get_status_string(self):
         """Helper method to get human-readable string displaying action status"""
         if self.is_approved:
             return f"approved through {self.approved_through} with role {self.approved_role} and condition {self.approved_condition}"
-        if self.status == "waiting":
+        if self.generate_status() == "waiting":
             if self.foundational_status == "waiting":
                 return f"waiting on condition set on foundational permission"
             pipeline_strings = []
             pipeline_strings.append("governing") if self.governing_status else None
             pipeline_strings.append("specific") if self.specific_status else None
             return f"waiting on condition(s) for { ', '.join(pipeline_strings) }"
-        if self.status == "sent":
+        if self.generate_status()  == "created":
             return "action has not been put through pipeline yet"
         if self.foundational_status == "rejected":
             return "actor does not have foundational authority"
@@ -325,7 +319,7 @@ class TemplateContext(object):
     if they exist, the pk of the associated action and the pk & ct of the result associated with the action.
 
     condition_data tracks conditions associated with the action container, and has structure like:
-    { unique_action_id: { source_id: { pk & ct or None }}} 
+    { unique_id: { source_id: { pk & ct or None }}} 
     """
 
     def __repr__(self):
@@ -339,7 +333,6 @@ class TemplateContext(object):
         self.trigger_action_pk = trigger_action_pk
         self.actions_and_results = actions_and_results if actions_and_results else []
         self.condition_data = condition_data if condition_data else {}
-        self.cache = { "actions": {}, "generic_objects": {} }
 
     def initialize(self, template_object, trigger_action, supplied_fields):
         """Initialize fields given a template object and trigger action, called exactly once by ActionContainer."""
@@ -354,162 +347,151 @@ class TemplateContext(object):
         
         if trigger_action:
             self.trigger_action_pk = trigger_action.pk
-            self.add_to_cache("action", trigger_action, trigger_action.pk)
 
-    # Cache methods
-
-    def get_action_from_cache_or_db(self, pk):
-        """Gets action from cache or DB, returning True if cached and False if from DB"""
-        if pk not in self.cache["actions"]:
-            from concord.actions.models import Action
-            self.cache["actions"][pk] = Action.objects.get(pk=pk)
-        return self.cache["actions"][pk]
-
-    def get_generic_obj_from_cache_or_db(self, pk, ct):
-        """Gets a generic objet from the cache or DB, returning True if cached and False if from DB"""
-        if ct not in self.cache["generic_objects"]:
-            self.cache["generic_objects"][ct] = {}
-        if pk not in self.cache["generic_objects"][ct]:
-            content_type = ContentType.objects.get_for_id(ct)
-            model_class = content_type.model_class()
-            instance = model_class.objects.get(id=pk)
-            self.cache["generic_objects"][ct][pk] = instance
-        return self.cache["generic_objects"][ct][pk]
-
-    def add_to_cache(self, action_or_generic, object_to_add, pk, ct=None):
-        """Adds a given object to action or generic object cache.  Overrides existing object."""
-        if action_or_generic == "action":
-            self.cache["actions"][pk] = object_to_add
-        if action_or_generic == "generic":
-            if ct not in self.cache["generic_objects"]:
-                self.cache["generic_objects"][ct] = {}
-            self.cache["generic_objects"][ct][pk] = object_to_add
-
-    def get_action_and_result_data_from_cache(self, data_dict):
-        """Given a dict with action and result data, returns models or None (if no pks etc specified."""
-        action = self.get_action_model_given_unique_id(data_dict["unique_id"]) if data_dict["db_action_pk"] else None
-        result = None
-        if data_dict["result_pk"] and data_dict["result_ct"]:
-            print("Getting result for ", data_dict["result_pk"], data_dict["result_ct"])
-            result = self.get_generic_obj_from_cache_or_db(data_dict["result_pk"], data_dict["result_ct"])
-        return action, result
-
-    # Action and result methods
-
-    @property
-    def trigger_action(self):
-        """Gets trigger action from cache or, if not in cache, from DB."""
-        if self.trigger_action_pk:
-            action = self.get_action_from_cache_or_db(self.trigger_action_pk)
-            return action
-
-    def construct_action(self, container_pk, template_data, unique_id):
-        from concord.actions.models import Action
-        mock_action = template_data.get_mock_action_given_unique_id(unique_id)
-        actor = self.trigger_action.actor
-        return Action(
-            actor = actor,
-            change = mock_action.change,
-            container = container_pk,
-            target = mock_action.target if mock_action.target and hasattr(mock_action.target, "pk") else None
-        )
+    def refresh_from_db(self):
+        for item in self.actions_and_results:
+            item["result_pk"], item["result_ct"] = None, None
 
     def create_actions_in_db(self, container_pk, template_data):
         """Creates actions in the DB, if they haven't been already.  Typically called by ActionContainer's
         initialize method."""
-        actions_created = False
+        from concord.actions.models import Action
+
+        action_pks = []
         for item in self.actions_and_results:
             if item["db_action_pk"] is None:
-                action = self.construct_action(container_pk, template_data, item["unique_id"])
-                action.save()
+                mock_action = template_data.get_mock_action_given_unique_id(item["unique_id"])
+                actor = self.trigger_action.actor
+                target = mock_action.target if mock_action.target and hasattr(mock_action.target, "pk") else None
+                action = Action.objects.create(actor=actor, change=mock_action.change, container=container_pk, 
+                                               target=target, is_draft=True)
                 item["db_action_pk"] = action.pk
-                self.add_to_cache("action", action, action.pk)
-                actions_created = True
-        return actions_created
-    
-    def get_db_action_pk_given_unique_id(self, unique_id):
+                action_pks.append(action.pk)
+
+        logging.debug(f"Actions created in container {container_pk}: {action_pks}")
+
+    # db retrieval methods
+
+    def get_action_model_given_pk(self, pk):
+        if not pk:
+            return None
+        from concord.actions.models import Action
+        return Action.objects.get(pk=pk)
+
+    def get_generic_object(self, pk, ct):
+        if not pk or not ct:
+            return None
+        content_type = ContentType.objects.get_for_id(ct)
+        model_class = content_type.model_class()
+        return model_class.objects.get(id=pk)
+
+    def get_action_and_result_models(self, data_dict):
+        action = self.get_action_model_given_pk(data_dict["db_action_pk"])
+        result = self.get_generic_object(data_dict["result_pk"], data_dict["result_ct"])
+        return action, result
+
+    @property
+    def trigger_action(self):
+        """Gets trigger action from DB."""
+        if self.trigger_action_pk:
+            return self.get_action_model_given_pk(self.trigger_action_pk)
+
+    # Action and result methods
+
+    def get_item_dict_given_unique_id(self, unique_id):
         for item in self.actions_and_results:
-            if item["unique_id"] == unique_id:
-                return item["db_action_pk"]
+            if str(item["unique_id"]) == str(unique_id):
+                return item
 
     def get_action_model_given_unique_id(self, unique_id):
-        action_pk = self.get_db_action_pk_given_unique_id(unique_id)
-        action = self.get_action_from_cache_or_db(action_pk)
+        item_dict = self.get_item_dict_given_unique_id(unique_id)
+        action = self.get_action_model_given_pk(item_dict["db_action_pk"])
         action.unique_id = unique_id
         return action
 
+    def get_result_model_given_unique_id(self, unique_id):
+        item_dict = self.get_item_dict_given_unique_id(unique_id)
+        return self.get_generic_object(item_dict["result_pk"], item_dict["result_ct"])
+
+    def get_actions(self):
+        """Gets action models for all actions associated with containers. May return Nones if called before
+        initialize()."""
+        return [self.get_action_model_given_pk(item["db_action_pk"]) for item in self.actions_and_results]
+
+    def get_action_and_result_for_position(self, position):
+        action_dict = self.actions_and_results[position]
+        return self.get_action_and_result_models(action_dict)
+
+    def get_result(self, position=None, unique_id=None, db_action_pk=None):
+        """Attempts to get the instantiated result object given a position in the list, the item's unique ID,
+        or the pk of the action."""
+
+        if position or position == 0:
+            action_dict = self.actions_and_results[position]
+            return self.get_generic_object(action_dict["result_pk"],action_dict["result_ct"])
+
+        if db_action_pk:
+            # get uniqe_id given db_action_pk
+            for item in self.actions_and_results:
+                if item["db_action_pk"] == db_action_pk:
+                    unique_id = item["unique_id"]
+
+        if unique_id:
+            return self.get_result_model_given_unique_id(unique_id)
+
+        logging.warn("Failed attempt to get result - position, db_action_pk, or unique_id must be supplied")
+        
     def add_result(self, unique_id, result):
         """Adds a result to the actions and results list."""
         ct_pk = ContentType.objects.get_for_model(result).pk
 
         # add to actions_and_results
         for item in self.actions_and_results:
-            if item["unique_id"] == unique_id:
+            if str(item["unique_id"]) == str(unique_id):
                 item["result_pk"] = result.pk
                 item["result_ct"] = ct_pk 
 
-        self.add_to_cache("generic", result, result.pk, ct_pk)
-
-    def get_action_and_result_for_position(self, position):
-        action_dict = self.actions_and_results[position]
-        action = self.get_action_from_cache_or_db(action_dict["db_action_pk"])
-        if action_dict["result_pk"] and action_dict["result_ct"]:
-            result = self.get_generic_obj_from_cache_or_db(action_dict["result_pk"], action_dict["result_ct"])
-        else:
-            result = None
-        return action, result
-
-    def get_result(self, position=None, unique_id=None, db_action_pk=None):
-        """Attempts to get the instantiated result object given a position in the list, the item's unique ID,
-        or the pk of the action."""
-
-        action_dict = None
-        
-        if position is not None:
-            action_dict = self.actions_and_results[position]
-        else:
-            for item in self.actions_and_results:
-                if unique_id and item["unique_id"] == unique_id:
-                    action_dict = item
-                    continue
-                if db_action_pk and item["db_action_pk"] == db_action_pk:
-                    action_dict = item
-                    continue   
-                    
-        if action_dict:
-            result = self.get_generic_obj_from_cache_or_db(action_dict["result_pk"], action_dict["result_ct"])
-            return result
-
     # Condition methods
 
-    def get_condition(self, unique_action_id, source_id):
-        """Instantiates condition item if unique_action_id and source_id have associated pk & ct.  Returns
-        None if no pk & ct associated. Creates """
-        if unique_action_id not in self.condition_data:
-            self.condition_data[unique_action_id] = { source_id : None }  # creates for later
-        else:
-            condition_dict = self.condition_data[unique_action_id][source_id]
-            if condition_dict:
-                condition = self.get_generic_obj_from_cache_or_db(condition_dict["pk"], condition_dict["ct"])
-                return condition
+    def add_condition_data(self, unique_id, source_id):
+        unique_id = str(unique_id)
+        if unique_id not in self.condition_data:
+            self.condition_data[unique_id] = {}
+        if source_id not in self.condition_data[unique_id]:
+            self.condition_data[unique_id][source_id] = {"ct": None, "pk": None}
+
+    def get_condition_given_dict(self, condition_dict):
+        if condition_dict["pk"] and condition_dict["ct"]:
+            return self.get_generic_object(condition_dict["pk"], condition_dict["ct"])
+        return None
+
+    def get_condition(self, unique_id, source_id):
+        return self.get_condition_given_dict(self.condition_data[str(unique_id)][source_id])
 
     def get_conditions(self):
-        """Gets the condition models for all conditions associated with container."""
+        """Get all condition models associated with container"""
         conditions = []
         for unique_id, data in self.condition_data.items():
             for source_id, condition_dict in data.items():
-                condition = self.get_generic_obj_from_cache_or_db(condition_dict["pk"], condition_dict["ct"])
+                condition = self.get_condition(unique_id, source_id)
                 conditions.append(condition)
         return conditions
 
-    def get_conditions_for_action(self, unique_action_id):
+    def get_conditions_for_action(self, unique_id):
+        """Get all condition models on a given action in the container."""
         conditions = []
-        if unique_action_id in self.condition_data:
-            for source_id, condition_dict in self.condition_data[unique_action_id]:
-                if condition_dict["pk"] and condition_dict["ct"]:
-                    conditions.append(self.get_generic_obj_from_cache_or_db(condition_dict["pk"], condition_dict["ct"]))
-                else:
-                    conditions.append("Uncreated Condition")
+        if unique_id in self.condition_data.items():
+            for source_id, condition_dict in self.condition_data[unique_id].items():
+                conditions.append(self.get_generic_object(condition_dict))
+        return conditions
+
+    def get_condition_dicts_for_action(self, unique_id):
+        """Gets condition dict (pk and content type pk (aka 'ct')) associated with action."""
+        unique_id = str(unique_id)
+        conditions = []
+        if unique_id in self.condition_data:
+            for source_id, condition_dict in self.condition_data[unique_id].items():
+                conditions.append(condition_dict)
         return conditions
 
     def generate_conditions(self):
@@ -523,14 +505,14 @@ class TemplateContext(object):
         generated = False
         for unique_id, action_data in self.condition_data.items():
             for source_id, condition_data in action_data.items():
-                if condition_data is None:
+                if not condition_data["pk"] and not condition_data["ct"]:
+                    # Create condition
                     action = self.get_action_model_given_unique_id(unique_id)
                     condition, container = client.trigger_condition_creation_from_source_id(action=action, 
                         source_id=source_id)
                     if condition:
                         ct = ContentType.objects.get_for_model(condition)
                         self.condition_data[unique_id][source_id] = { "pk": condition.pk, "ct": ct.pk }
-                        self.add_to_cache("generic", condition, condition.pk, ct.pk)
                         generated = True
         return generated
 

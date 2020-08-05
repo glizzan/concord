@@ -10,7 +10,7 @@ from django.contrib.auth.models import User
 
 from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, ClientInterface, replace_fields
 from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField, 
-    TemplateContextField, Template, TemplateContext)
+                                          TemplateContextField, Template, TemplateContext)
 
 
 logger = logging.getLogger(__name__)
@@ -358,6 +358,8 @@ class PermissionedModel(models.Model):
     # Permission-related fields
     foundational_permission_enabled = models.BooleanField(default=False)
     governing_permission_enabled = models.BooleanField(default=True)
+
+    is_permissioned_model = True
 
     class Meta:
         abstract = True

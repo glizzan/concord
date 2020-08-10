@@ -15,7 +15,7 @@ from django.dispatch import receiver
 from concord.actions.models import PermissionedModel
 from concord.actions.client import ActionClient
 from concord.permission_resources.client import PermissionResourceClient
-from concord.actions.state_changes import Changes
+from concord.actions.utils import Changes
 from concord.conditionals import utils
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 
@@ -164,13 +164,13 @@ class ApprovalCondition(ConditionModel):
             "self_approval_allowed": { "display": "Can individuals approve their own actions?",
                 **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))},
             "approve_roles" : { "display": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
-                "value": None, "field_name": "approve_roles", "full_name": Changes.Conditionals.Approve },
+                "value": None, "field_name": "approve_roles", "full_name": Changes().Conditionals.Approve },
             "approve_actors" : { "display": "People who can approve", "type": "PermissionActorField", "required": False, 
-                "value": None, "field_name": "approve_actors", "full_name": Changes.Conditionals.Approve },
+                "value": None, "field_name": "approve_actors", "full_name": Changes().Conditionals.Approve },
             "reject_roles" : { "display": "Roles who can reject", "type": "PermissionRoleField", "required": False, 
-                "value": None, "field_name": "reject_roles", "full_name": Changes.Conditionals.Reject },
+                "value": None, "field_name": "reject_roles", "full_name": Changes().Conditionals.Reject },
             "reject_actors": { "display": "People who can reject", "type": "PermissionActorField", "required": False, 
-                "value": None, "field_name": "reject_actors", "full_name": Changes.Conditionals.Reject }
+                "value": None, "field_name": "reject_actors", "full_name": Changes().Conditionals.Reject }
         }
 
     def display_fields(self):
@@ -311,9 +311,9 @@ class VoteCondition(ConditionModel):
             "voting_period":  { "display": "How long should the vote go on, in hours?",
                 **cls.get_form_dict_for_field(cls._meta.get_field("voting_period")) },
             "vote_roles" : { "display": "Roles who can vote", "type": "PermissionRoleField", 
-                "required": False, "value": None, "field_name": "vote_roles", "full_name": Changes.Conditionals.AddVote },
+                "required": False, "value": None, "field_name": "vote_roles", "full_name": Changes().Conditionals.AddVote },
             "vote_actors": { "display": "People who can vote", "type": "PermissionActorField", 
-                "required": False, "value": None, "field_name": "vote_actors", "full_name": Changes.Conditionals.AddVote },
+                "required": False, "value": None, "field_name": "vote_actors", "full_name": Changes().Conditionals.AddVote },
         }
 
     def display_fields(self):        

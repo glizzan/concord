@@ -8,7 +8,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, replace_fields
+from concord.actions.utils import get_state_changes_settable_on_model_and_parents, replace_fields
 from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField,
                                           TemplateContextField, Template, TemplateContext)
 
@@ -448,7 +448,7 @@ class PermissionedModel(models.Model):
         if this object owns another object, we may have set permissions for actions targeting
         the owned object.
         """
-        return get_state_change_objects_which_can_be_set_on_model(model_class=cls, app_name=cls._meta.app_label)
+        return get_state_changes_settable_on_model_and_parents(cls)
 
     def save(self, *args, override_check=False, **kwargs):
         """Save permissions.

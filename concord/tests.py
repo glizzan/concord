@@ -22,7 +22,7 @@ from concord.communities.forms import RoleForm
 from concord.permission_resources.forms import PermissionForm, MetaPermissionForm
 from concord.conditionals.forms import ConditionSelectionForm, conditionFormDict
 from concord.actions.models import Action  # NOTE: For testing action status later, do we want a client?
-from concord.actions.state_changes import Changes
+from concord.actions.utils import Changes
 from concord.permission_resources.models import PermissionsItem
 from concord.conditionals.models import ApprovalCondition
 from concord.resources.models import Resource, Item
@@ -108,10 +108,10 @@ class PermissionResourceModelTests(DataTestCase):
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
         action, permission = self.prc.add_permission(
-            permission_type=Changes.Resources.AddItem,
+            permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.pinoe.pk])
         items = self.prc.get_permissions_on_object(object=resource)
-        self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemResourceStateChange on Resource object (1))')
+        self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
 
     def test_remove_permission_from_resource(self):
         """
@@ -120,10 +120,10 @@ class PermissionResourceModelTests(DataTestCase):
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
         action, permission = self.prc.add_permission(
-            permission_type=Changes.Resources.AddItem,
+            permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.pinoe.pk])
         items = self.prc.get_permissions_on_object(object=resource)
-        self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemResourceStateChange on Resource object (1))')
+        self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
         self.prc.remove_permission(item_pk=permission.pk)
         items = self.prc.get_permissions_on_object(object=resource)
         self.assertEquals(list(items), [])
@@ -148,11 +148,11 @@ class PermissionSystemTest(DataTestCase):
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
         action, permission = self.prc.add_permission(
-            permission_type=Changes.Resources.AddItem,
+            permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
         items = self.prc.get_permissions_on_object(object=resource)
         self.assertEquals(items.first().get_name(), 
-            'Permission 1 (for concord.resources.state_changes.AddItemResourceStateChange on Resource object (1))')
+            'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
 
         # Now the non-owner actor (Rose) takes the permitted action on the resource
         rose_rc = ResourceClient(actor=self.users.rose, target=resource)
@@ -168,7 +168,7 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission for Rose to the resource.
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
 
         # Tobin can't add an item to this resource because she's not the owner nor specified in
@@ -179,7 +179,7 @@ class PermissionSystemTest(DataTestCase):
 
         # Pinoe adds a permission on the permission which Tobin does have.
         self.prc.set_target(target=permission)
-        action, rec_permission = self.prc.add_permission(permission_type=Changes.Permissions.AddPermission,
+        action, rec_permission = self.prc.add_permission(permission_type=Changes().Permissions.AddPermission,
             permission_actors=[self.users.tobin.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
@@ -189,7 +189,7 @@ class PermissionSystemTest(DataTestCase):
         
         # But Tobin CAN make the second-level change.
         tobin_prc = PermissionResourceClient(actor=self.users.tobin, target=permission)
-        action, permission = tobin_prc.add_permission(permission_type=Changes.Permissions.AddPermission,
+        action, permission = tobin_prc.add_permission(permission_type=Changes().Permissions.AddPermission,
             permission_actors=[self.users.rose.pk])        
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
@@ -199,11 +199,11 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission to the resource.
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.christen.pk])
 
         # Then she adds another permission with different actors/roles.
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
 
         # Both of the actors specified can do the thing.
@@ -224,16 +224,16 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission to the resource.
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.christen.pk])
 
         # Then she adds another permission with different actors/roles.
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
 
         # Then she adds a condition to the second one
         permission_data = [
-            { "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
+            { "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
         ]
         action, condition = self.prc.add_condition_to_permission(permission_pk=permission.pk,
             condition_type="approvalcondition", condition_data=None, permission_data=permission_data)
@@ -256,7 +256,7 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission to the resource.
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.jj.pk])
 
         # JJ can use the permission
@@ -294,7 +294,7 @@ class PermissionSystemTest(DataTestCase):
 
         # She sets a permission on the resource and it works, blocking Tobin from adding an item
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.christen.pk])
         tobin_rc = ResourceClient(actor=self.users.tobin, target=resource)
         action, item = tobin_rc.add_item(item_name="Tobin Test")
@@ -303,7 +303,7 @@ class PermissionSystemTest(DataTestCase):
 
         # She sets a permission on the group that does let Tobin add item, now it works
         self.prc.set_target(target=self.instance)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
         
         tobin_rc = ResourceClient(actor=self.users.tobin, target=resource)
@@ -322,14 +322,14 @@ class PermissionSystemTest(DataTestCase):
 
         # She sets permissions on the resource and on the group, both of which let Tobin add an item
         self.prc.set_target(target=resource)
-        action, resource_permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, resource_permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
         self.prc.set_target(target=self.instance)
-        action, group_permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, group_permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
 
         # She adds a condition to the one on the resource
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}]
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}]
         action, result = self.prc.add_condition_to_permission(permission_pk=resource_permission.pk, 
             condition_type="approvalcondition", permission_data=permission_data, condition_data=None)
 
@@ -339,7 +339,7 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # She adds a condition to the group, now Tobin has to wait
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}]
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}]
         action, result = self.prc.add_condition_to_permission(permission_pk=group_permission.pk, 
             condition_type="approvalcondition", permission_data=permission_data, condition_data=None)
         action, item = tobin_rc.add_item(item_name="Tobin Test 2")
@@ -354,7 +354,7 @@ class PermissionSystemTest(DataTestCase):
         self.commClient.add_members([self.users.rose.pk, self.users.crystal.pk,
             self.users.tobin.pk])
         self.prc = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
-        action, result = self.prc.add_permission(permission_type=Changes.Communities.ChangeName,
+        action, result = self.prc.add_permission(permission_type=Changes().Communities.ChangeName,
             permission_roles=['members'])
         self.target_permission = result
 
@@ -391,10 +391,10 @@ class PermissionSystemTest(DataTestCase):
          # Pinoe creates a resource and adds a permission to the resource and a condition to the permission.
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
         permission_data = [
-            {"permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
+            {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
         ]
         action, condition = self.prc.add_condition_to_permission(permission_pk=permission.pk,
             condition_type="approvalcondition", condition_data=None, permission_data=permission_data)
@@ -427,27 +427,27 @@ class ConditionSystemTest(DataTestCase):
         from concord.permission_resources.state_changes import AddPermissionConditionStateChange
         from concord.permission_resources.state_changes import PermissionsItem
         permission = PermissionsItem()
-        permission_data = [{ "permission_type": Changes.Conditionals.AddVote, 
+        permission_data = [{ "permission_type": Changes().Conditionals.AddVote, 
             "permission_actors": [self.users.crystal.pk, self.users.jmac.pk] }]
         change = AddPermissionConditionStateChange(permission_pk=1, condition_type="votecondition", condition_data=None,
             permission_data=permission_data)
         mock_actions = change.generate_mock_actions(actor=self.users.pinoe, permission=permission)
         self.assertEquals(len(mock_actions), 2)
-        self.assertEquals(mock_actions[0].change.get_change_type(), Changes.Conditionals.AddConditionToAction)
-        self.assertEquals(mock_actions[1].change.get_change_type(), Changes.Permissions.AddPermission)     
+        self.assertEquals(mock_actions[0].change.get_change_type(), Changes().Conditionals.SetConditionOnAction)
+        self.assertEquals(mock_actions[1].change.get_change_type(), Changes().Permissions.AddPermission)     
         self.assertEquals(mock_actions[0].target, "{{trigger_action}}")  
         self.assertEquals(mock_actions[1].change.permission_actors, [self.users.crystal.pk, self.users.jmac.pk])
 
     def test_add_leadership_condition_state_change(self):
         from concord.communities.state_changes import AddLeadershipConditionStateChange
         community = CommunityClient(actor=self.users.pinoe).create_community(name="Test community")
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_roles": ["members"] }]
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_roles": ["members"] }]
         change = AddLeadershipConditionStateChange(condition_type="approvalcondition", condition_data=None, 
             permission_data=permission_data, leadership_type="governor")
         mock_actions = change.generate_mock_actions(actor=self.users.pinoe, target=community)
         self.assertEquals(len(mock_actions), 2)
-        self.assertEquals(mock_actions[0].change.get_change_type(), Changes.Conditionals.AddConditionToAction)
-        self.assertEquals(mock_actions[1].change.get_change_type(), Changes.Permissions.AddPermission)        
+        self.assertEquals(mock_actions[0].change.get_change_type(), Changes().Conditionals.SetConditionOnAction)
+        self.assertEquals(mock_actions[1].change.get_change_type(), Changes().Permissions.AddPermission)        
         self.assertEquals(mock_actions[0].target, "{{trigger_action}}")  
         self.assertEquals(mock_actions[1].change.permission_roles, ["members"])
 
@@ -456,7 +456,7 @@ class ConditionSystemTest(DataTestCase):
         from concord.permission_resources.state_changes import AddPermissionConditionStateChange
         from concord.permission_resources.state_changes import PermissionsItem
         permission = PermissionsItem()
-        permission_data = [{ "permission_type": Changes.Conditionals.AddVote, 
+        permission_data = [{ "permission_type": Changes().Conditionals.AddVote, 
             "permission_actors": [self.users.crystal.pk, self.users.jmac.pk] }]
         change = AddPermissionConditionStateChange(permission_pk=1, condition_type="votecondition", condition_data=None,
             permission_data=permission_data)
@@ -468,8 +468,8 @@ class ConditionSystemTest(DataTestCase):
         from concord.actions.text_utils import condition_template_to_text
         from concord.communities.state_changes import AddLeadershipConditionStateChange
         community = CommunityClient(actor=self.users.pinoe).create_community(name="Test community")
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_roles": ["members"] },
-            { "permission_type": Changes.Conditionals.Reject, "permission_actors": [self.users.crystal.pk]}]
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_roles": ["members"] },
+            { "permission_type": Changes().Conditionals.Reject, "permission_actors": [self.users.crystal.pk]}]
         change = AddLeadershipConditionStateChange(condition_type="approvalcondition", condition_data=None, 
             permission_data=permission_data, leadership_type="governor")
         mock_actions = change.generate_mock_actions(actor=self.users.pinoe, target=community)
@@ -495,11 +495,11 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
         
         # But she places a vote condition on the permission
-        permission_data = [{ "permission_type": Changes.Conditionals.AddVote, 
+        permission_data = [{ "permission_type": Changes().Conditionals.AddVote, 
             "permission_actors": [self.users.jmac.pk, self.users.crystal.pk] }]
         self.prc.add_condition_to_permission(permission_pk=permission.pk, condition_type="votecondition", 
             permission_data=permission_data)
@@ -542,7 +542,7 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
         
         # But she places a condition on the permission that Rose has to get
@@ -586,9 +586,9 @@ class ConditionalsTest(DataTestCase):
         # Pinoe creates a resource and sets a permission and a condition on the permission
         resource = self.rc.create_resource(name="Go USWNT!")
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, 
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, 
             "permission_actors" : [self.users.crystal.pk]}]
         self.prc.add_condition_to_permission(permission_pk=permission.pk, condition_type="approvalcondition", 
             permission_data=permission_data)
@@ -620,12 +620,12 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
         
         # But she places a condition on the permission that Rose has to get
         # approval.  She specifies that *Crystal* has to approve it.
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, 
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, 
             "permission_actors" : [self.users.crystal.pk]}]
         self.prc.add_condition_to_permission(permission_pk=permission.pk, condition_type="approvalcondition", 
             permission_data=permission_data)
@@ -657,15 +657,15 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
         
         # But she places a condition on the permission that Rose has to get
         # approval.  She specifies that *Crystal* has to approve it.  She also 
         # specifies that Andi Sullivan can reject it.
         permission_data = [
-            { "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.crystal.pk] },
-            { "permission_type": Changes.Conditionals.Reject, "permission_actors": [self.users.sully.pk] }
+            { "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk] },
+            { "permission_type": Changes().Conditionals.Reject, "permission_actors": [self.users.sully.pk] }
         ]
         action, result = self.prc.add_condition_to_permission(permission_pk=permission.pk, condition_type="approvalcondition", 
             permission_data=permission_data)
@@ -728,7 +728,7 @@ class ConditionalsFormTest(DataTestCase):
 
         # Create a permission to set a condition on 
         self.prc = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
-        action, result = self.prc.add_permission(permission_type=Changes.Resources.ChangeResourceName,
+        action, result = self.prc.add_permission(permission_type=Changes().Resources.ChangeResourceName,
             permission_actors=[self.users.rose.pk])
         self.target_permission = result
 
@@ -896,7 +896,7 @@ class ConditionalsFormTest(DataTestCase):
         approvalForm.save()
         condTemplate = self.pcc.get_condition_template()
         perm_data = json.loads(condTemplate.permission_data)
-        self.assertEquals(perm_data[0]["permission_type"], Changes.Conditionals.Approve)
+        self.assertEquals(perm_data[0]["permission_type"], Changes().Conditionals.Approve)
         self.assertEquals(perm_data[0]["permission_actors"], [self.users.rose.pk])
         self.assertFalse(perm_data[0]["permission_roles"])
         self.assertFalse(perm_data[0]["permission_configuration"])
@@ -910,7 +910,7 @@ class ConditionalsFormTest(DataTestCase):
 
         # Then she adds a permission that says that Tobin can add items.
         self.prc.set_target(target=resource)
-        action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
+        action, permission = self.prc.add_permission(permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
 
         # Pinoe uses the form to place a condition on the permission she just created, such that
@@ -1053,7 +1053,7 @@ class BasicCommunityTest(DataTestCase):
         # Add  permission for nongovernor to change name
         prc = PermissionResourceClient(actor=self.users.pinoe)
         prc.set_target(target=resource)
-        action, permission = prc.add_permission(permission_type=Changes.Resources.ChangeResourceName,
+        action, permission = prc.add_permission(permission_type=Changes().Resources.ChangeResourceName,
             permission_actors=[self.users.jj.pk])
         
         # Test - JJ should now be allowed to change name
@@ -1088,7 +1088,7 @@ class GoverningAuthorityTest(DataTestCase):
     def test_with_conditional_on_governer_decision_making(self):
 
         # Set conditional on governor decision making.  Only Sonny can approve condition.
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.sonny.pk]}]
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.sonny.pk]}]
         action, result = self.commClient.add_leadership_condition(
             leadership_type="governor", condition_type="approvalcondition", permission_data=permission_data)
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented") # Action accepted
@@ -1139,7 +1139,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Owner adds a specific permission for Aubrey, so Aubrey's action is successful
         prc = PermissionResourceClient(actor=self.users.pinoe, target=resource)
-        owner_action, result = prc.add_permission(permission_type=Changes.Resources.ChangeResourceName,
+        owner_action, result = prc.add_permission(permission_type=Changes().Resources.ChangeResourceName,
             permission_actors=[self.users.aubrey.pk])
         action, result = aubrey_rc.change_name(new_name="Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
@@ -1163,7 +1163,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Owner Pinoe adds a specific permission for Aubrey, Aubrey's action is successful
         prc = PermissionResourceClient(actor=self.users.pinoe, target=self.resource)
-        owner_action, result = prc.add_permission(permission_type=Changes.Resources.ChangeResourceName,
+        owner_action, result = prc.add_permission(permission_type=Changes().Resources.ChangeResourceName,
             permission_actors=[self.users.aubrey.pk])
         action, result = aubrey_rc.change_name(new_name="Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
@@ -1190,7 +1190,7 @@ class FoundationalAuthorityTest(DataTestCase):
         # In this community, all members are owners but for the foundational authority to do
         # anything they must agree via majority vote.
         action, result = self.commClient.add_owner_role(owner_role="members") # Add member role
-        permission_data = [{ "permission_type": Changes.Conditionals.AddVote, "permission_roles": ["members"]}]
+        permission_data = [{ "permission_type": Changes().Conditionals.AddVote, "permission_roles": ["members"]}]
         action, result = self.commClient.add_leadership_condition(
             leadership_type="owner",
             condition_type = "votecondition", 
@@ -1389,7 +1389,7 @@ class RolesetTest(DataTestCase):
 
         # Pinoe creates a permission item with the 'namers' role in it
         self.permClient.set_target(self.resource)
-        action, result = self.permClient.add_permission(permission_type=Changes.Resources.ChangeResourceName,
+        action, result = self.permClient.add_permission(permission_type=Changes().Resources.ChangeResourceName,
             permission_roles=["namers"])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
@@ -1631,7 +1631,7 @@ class PermissionFormTest(DataTestCase):
         # Check that it works on save
         self.permission_form.save()
         permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
-        self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_role[0].change_type, Changes().Communities.AddPeopleToRole)
 
     def test_add_roles_to_permission(self):
 
@@ -1650,9 +1650,9 @@ class PermissionFormTest(DataTestCase):
         # Check that it works on save
         self.permission_form.save()
         permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="spirit players")
-        self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_role[0].change_type, Changes().Communities.AddPeopleToRole)
         permissions_for_role = self.prClient.get_permissions_associated_with_role(role_name="midfielders")
-        self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_role[0].change_type, Changes().Communities.AddPeopleToRole)
 
     def test_add_individual_to_permission(self):
 
@@ -1675,7 +1675,7 @@ class PermissionFormTest(DataTestCase):
         self.permission_form.save()
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.aubrey.pk)
-        self.assertEqual(permissions_for_actor[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_actor[0].change_type, Changes().Communities.AddPeopleToRole)
 
     def test_add_individuals_to_permission(self):
 
@@ -1698,10 +1698,10 @@ class PermissionFormTest(DataTestCase):
         self.permission_form.save()
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.aubrey.pk)
-        self.assertEqual(permissions_for_actor[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_actor[0].change_type, Changes().Communities.AddPeopleToRole)
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.christen.pk)
-        self.assertEqual(permissions_for_actor[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_actor[0].change_type, Changes().Communities.AddPeopleToRole)
 
     def test_add_multiple_to_multiple_permissions(self):
 
@@ -1763,7 +1763,7 @@ class PermissionFormTest(DataTestCase):
         self.permission_form.save()
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
             role_name="spirit players")
-        self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_role[0].change_type, Changes().Communities.AddPeopleToRole)
 
         # now remove it
         self.data["6~roles"] = []
@@ -1785,10 +1785,10 @@ class PermissionFormTest(DataTestCase):
         self.permission_form.save()
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
             role_name="spirit players")
-        self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_role[0].change_type, Changes().Communities.AddPeopleToRole)
         permissions_for_role = self.prClient.get_permissions_associated_with_role(
             role_name="midfielders")
-        self.assertEqual(permissions_for_role[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_role[0].change_type, Changes().Communities.AddPeopleToRole)
 
         # now remove them
         self.data["6~roles"] = []
@@ -1813,7 +1813,7 @@ class PermissionFormTest(DataTestCase):
         self.permission_form.save()
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.christen.pk)
-        self.assertEqual(permissions_for_actor[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_actor[0].change_type, Changes().Communities.AddPeopleToRole)
 
         # Remove actor from permission
         self.data["6~individuals"] = []
@@ -1835,10 +1835,10 @@ class PermissionFormTest(DataTestCase):
         self.permission_form.save()
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.pinoe.pk)
-        self.assertEqual(permissions_for_actor[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_actor[0].change_type, Changes().Communities.AddPeopleToRole)
         permissions_for_actor = self.prClient.get_permissions_associated_with_actor(
             actor=self.users.christen.pk)
-        self.assertEqual(permissions_for_actor[0].change_type, Changes.Communities.AddPeopleToRole)
+        self.assertEqual(permissions_for_actor[0].change_type, Changes().Communities.AddPeopleToRole)
 
         # Remove actors from permission
         self.data["6~individuals"] = []
@@ -2001,7 +2001,7 @@ class MetaPermissionsFormTest(DataTestCase):
 
         # Initial data for metapermissions level
         self.target_permission = self.prClient.get_specific_permissions(
-            change_type=Changes.Communities.AddPeopleToRole)[0]
+            change_type=Changes().Communities.AddPeopleToRole)[0]
         self.metapermissions_data = {}
         
         self.metaClient = PermissionResourceClient(actor=self.users.pinoe, target=self.target_permission)
@@ -2138,7 +2138,7 @@ class MetaPermissionsFormTest(DataTestCase):
 
         # No one currently has the specific permission "remove people from role".
         remove_permission = self.prClient.get_specific_permissions(change_type=
-            Changes.Communities.RemovePeopleFromRole)
+            Changes().Communities.RemovePeopleFromRole)
         self.assertFalse(remove_permission)
 
         # Pinoe tries to give JJ the ability to add or remove people from the permission
@@ -2149,7 +2149,7 @@ class MetaPermissionsFormTest(DataTestCase):
         target_permission = self.prClient.get_permission_or_return_mock(
             permitted_object_id=self.instance.pk,
             permitted_object_content_type=str(ct.pk),
-            permission_change_type=Changes.Communities.RemovePeopleFromRole)
+            permission_change_type=Changes().Communities.RemovePeopleFromRole)
         self.assertEqual(target_permission.__class__.__name__, "MockMetaPermission")
 
         # Then we actually update metapermissions via the form.
@@ -2160,8 +2160,8 @@ class MetaPermissionsFormTest(DataTestCase):
         self.metapermission_form.save()
 
         # Now that Pinoe has done that, the specific permission exists.  
-        remove_permission = self.prClient.get_specific_permissions(change_type=Changes.Communities.RemovePeopleFromRole)
-        ah = PermissionsItem.objects.filter(change_type=Changes.Communities.RemovePeopleFromRole)
+        remove_permission = self.prClient.get_specific_permissions(change_type=Changes().Communities.RemovePeopleFromRole)
+        ah = PermissionsItem.objects.filter(change_type=Changes().Communities.RemovePeopleFromRole)
         self.assertEqual(len(remove_permission), 1)         
 
         # The metapermission Pinoe created for JJ also exists.
@@ -2219,11 +2219,11 @@ class ResourcePermissionsFormTest(DataTestCase):
 
         # Initial form data
         self.data = {
-            '0~name': Changes.Resources.AddItem,
+            '0~name': Changes().Resources.AddItem,
             '0~individuals': [], '0~roles': None,
-            '1~name': Changes.Resources.ChangeResourceName,
+            '1~name': Changes().Resources.ChangeResourceName,
             '1~individuals': [], '1~roles': None,
-            '2~name': Changes.Resources.RemoveItem,
+            '2~name': Changes().Resources.RemoveItem,
             '2~individuals': [], '2~roles': None}
 
     def test_add_and_remove_actor_permission_to_resource_via_form(self):
@@ -2349,7 +2349,7 @@ class ResolutionFieldTest(DataTestCase):
 
         # Add permission so any member can change the name of the group
         self.prc.add_permission(permission_roles=["members"],
-            permission_type=Changes.Communities.ChangeName)
+            permission_type=Changes().Communities.ChangeName)
 
         # User changes name
         self.commClient.set_actor(actor=self.member_user)
@@ -2366,7 +2366,7 @@ class ResolutionFieldTest(DataTestCase):
 
         # Add permission so any member can change the name of the group
         self.prc.add_permission(permission_roles=["members"],
-            permission_type=Changes.Communities.ChangeName)
+            permission_type=Changes().Communities.ChangeName)
 
         # Non-member user changes name
         self.commClient.set_actor(actor=self.nonmember_user)
@@ -2396,7 +2396,7 @@ class ResolutionFieldTest(DataTestCase):
 
         # Crystal can change the name of the group because she has a specific permission.
         self.prc.add_permission(permission_actors=[self.users.crystal.pk],
-            permission_type=Changes.Communities.ChangeName)
+            permission_type=Changes().Communities.ChangeName)
         action, result = self.crystalClient.change_name(new_name="Crystal Dunn and Her Sidekicks")
         self.assertEquals(action.status, "implemented")
         self.assertTrue(action.resolution.is_resolved)
@@ -2407,7 +2407,7 @@ class ResolutionFieldTest(DataTestCase):
 
         # Add permission so any member can change the name of the group
         self.prc.add_permission(permission_roles=["members"],
-            permission_type=Changes.Communities.ChangeName)
+            permission_type=Changes().Communities.ChangeName)
 
         # When they change the name, the resolution role field shows the role
         action, result = self.roseClient.change_name(new_name="Best Team")
@@ -2429,7 +2429,7 @@ class ResolutionFieldTest(DataTestCase):
 
         # Add permission so a specific person can change the name of the group
         self.prc.add_permission(permission_actors=[self.users.rose.pk],
-            permission_type=Changes.Communities.ChangeName)
+            permission_type=Changes().Communities.ChangeName)
 
         # When they change the name, the resolution role field shows no role
         action, result = self.roseClient.change_name(new_name="Best Team")
@@ -2441,7 +2441,7 @@ class ResolutionFieldTest(DataTestCase):
 
         # Pinoe sets a permission on the community that any 'member' can change the name.
         action, permission = self.prc.add_permission(permission_roles=["members"],
-            permission_type=Changes.Communities.ChangeName)
+            permission_type=Changes().Communities.ChangeName)
 
         # But then she adds a condition that someone needs to approve a name change 
         # before it can go through. 
@@ -2530,7 +2530,7 @@ class ConfigurablePermissionTest(DataTestCase):
         # Pinoe configures a position so that only Rose can add people to the Spirit Players role
         # and not the Forwards role
         self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_type=Changes().Communities.AddPeopleToRole,
             permission_actors=[self.users.rose.pk],
             permission_configuration={"role_name": "spirit players"})
 
@@ -2608,7 +2608,7 @@ class ConfigurablePermissionTest(DataTestCase):
         # Pinoe creates a configured permission where people with role 'admins', as well as the role 
         # 'spirit players', can add people to the role 'forwards'.
         action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_type=Changes().Communities.AddPeopleToRole,
             permission_roles=["admins", "spirit players"],
             permission_configuration={"role_name": "forwards"})
         self.assertCountEqual(permission.roles.role_list, ["admins", "spirit players"]) 
@@ -2624,7 +2624,7 @@ class ConfigurablePermissionTest(DataTestCase):
         # JJ to remove the role 'spirit players' but not admins.
         self.metaPermClient = PermissionResourceClient(actor=self.users.pinoe, target=permission)
         self.metaPermClient.add_permission(
-            permission_type=Changes.Permissions.RemoveRoleFromPermission,
+            permission_type=Changes().Permissions.RemoveRoleFromPermission,
             permission_actors=[self.users.jj.pk],
             permission_configuration={"role_name": "spirit players"})
 
@@ -2651,7 +2651,7 @@ class ConfigurablePermissionTest(DataTestCase):
         self.commClient.add_people_to_role(role_name="admins", people_to_add=[self.users.tobin.pk])
         self.commClient.add_people_to_role(role_name="spirit players", people_to_add=[self.users.rose.pk])
         action, target_permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddPeopleToRole,
+            permission_type=Changes().Communities.AddPeopleToRole,
             permission_roles=["admins", "spirit players"],
             permission_configuration={"role_name": "forwards"}) 
         self.roseClient.add_people_to_role(role_name="forwards", people_to_add=[self.users.jmac.pk])
@@ -2726,7 +2726,7 @@ class MockActionTest(DataTestCase):
         # Pinoe sets specific permission that Tobin does not have
         self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
         action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddRole,
+            permission_type=Changes().Communities.AddRole,
             permission_actors=[self.users.christen.pk])
 
         from concord.actions.utils import check_permissions_for_action_group
@@ -2749,9 +2749,9 @@ class MockActionTest(DataTestCase):
          # Pinoe sets specific permission & condition on that permission
         self.permClient = PermissionResourceClient(actor=self.users.pinoe, target=self.instance)
         action, permission = self.permClient.add_permission(
-            permission_type=Changes.Communities.AddRole,
+            permission_type=Changes().Communities.AddRole,
             permission_actors=[self.users.tobin.pk])
-        perm_data = [ { "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.christen.pk] } ]
+        perm_data = [ { "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.christen.pk] } ]
         self.permClient.add_condition_to_permission(permission_pk=permission.pk, condition_type="approvalcondition", 
             permission_data=perm_data)
 
@@ -2849,14 +2849,14 @@ class ActionContainerTest(DataTestCase):
         self.permClient.set_actor(actor=self.users.crystal)
 
         # new governor, Crystal, adds specific permissions for Pinoe to take the five actions
-        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddMembers,
+        action, permission = self.permClient.add_permission(permission_type=Changes().Communities.AddMembers,
             permission_actors=[self.users.pinoe.pk])
-        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddRole,
+        action, permission = self.permClient.add_permission(permission_type=Changes().Communities.AddRole,
             permission_actors=[self.users.pinoe.pk])
-        action, permission = self.permClient.add_permission(permission_type=Changes.Communities.AddPeopleToRole,
+        action, permission = self.permClient.add_permission(permission_type=Changes().Communities.AddPeopleToRole,
             permission_actors=[self.users.pinoe.pk])
         # add condition to one of the permissions
-        permission_data = [{ "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk] }]
+        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.pinoe.pk] }]
         action, result = self.permClient.add_condition_to_permission(permission_pk=permission.pk, 
             condition_type="approvalcondition", condition_data={"self_approval_allowed": True}, 
             permission_data=permission_data)
@@ -3338,7 +3338,7 @@ class PermissionedReadTest(DataTestCase):
 
     def test_unconfigured_permission_read(self):
         # Only people with role "forwards" can view the resource
-        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+        action, result = self.permClient.add_permission(permission_type=Changes().Actions.View, 
             permission_roles=["forwards"])
 
         # User Rose without role 'forwards' can't see object
@@ -3358,7 +3358,7 @@ class PermissionedReadTest(DataTestCase):
 
     def test_can_configure_readable_fields(self):
         # Only people with role "forwards" can view the resource field "name" and resource "id"
-        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+        action, result = self.permClient.add_permission(permission_type=Changes().Actions.View, 
             permission_roles=["forwards"], permission_configuration={"fields_to_include": ["name", "id"]})
 
         # They try to get other fields, get error
@@ -3388,12 +3388,12 @@ class PermissionedReadTest(DataTestCase):
     def test_multiple_readpermissions(self):
 
         # Permission 1: user Tobin can only see field "name"
-        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+        action, result = self.permClient.add_permission(permission_type=Changes().Actions.View, 
             permission_actors=[self.users.tobin.pk], 
             permission_configuration={"fields_to_include": ["name"]})
 
         # Permission 2: user Rose can only see field "owner"
-        action, result = self.permClient.add_permission(permission_type=Changes.Actions.ViewPermission, 
+        action, result = self.permClient.add_permission(permission_type=Changes().Actions.View, 
             permission_actors=[self.users.rose.pk], 
             permission_configuration={"fields_to_include": ["owner"]})
 

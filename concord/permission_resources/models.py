@@ -115,8 +115,8 @@ class PermissionsItem(PermissionedModel):
         return self.permitted_object
 
     def get_state_change_object(self):
-        from concord.actions.utils import get_state_change_object_given_name
-        return get_state_change_object_given_name(self.change_type)
+        from concord.actions.utils import get_state_change_object
+        return get_state_change_object(self.change_type)
 
     def full_description(self):
         """Helper method for displaying permsisions."""

@@ -60,8 +60,8 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         """ To validate a permission being added, we need to instantiate the permission and check its configuration is valid.
         We also need to validate that the given permission can be set on the target.
         """
-        from concord.actions.utils import get_state_change_object_given_name
-        permission =  get_state_change_object_given_name(self.permission_type)
+        from concord.actions.utils import get_state_change_object
+        permission = get_state_change_object(self.permission_type)
 
         # check that target is a valid class for the permission to be set on
         if target.__class__ not in permission.get_settable_classes():

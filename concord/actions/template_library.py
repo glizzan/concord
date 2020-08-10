@@ -6,7 +6,7 @@ import json
 from django.contrib.auth.models import User
 
 from concord.actions.customfields import Template
-from concord.actions.state_changes import Changes
+from concord.actions.utils import Changes
 from concord.conditionals.client import ConditionalClient
 from concord.permission_resources.client import PermissionResourceClient
 from concord.actions.models import TemplateModel
@@ -28,7 +28,7 @@ def create_invite_only_template():
     perm_client.mode = "mock"
 
     # Step 1: add permission to addMember change
-    action_1 = perm_client.add_permission(permission_type=Changes.Communities.AddMembers,
+    action_1 = perm_client.add_permission(permission_type=Changes().Communities.AddMembers,
         permission_actors="{{supplied_fields.addmembers_permission_actors}}",
         permission_roles="{{supplied_fields.addmembers_permission_roles}}")
     action_1.target="{{trigger_action.target}}"
@@ -64,12 +64,12 @@ def create_anyone_can_request_template():
     perm_client.mode = "mock"
 
     # Step 1: add addMember permission with anyone set to True and self_only set to True
-    action_1 = perm_client.add_permission(permission_type=Changes.Communities.AddMembers,
+    action_1 = perm_client.add_permission(permission_type=Changes().Communities.AddMembers,
         anyone=True, permission_configuration={"self_only": True})
     action_1.target="{{trigger_action.target}}"
     
     # Step 2: add condition to permission
-    permission_data = [{ "permission_type": Changes.Conditionals.Approve, 
+    permission_data = [{ "permission_type": Changes().Conditionals.Approve, 
         "permission_actors": "{{supplied_fields.approve_permission_actors}}",
         "permission_roles": "{{supplied_fields.approve_permission_roles}}"
     }]  
@@ -100,7 +100,7 @@ def create_anyone_can_join_template():
     perm_client.mode = "mock"
 
     # Step 1: add addMember permission with anyone set to True and self_only set to True
-    action_1 = perm_client.add_permission(permission_type=Changes.Communities.AddMembers,
+    action_1 = perm_client.add_permission(permission_type=Changes().Communities.AddMembers,
         anyone=True, permission_configuration={"self_only": True})
     action_1.target="{{trigger_action.target}}"
     

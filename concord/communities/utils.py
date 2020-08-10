@@ -1,4 +1,4 @@
-from concord.actions.state_changes import Changes
+from concord.actions.utils import Changes
 from concord.permission_resources.client import PermissionResourceClient
 from concord.conditionals.client import ConditionalClient
 
@@ -72,7 +72,7 @@ class MembershipHelper(object):
 
         # add permission
         roles, actors = self.get_permission_roles_and_actors()
-        action = self.permissionClient.add_permission(permission_type=Changes.Communities.AddMembers,
+        action = self.permissionClient.add_permission(permission_type=Changes().Communities.AddMembers,
             permission_roles=roles, permission_actors=actors)
         self.mock_action_list.append(action)
 
@@ -93,14 +93,14 @@ class MembershipHelper(object):
     def add_anyone_can_join(self):
 
         # add permission & set to anyone
-        action = self.permissionClient.add_permission(permission_type=Changes.Communities.AddMembers,
+        action = self.permissionClient.add_permission(permission_type=Changes().Communities.AddMembers,
             permission_configuration={"self_only": True}, anyone=True)
         self.mock_action_list.append(action)
 
     def add_anyone_can_ask(self):
 
         # add permission & set to anyone
-        action = self.permissionClient.add_permission(permission_type=Changes.Communities.AddMembers,
+        action = self.permissionClient.add_permission(permission_type=Changes().Communities.AddMembers,
             permission_configuration={"self_only": True}, anyone=True)
         self.mock_action_list.append(action)
 

@@ -94,9 +94,9 @@ class ResourceClient(BaseClient):
         return self.create_and_take_action(change)
 
     def add_item(self, *, item_name: str) -> Tuple[int, Any]:
-        change = sc.AddItemResourceStateChange(item_name=item_name)
+        change = sc.AddItemStateChange(item_name=item_name)
         return self.create_and_take_action(change)
 
     def remove_item(self, *, item_pk: int) -> Tuple[int, Any]:
-        change = sc.RemoveItemResourceStateChange(item_pk=item_pk)
+        change = sc.RemoveItemStateChange(item_pk=item_pk)
         return self.create_and_take_action(change)

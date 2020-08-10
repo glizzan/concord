@@ -137,6 +137,6 @@ def check_configuration(action, permission):
 
 
 def get_verb_given_permission_type(permission):
-    from concord.actions.utils import get_state_change_object_given_name
-    state_change_object = get_state_change_object_given_name(permission)
+    from concord.actions.utils import get_state_change_object
+    state_change_object = get_state_change_object(permission)
     return state_change_object.description.lower()

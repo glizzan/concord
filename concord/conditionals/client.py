@@ -140,7 +140,7 @@ class ConditionalClient(BaseClient):
             raise ValueError("Must supply either permission or community & leadership type to trigger_condition_creation")
         # We know that a condition template has a condition as the result of the first action, so we can find it
         # and return it here
-        condition = container.context.get_result(position=0)  
+        condition = container.context.get_result(position=0)
         return condition, container
 
     def trigger_condition_creation_from_source_id(self, *, action, source_id):

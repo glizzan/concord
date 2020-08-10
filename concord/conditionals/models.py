@@ -365,6 +365,6 @@ def retry_action(sender, instance, created, **kwargs):
         else:
             actionClient.take_action(action=action)
 
+
 for conditionModel in [ApprovalCondition, VoteCondition]:  # FIXME: should be auto-detected
     post_save.connect(retry_action, sender=conditionModel)
-

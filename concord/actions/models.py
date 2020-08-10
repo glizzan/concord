@@ -8,8 +8,8 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, ClientInterface, replace_fields
-from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField, 
+from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model, replace_fields
+from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField,
                                           TemplateContextField, Template, TemplateContext)
 
 
@@ -30,7 +30,7 @@ class Action(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, blank=True, null=True)
     object_id = models.PositiveIntegerField(blank=True, null=True)
     target = GenericForeignKey()
-    container = models.PositiveIntegerField(blank=True, null=True)   
+    container = models.PositiveIntegerField(blank=True, null=True)
 
     # Change field
     change = StateChangeField()
@@ -47,75 +47,73 @@ class Action(models.Model):
     # Basics
 
     def __str__(self):
-        return f"{self.status} action {self.change.description} by {self.actor} on {self.target} "
+        return f"Action {self.pk} '{self.change.description}' by {self.actor} on {self.target} ({self.status})"
 
     def get_status(self):
+        """Get status of Action."""
         return "draft" if self.is_draft else self.status
 
-    def save(self, *args, override_check=False, **kwargs):
-        """
-        If action is live (is_draft is False) check that target and actor are set.
-        """
+    def save(self, *args, **kwargs):
+        """If action is live (is_draft is False) check that target and actor are set."""
         if not self.is_draft:
             if self.target is None or self.actor is None:
                 raise DatabaseError("Must set target and actor before sending or implementing an Action")
-        return super().save(*args, **kwargs)  # Call the "real" save() method.     
+        return super().save(*args, **kwargs)  # Call the "real" save() method.
 
     def get_description(self):
         """Gets description of the action by reference to `change_types` set via change field, including the target."""
         if self.status == "implemented":
             description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
-            return self.actor.username + " " + description + " " + target_preposition + " " + self.target.get_name()
+            return f"{self.actor.username} {description} {target_preposition} {self.target.get_name()}"
         else:
             description, target_preposition = self.change.description_present_tense(), self.change.get_preposition()
-            return self.actor.username + " asked to " + description + " " + target_preposition + " " + self.target.get_name()
+            return f"{self.actor.username} asked to {description} {target_preposition} {self.target.get_name()}"
 
     def get_targetless_description(self):
         """Gets description of the action by reference to `change_types` set via change field, without the target."""
         if self.status == "implemented":
-            description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
-            return self.actor.username + " " + description
+            return f"{self.actor.username} {self.change.description_past_tense()}"
         else:
-            description, target_preposition = self.change.description_present_tense(), self.change.get_preposition()
-            return self.actor.username + " asked to " + description
+            return f"{self.actor.username} asked to {self.change.description_present_tense()}"
 
     # Steps of action execution
 
     def implement_action(self):
-        """Perform an action by the change object.
-
-        Carries out its custom implementation using the actor and target.
-        """
+        """Perform an action defined by the Change object. Carries out its custom implementation using the actor
+        and target."""
         if hasattr(self.change, "pass_action") and self.change.pass_action:
             logger.debug("Implementing action through pass_action workaround")
             result = self.change.implement(actor=self.actor, target=self.target, action=self)
         else:
             result = self.change.implement(actor=self.actor, target=self.target)
         self.status = "implemented"
-        logger.debug(f"Action {self.pk} implemented")
+        logger.debug(f"{self} implemented")
         return result
 
     def take_action(self):
         """Runs the action through the permissions pipeline.  If waiting on a condition,
-        triggers that condition.  If approved, implements action.  
-        
-        Returns itself and, optionally, the result of implementing the action.
-        """
+        triggers that condition.  If approved, implements action.
+
+        Returns itself and, optionally, the result of implementing the action."""
 
         logger.info(f"Taking action {self.pk}: ({self.actor} {self.change.description} on {self.target})")
 
         if self.status in ["created", "waiting"]:
 
             from concord.actions.permissions import has_permission
-            self = has_permission(action=self)
+            self.resolution.refresh_status()
+            self = has_permission(action=self)  # TODO: try just has_permission, not sure assigning to self works here
             self.status = self.resolution.generate_status()
 
-            if self.status == "waiting" and len(self.resolution.conditions) > 0:
+            if self.status == "waiting" and len(self.resolution.uncreated_conditions()) > 0:
+
                 from concord.conditionals.client import ConditionalClient
                 client = ConditionalClient(system=True)
-                for source_id in self.resolution.conditions:
-                    logger.info(f"Creating condition on action {self.pk} with source_id {source_id}")
-                    client.trigger_condition_creation_from_source_id(action=self, source_id=source_id)
+                for source_id in self.resolution.uncreated_conditions():
+                    condition, container = client.trigger_condition_creation_from_source_id(action=self,
+                                                                                            source_id=source_id)
+                    logger.info(f"Created condition {condition.pk} on action {self.pk} with source_id {source_id}")
+                    self.resolution.condition_created(source_id)
 
         if self.status == "approved":
             result = self.implement_action()
@@ -130,12 +128,10 @@ class Action(models.Model):
 class ActionContainer(models.Model):
     """An `ActionContainer` is a tool for helping generate, process, and implement a set of actions
     as a cohesive group.  This is useful for user-facing templates as well as for system actions
-    that are closely connected to each other and which users might see as a single action, for
-    example "adding a user with role X to group Y". This might seem like one action to a user but could 
-    actually be three: adding the role to the group, adding the user to the group, and adding the user to 
-    the role.  ActionContainers allow us to trigger conditions for all of the actions at once, as well as
+    that are closely connected to each other and which users might see as a single action. Crucially,
+    ActionContainers allow us to trigger conditions for all of the actions at once, as well as
     wait on implementing any of the actions until all of them pass.
-    
+
     ActionContainer stores the template information from the template that triggered it as well as context data
     specific to this particular application/implementation, for instance the pk of the action which triggered
     apply_template, and actions/results created by implemented the actions templates, as well as data for any
@@ -147,16 +143,18 @@ class ActionContainer(models.Model):
     trigger_action_pk = models.PositiveIntegerField(blank=True, null=True)
     status = models.CharField(max_length=500, blank=True, null=True)
 
+    def __str__(self):
+        return self.__repr__()
+
     def __repr__(self):
         return f"ActionContainer(template_data={repr(self.template_data)}, context={repr(self.context)}, " + \
             f"status={self.status})"
 
-    def __str__(self):
-        return self.__repr__()
-
     @property
     def is_open(self):
-        return False if self.status == "implemented" else True
+        """Property method which returns boolean indicating if Container is still open (True) or if it's been
+        implemented or rejected (false)."""
+        return False if self.status in ["implemented", "rejected"] else True
 
     # Action processing methods
 
@@ -170,14 +168,14 @@ class ActionContainer(models.Model):
         if make_actions_in_db:
             self.context.create_actions_in_db(self.pk, self.template_data)
 
-    def get_db_action(self, item):   
+    def get_db_action(self, item):
         """Gets action from db and processes it with replace_fields."""
         action = self.context.get_action_model_given_unique_id(item["unique_id"])
         mock_action = self.template_data.get_mock_action_given_unique_id(unique_id=item["unique_id"])
-        action = replace_fields(action_to_change=action, mock_action=mock_action, context=self.context)  
+        action = replace_fields(action_to_change=action, mock_action=mock_action, context=self.context)
         return action
 
-    def validate_action(self, action, index):
+    def validate_action(self, action):
         """Checks that a given action is still valid."""
 
         for field in ["actor", "target", "change"]:
@@ -192,7 +190,9 @@ class ActionContainer(models.Model):
             logging.debug(f"Action {action} is invalid due to: {action.change.validation_error.message}")
         return is_valid
 
-    def check_action_permission(self, action, index):
+    def check_action_permission(self, action):
+        """Checks whether a given action passes the permissions pipeline. If an action is waiting on conditions,
+        stores that information in the context field to be used later."""
 
         logging.debug(f"Checking permission for action {action}")
 
@@ -201,7 +201,7 @@ class ActionContainer(models.Model):
         if self.template_data.system:
             logging.debug("Approved as system action")
             return "approved"
-        
+
         from concord.actions.permissions import has_permission
         action = has_permission(action=action)
         action.status = action.resolution.generate_status()
@@ -224,35 +224,34 @@ class ActionContainer(models.Model):
                     return "approved"
 
         return "rejected"
-            
+
     def process_actions(self):
         """The heart of ActionContainer functionality - runs through action data, attempting to create
-        actions and, if necessary, managing their conditions.  Typically called by commit_actions and 
+        actions and, if necessary, managing their conditions.  Typically called by commit_actions and
         returns ok_to_commit indicating whether the commit needs to be rolled back or not."""
 
-        from concord.actions.permissions import has_permission
         ok_to_commit = True
-        actions = []   # not saved to DB, store of actions
+        actions = []   # not saved to DB, store of actions for later use
 
-        for index, item in enumerate(self.context.actions_and_results):
+        for item in self.context.actions_and_results:
 
             logging.debug(f"Processing item {item}")
             action = self.get_db_action(item)
             actions.append(action)
 
             # Check if still valid
-            if not self.validate_action(action, index):
+            if not self.validate_action(action):
                 ok_to_commit = False
                 continue
 
             # Check if has permission
-            status = self.check_action_permission(action, index)
+            status = self.check_action_permission(action)
             logging.debug(f"Action {action} has permission {status}")
             ok_to_commit = False if status != "approved" else ok_to_commit
             if status == "rejected":  # if status is rejected, skip implementing
                 continue
 
-            # Implement action 
+            # Implement action
             result = action.implement_action()
             self.context.add_result(unique_id=item["unique_id"], result=result)  # add to context
             if status == "waiting":  # roll back status change that comes with implement_action()
@@ -265,8 +264,8 @@ class ActionContainer(models.Model):
     def determine_overall_status(self, actions):
         """Given actions generated by a run of process_actions, determines what the status of the
         whole container should be.
-        
-        'drafted' - used when first created
+
+        'created' - used when first created
         'invalid' - if any of the actions created are invalid - shouldn't happen, but just in case
         'rejected' - used if any of the actions within the container are unconditionally rejected
         'waiting' - used if any of the actions within the container are 'waiting' or if any are missing
@@ -274,19 +273,28 @@ class ActionContainer(models.Model):
         'implemented' - used if all actions within container are implemented
         """
 
-        if self.status == "implemented": 
+        if self.status == "implemented":
             return "implemented"
 
         if any([action.status == "rejected" for action in actions]):
             return "rejected"
-        if any([action.status == "waiting" for action in actions]): 
+        if any([action.status == "waiting" for action in actions]):
             return "waiting"
         if any([action.status == "invalid" for action in actions]):
             return "invalid"
+        if all([action.status in ["approved", "implemented"] for action in actions]):
+            return "approved"
 
-        return "approved"
+        raise ValueError("Unexpected state when determining overall status, individual action statuses: " +
+                         f"{','.join([action.status for action in actions])}")
 
-    def commit_actions(self, test=False, generate_conditions=True):  
+        # FIXME: check for 'created' or other options?
+
+    def commit_actions(self, test=False, generate_conditions=True):
+        """Attempts to implement the actions in the container within an atomic transaction. If any of the actions
+        are not approved, rolls back commit. By default, calls generate_conditions which will create condition
+        instances for any conditions encountered during the pipeline, provided the container is not already
+        implemented or rejected."""
 
         if self.status == "implemented":
             logging.warn(f"Attempted to commit actions of implemented container {self.pk}")
@@ -299,12 +307,12 @@ class ActionContainer(models.Model):
                 if not ok_to_commit or test:
                     logging.info(f"Container {self.pk} not ok to commit, reverting (test = {test})")
                     raise DatabaseError()
-                self.status = "implemented"            
-        except DatabaseError as db_error:
-            if generate_conditions:
+                self.status = "implemented"
+        except DatabaseError:
+            if generate_conditions and self.is_open:
                 self.context.generate_conditions()
 
-        if self.status is not "implemented":
+        if self.status != "implemented":
             logging.debug(f"Reseting actions and results in context data, was {self.context.actions_and_results}")
             self.context.refresh_from_db()
 
@@ -329,7 +337,7 @@ class ActionContainer(models.Model):
                 conditions = self.context.get_condition_dicts_for_action(str(mock_action.unique_id))
                 actions.append({"action": None, "mock_action": mock_action, "result": None, "conditions": conditions})
                 logging.debug(f"Getting un-implemented actions: {actions}")
-  
+
         return actions
 
     def get_actions(self):
@@ -345,13 +353,9 @@ class PermissionedModel(models.Model):
 
     The `PermissionedModel` contains information about owners and their related permissions.
     """
-    owner_content_type = models.ForeignKey(
-        ContentType,
-        on_delete=models.CASCADE,
-        related_name="%(app_label)s_%(class)s_owned_objects",
-        blank=True,
-        null=True
-    )
+
+    owner_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, blank=True, null=True,
+                                           related_name="%(app_label)s_%(class)s_owned_objects")
     owner_object_id = models.PositiveIntegerField(blank=True, null=True)
     owner = GenericForeignKey('owner_content_type', 'owner_object_id')
 
@@ -407,10 +411,10 @@ class PermissionedModel(models.Model):
 
         By default, the readable attributes of a permissioned model are all fields specified on the
         model.  However, we cannot simply use `self._meta.get_fields()` since the field name is sometimes
-        different than the attribute name, for instance with related fields that are called, X but show
+        different than the attribute name, for instance with related fields that are called X but show
         up as X_set on the model.
 
-        For now we're assuming this is going to be user-facing. Eventually we need to refactor the
+        TODO: For now we're assuming this is going to be user-facing. Eventually we need to refactor the
         serialization done here, in the `state_change` serialization, and in the templates so it's all
         relying on a single set of utils for consistency's sake.
         """
@@ -451,13 +455,13 @@ class PermissionedModel(models.Model):
 
         There are two things happening here:
 
-        - 1:  Subtypes of `BaseCommunity` are the *only* children of `PermissionedModel` that
-          should be allowed to have a null owner.  We check that here and raise an error if
-          a non-community model has null values for owner fields.
+        1:  Subtypes of `BaseCommunity` are the *only* children of `PermissionedModel` that
+            should be allowed to have a null owner.  We check that here and raise an error if
+            a non-community model has null values for owner fields.
 
-        - 2:  A permissioned model's save method can *only* be invoked by a descendant of
-          `BaseStateChange`, on update (create is fine). For now, we inspect who is calling us.
-           *This is a hack.  Once we have better testing, we will enforce this via tests.*
+        2:  A permissioned model's save method can *only* be invoked by a descendant of
+            `BaseStateChange`, on update (create is fine). For now, we inspect who is calling us, but
+            there may be a better long-term solution.
         """
 
         # CHECK 1: only allow null owner for communities
@@ -468,30 +472,28 @@ class PermissionedModel(models.Model):
 
         # CHECK 2: only invoke save method via descendant of BaseStateChange
 
-        # Allow normal save on create.
+        if not self.pk:  # Allow normal save on create, aka when no pk is defined.
+            return super().save(*args, **kwargs)
 
-        if not self.pk:
-            return super().save(*args, **kwargs)  # Call the "real" save() method.
+        if override_check is True:  # or, if override_check is passed, allow normal save
+            return super().save(*args, **kwargs)
 
-        # If override_check has been passed in by internal system, allow normal save.
-        if override_check is True:
-            return super().save(*args, **kwargs)  # Call the "real" save() method.
-
-        # Check all others for call by StateChange.
-
+        # Check all others for call by StateChange's 'implement' method.
         import inspect
         curframe = inspect.currentframe()
         caller = inspect.getouterframes(curframe, 5)
         calling_function_name = caller[1].function
         if calling_function_name == "implement":
             del curframe, caller
-            return super().save(*args, **kwargs)  # Call the "real" save() method.
-        # Hack to accommodate overriding save on subclasses
+            return super().save(*args, **kwargs)
+
+        # FIXME: Hack to accommodate overriding save on subclasses
         if calling_function_name == "save":
             calling_function_name = caller[2].function
             if calling_function_name == "implement":
                 del curframe, caller
-                return super().save(*args, **kwargs)  # Call the "real" save() method.
+                return super().save(*args, **kwargs)
+
         raise BaseException("Save called incorrectly")
 
 
@@ -507,24 +509,31 @@ class TemplateModel(PermissionedModel):
     def __str__(self):
         return self.name
 
+    def __repr__(self):
+        return f"TemplateModel(pk={self.pk}, name={self.name}, user_description={self.user_description}, " + \
+               f"supplied_fields={self.supplied_fields}, scopes={self.scopes}, template_data={self.template_data})"
+
     def get_scopes(self):
+        """Gets list of scopes the template model applies to."""
         if self.scopes:
             return json.loads(self.scopes)
         return []
-        
+
     def set_scopes(self, scopes):
-        # TODO: possible set a list of allowable scopes and check here for them?
+        """Saves a list of scopes to the template model."""
+        # TODO: possibly set a list of allowable scopes and check here for them here?
         if type(scopes) != list:
             raise TypeError(f"Scopes must be type list/array, not type {type(scopes)}")
         self.scopes = json.dumps(scopes)
 
     def get_supplied_fields(self):
+        """Get supplied fields as dictionary."""
         return json.loads(self.supplied_fields)
 
     def get_supplied_form_fields(self):
         """Loads template supplied fields and gets their forms, using field_helper.  Supplied
-        fields typically have format like: 
-        
+        fields typically have format like:
+
             "field_x": ["RoleListField", None]
             "field_y": ["IntegerField", { "maximum": 2 }]
         """
@@ -532,10 +541,10 @@ class TemplateModel(PermissionedModel):
         from concord.actions.field_utils import field_helper
 
         form_fields = []
-        
+
         for field_name, field_info in self.get_supplied_fields().items():
 
-            overrides = { "field_name": field_name }
+            overrides = {"field_name": field_name}
             if field_info[1] is not None:
                 overrides.update(field_info[1])
 
@@ -543,6 +552,3 @@ class TemplateModel(PermissionedModel):
             form_fields.append(form_field)
 
         return form_fields
-        
-
-

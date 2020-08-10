@@ -206,6 +206,7 @@ class MockAction(object):
         self.target = target
         self.actor = actor
         self.status = "created"
+        self.pk = 0  # Note that this is an invalid PK
 
         if not resolution:
             from concord.actions.customfields import Resolution

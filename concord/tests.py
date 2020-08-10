@@ -394,7 +394,7 @@ class PermissionSystemTest(DataTestCase):
         action, permission = self.prc.add_permission(permission_type=Changes.Resources.AddItem,
             permission_actors=[self.users.tobin.pk])
         permission_data = [
-            { "permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
+            {"permission_type": Changes.Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
         ]
         action, condition = self.prc.add_condition_to_permission(permission_pk=permission.pk,
             condition_type="approvalcondition", condition_data=None, permission_data=permission_data)

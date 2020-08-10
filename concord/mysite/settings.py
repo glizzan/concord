@@ -124,10 +124,17 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-TEST_LOG_LEVEL = "WARN"
 import sys
 TESTING = sys.argv[1:2] == ['test']
+TEST_LOG_LEVEL = "WARN"
 LOG_LEVEL = TEST_LOG_LEVEL if TESTING else "DEBUG"
+
+# Generate loggers
+loggers = {}
+for app in INSTALLED_APPS:
+    if "concord" in app:
+        loggers.update({app: {'handlers': ['console', 'file'], 'level': LOG_LEVEL}})
+loggers[''] = {'handlers': ['console', 'file'], 'level': "WARN"}
 
 LOGGING = {
     'version': 1,
@@ -152,10 +159,5 @@ LOGGING = {
             'filename': '/tmp/debug.log'
         }
     },
-    'loggers': {
-        '': {
-            'level': LOG_LEVEL,
-            'handlers': ['console', 'file']
-        }
-    }
+    'loggers': loggers
 }

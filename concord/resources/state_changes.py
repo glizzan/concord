@@ -140,7 +140,7 @@ class ChangeResourceNameStateChange(BaseStateChange):
         return target
 
 
-class AddItemResourceStateChange(BaseStateChange):
+class AddItemStateChange(BaseStateChange):
     description = "Add item to resource"
 
     def __init__(self, item_name):
@@ -173,7 +173,7 @@ class AddItemResourceStateChange(BaseStateChange):
         return item
 
 
-class RemoveItemResourceStateChange(BaseStateChange):
+class RemoveItemStateChange(BaseStateChange):
     description = "Remove item from resource"
     preposition = "from"
 

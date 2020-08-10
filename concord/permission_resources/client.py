@@ -128,11 +128,10 @@ class PermissionResourceClient(BaseClient):
     def get_settable_permissions_for_model(self, model_class):
         """Given a model class (or, optionally, an instance of a model class), gets the state change objects
         which may be set on that model via a permission."""
-        from concord.actions.utils import get_state_change_objects_which_can_be_set_on_model
+        from concord.actions.utils import get_state_changes_settable_on_model_and_parents
         if hasattr(model_class, "pk") and type(model_class.pk) == int:
             model_class = model_class.__class__   # just in case we've been passed in an instance
-        app_name = model_class._meta.app_label 
-        return get_state_change_objects_which_can_be_set_on_model(model_class, app_name)
+        return get_state_changes_settable_on_model_and_parents(model_class)
 
     def get_settable_permissions(self, return_format="tuples") -> List[Tuple[str,str]]:
         """Gets a list of permissions it is possible to set on the target, in various formats"""

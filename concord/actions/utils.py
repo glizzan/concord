@@ -5,87 +5,144 @@ from django.apps import apps
 logger = logging.getLogger(__name__)
 
 
-def can_jsonify(obj):
-    try:
-        json.dumps(obj)
-        return True
-    except (TypeError, OverflowError):
-        return False
+######################
+### Lookup Helpers ###
+######################
 
 
-def get_state_change_object_given_name(state_change_name):
+def get_all_apps(return_as="app_configs"):
+    """Get all apps that are part of Concord and the app that is using it.  Returns as list of app_configs by
+    default, but can also be returned as app name string by passing 'strings' to return_as."""
+    relevant_apps = []
+    for name, app in apps.app_configs.items():
+        if hasattr(app, "get_state_changes_module"):
+            if return_as == "app_configs":
+                relevant_apps.append(app)
+            elif return_as == "strings":
+                relevant_apps.append(name)
+    return relevant_apps
+
+
+def get_all_permissioned_models():
+    """Gets all non-abstract permissioned models in the system."""
+    permissioned_models = []
+    for app in get_all_apps():
+        for model in app.get_models():
+            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
+                permissioned_models.append(model)
+    return permissioned_models
+
+
+def get_all_community_models():
+    """Gets all non-abstract permissioned models with attr is_community equal to True."""
+    community_models = []
+    for model in get_all_permissioned_models():
+        if hasattr(model, "is_community") and model.is_community:
+            community_models.append(model)
+    return community_models
+
+
+def get_all_state_changes():
+    """Gets all possible state changes in Concord and the app using it."""
+    all_state_changes = []
+    for app in get_all_apps():
+        state_changes_module = app.get_state_changes_module()
+        state_changes = inspect.getmembers(state_changes_module)  # get_members returns (name, value) tuple
+        all_state_changes += [value for (name, value) in state_changes if "StateChange" in name] 
+    return all_state_changes
+
+
+def get_all_foundational_state_changes():
+    """Gets all state changes in Concord and app using it that are foundational."""
+    return [change for change in get_all_state_changes() if change.is_foundational]
+
+
+def get_state_changes_for_app(app_name):
+    """Given an app name, gets state_changes as list of state change objects."""
+    app_config = apps.get_app_config(app_name)
+    state_changes_module = app_config.get_state_changes_module()
+    state_changes = inspect.getmembers(state_changes_module)  # get_members returns (name, value) tuple
+    return [value for (name, value) in state_changes if "StateChange" in name]
+
+
+def get_state_change_object(state_change_name):
+    """Given a full name string, gets the state change object."""
 
     name_elements = state_change_name.split(".")
-    if name_elements[0] == "concord":
-        # Name fed in has format concord.app.state_changes.state_change_object
+    
+    if name_elements[0] == "concord":  # format: concord.app.state_changes.state_change_object
         app_name = name_elements[1]
         change_name = name_elements[3]
-    else:
-        # Name fed in has format app_name.state_changes.state_change_object 
+    else:                              # format: app_name.state_changes.state_change_object 
         app_name = name_elements[0]
         change_name = name_elements[2]
 
-    # Import state changes
-    app_config = apps.get_app_config(app_name)
-    state_changes_module = app_config.get_state_changes_module()
-    state_changes = inspect.getmembers(state_changes_module) 
-
-    # Get matching state change
-    for member_tuple in state_changes:   #member_tuple is (name, value) tuple 
-        if member_tuple[0] == change_name:
-            return member_tuple[1]
+    for state_change_object in get_state_changes_for_app(app_name):
+        if state_change_object.__name__ == change_name:
+            return state_change_object
 
 
-def get_possible_state_changes(app_name):
-    """Get all state changes in a given app, plus core state changes."""
+def get_state_changes_settable_on_model(model_name, state_changes=None):
+    """Gets all state changes a given model can be set on.  If state_changes is not passed in, checks against
+    all possible state_changes."""
+    state_changes = state_changes if state_changes else get_all_state_changes()
+    matching_state_changes = []
+    for change in state_changes:
+        if hasattr(change, "can_set_on_model") and change.can_set_on_model(model_name) \
+                and change.__name__ != "BaseStateChange":
+            matching_state_changes.append(change)
+    return matching_state_changes
 
-    # Get core state changes
+
+def get_parent_state_changes(model_class):
+    """Gets state changes for parents of the given model class and, recurisvely, for all ancestors."""
     state_changes = []
-    for core_app_name in ["permission_resources", "actions", "conditionals"]:
-        app_config = apps.get_app_config(core_app_name)
-        state_changes_module = app_config.get_state_changes_module()
-        state_changes += inspect.getmembers(state_changes_module)
-
-    # Get state changes from calling app
-    app_config = apps.get_app_config(app_name)
-    state_changes_module = app_config.get_state_changes_module()
-    state_changes += inspect.getmembers(state_changes_module) 
-
+    for parent in model_class.__bases__:
+        if hasattr(parent, "get_settable_state_changes"):   # only checks parents which are PermissionedModels
+            state_changes += get_state_changes_for_app(parent._meta.app_label)
+        state_changes += get_parent_state_changes(parent)
     return state_changes
 
 
-def get_matching_state_changes(model_name, state_changes):
-    """Iterate through a list of state changes and check for matches."""
-    matching_state_changes = []
-    for member_tuple in state_changes:  #member_tuple is (name, value) tuple 
-        if hasattr(member_tuple[1], "can_set_on_model") and member_tuple[1].can_set_on_model(model_name):
-            if member_tuple[0] != "BaseStateChange":
-                matching_state_changes.append(member_tuple[1])
-    return matching_state_changes
+def get_state_changes_settable_on_model_and_parents(model_class):
+    """When given a model, returns all state changes that apply to the model, include state changes belonging to
+    parent models."""
+
+    state_changes = get_state_changes_for_app(model_class._meta.app_label)
+    state_changes += get_parent_state_changes(model_class)
+    state_changes = list(set(state_changes))
+
+    return get_state_changes_settable_on_model(model_class.__name__, state_changes=state_changes)
 
 
-def get_parent_matches(model_to_match, model_to_get_parent_of):
-    matching_state_changes = []
-    for parent in  model_to_get_parent_of.__bases__:
-        if hasattr(parent, "get_settable_state_changes"):   # only checks parents which are PermissionedModels
-            state_changes = get_possible_state_changes(parent._meta.app_label)
-            matching_state_changes += get_matching_state_changes(model_to_match.__name__, state_changes)
-            # Get parent matches
-            matching_state_changes += get_parent_matches(model_to_match, parent)
-    return matching_state_changes
+class Attributes(object):
+    """Hack to allow nested attributes on Changes."""
+    ...
 
 
-def get_state_change_objects_which_can_be_set_on_model(model_class, app_name):
-    """When given a model and its containing app, returns all state changes that apply to that model."""
-    
-    # Find the app_name & import its state_changes module, then get the actual state change objects
-    state_changes = get_possible_state_changes(app_name)
-    matching_state_changes = get_matching_state_changes(model_class.__name__, state_changes)
+class Changes(object):
+    """Helper object which lets developers easily access change types."""
 
-    # Get parent matches
-    matching_state_changes += get_parent_matches(model_class, model_class)
+    def __init__(self):
 
-    return list(set(matching_state_changes)) # Make sure there are no duplicates
+        for change in get_all_state_changes():
+
+            tokens = change.get_change_type().split(".")
+            app_name = (tokens[1] if "concord" in tokens else tokens[0]).capitalize()
+            change_name = (tokens[3] if "concord" in tokens else tokens[2]).replace("StateChange", "")
+
+            app_name = "Permissions" if app_name == "Permission_resources" else app_name
+
+            if not hasattr(self, app_name):
+                setattr(self, app_name, Attributes())
+
+            app_attr = getattr(self, app_name)
+            setattr(app_attr, change_name, change.get_change_type())
+
+
+############################
+### Replace Fields Utils ###
+############################
 
 
 def replacer(key, value, context):
@@ -193,6 +250,11 @@ def replace_fields(*, action_to_change, mock_action, context):
     return action_to_change
 
 
+#########################
+### Mock Action Utils ###
+#########################
+
+
 class MockAction(object):
     """Mock Actions are used in place of the Action django model in templates.  They are easier to serialize,
     lack db-dependent fields like created_at, and crucially allow us to replace certain fields or subfields
@@ -265,22 +327,3 @@ def check_permissions_for_action_group(list_of_actions):
         raise ValueError("Unexpected value in status list: " + ", ".join(status_list))
 
     return summary_status, action_log
-
-
-class ClientInterface(object):
-
-    def __init__(self, default_actor=None, system=False):
-        
-        if not default_actor or system:
-            raise ValidationError("When creating interface, must supply default actor or set system to true")
-
-        if default_actor:
-            self.communities = CommunityClient(actor=default_actor)
-            self.conditions = ConditionalClient(actor=default_actor)
-            self.permissions = PermissionResourceClient(actor=default_actor)
-            self.resources = ResourceClient(actor=default_actor)
-        elif system:
-            self.communities = CommunityClient(system=True)
-            self.conditions = ConditionalClient(system=True)
-            self.permissions = PermissionResourceClient(system=True)
-            self.resources = ResourceClient(system=True)    

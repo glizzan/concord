@@ -117,7 +117,7 @@ def condition_template_to_text(condition_action, permissions_actions):
     so typically we're adding the second part of a sentence that begins 'X has permission to Y...'"""
 
     # For now, we ignore the configuration in condition_action, and build our text from the permissions_actions
-    from concord.actions.utils import get_state_change_object_given_name
+    from concord.actions.utils import get_state_change_object
     
     phrases = []
     for perm_action in permissions_actions:
@@ -125,7 +125,7 @@ def condition_template_to_text(condition_action, permissions_actions):
         roles_and_actors_string = roles_and_actors({ "roles": perm_action.change.permission_roles, 
             "actors": perm_action.change.permission_actors })
 
-        change_type = get_state_change_object_given_name(perm_action.change.permission_type)
+        change_type = get_state_change_object(perm_action.change.permission_type)
 
         # FIXME: this logic should really be on the condition model, because how many people need to do X
         # is controlled by condition configuration

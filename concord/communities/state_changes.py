@@ -164,6 +164,7 @@ class RemoveMembersStateChange(BaseStateChange):
 
 class AddGovernorStateChange(BaseStateChange):
     description = "Add governor of community"
+    is_foundational = True
 
     def __init__(self, governor_pk):
         self.governor_pk = governor_pk
@@ -193,6 +194,7 @@ class AddGovernorStateChange(BaseStateChange):
 class RemoveGovernorStateChange(BaseStateChange):
     description = "Remove governor from community"
     preposition = "from"
+    is_foundational = True
 
     def __init__(self, governor_pk):
         self.governor_pk = governor_pk
@@ -221,6 +223,7 @@ class RemoveGovernorStateChange(BaseStateChange):
 
 class AddGovernorRoleStateChange(BaseStateChange):
     description = "Add role of governor to community"
+    is_foundational = True
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -250,6 +253,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
 class RemoveGovernorRoleStateChange(BaseStateChange):
     description = "Remove role of governor from community"
     preposition = "from"
+    is_foundational = True
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -278,6 +282,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
 class AddOwnerStateChange(BaseStateChange):
     description = "Add owner to community"
+    is_foundational = True
 
     def __init__(self, owner_pk):
         self.owner_pk = owner_pk
@@ -307,6 +312,7 @@ class AddOwnerStateChange(BaseStateChange):
 class RemoveOwnerStateChange(BaseStateChange):
     description = "Remove owner from community"
     preposition = "from"
+    is_foundational = True
 
     def __init__(self, owner_pk):
         self.owner_pk = owner_pk
@@ -335,6 +341,7 @@ class RemoveOwnerStateChange(BaseStateChange):
 
 class AddOwnerRoleStateChange(BaseStateChange):
     description = "Add role of owner to community"
+    is_foundational = True
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -364,6 +371,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
 class RemoveOwnerRoleStateChange(BaseStateChange):
     description = "Remove role from owners of community"
     preposition = "from"
+    is_foundational = True
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -549,6 +557,7 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
 class AddLeadershipConditionStateChange(BaseStateChange):
     description = "Add leadership condition"
+    is_foundational = True
 
     def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
         self.condition_type = condition_type
@@ -627,6 +636,7 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
 class RemoveLeadershipConditionStateChange(BaseStateChange):
     description = "Remove leadership condition"
+    is_foundational = True
 
     def __init__(self, *, leadership_type):
         self.leadership_type = leadership_type

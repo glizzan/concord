@@ -11,6 +11,7 @@ class BaseStateChange(object):
     allowable_targets = []
     settable_classes = []
     instantiated_fields = []
+    is_foundational = False
 
     @classmethod 
     def get_change_type(cls):
@@ -31,18 +32,9 @@ class BaseStateChange(object):
 
     @classmethod
     def get_all_possible_targets(cls):
-        '''
-        Gets all models in registered apps and returns them if they have a foundational
-        permission enabled attribute (a bit of a hack to find anything descended from
-        PermissionedModel) and if they are not abstract models.
-        '''
-        # TODO: should get targets from customizing sites
-        models = apps.get_models()
-        possible_targets = []
-        for model in models:
-            if hasattr(model, "foundational_permission_enabled") and not model._meta.abstract:
-                possible_targets.append(model)  
-        return possible_targets 
+        """Gets all permissioned models in system that are not abstract."""
+        from concord.actions.utils import get_all_permissioned_models
+        return get_all_permissioned_models()
 
     @classmethod 
     def get_configurable_fields(cls):
@@ -75,37 +67,8 @@ class BaseStateChange(object):
     @classmethod
     def get_community_models(cls):
         """This helper method lets us indicate alternative community models as allowable targets for community actions."""
-        # first get default model
-        from concord.communities.models import Community
-        community_models = [Community]
-
-        # then get custom models added by third parties
-        if hasattr(settings, "ALTERNATIVE_COMMUNITY_MODELS"):
-            for model in settings.ALTERNATIVE_COMMUNITY_MODELS:
-                model_instance = apps.get_model(model["app_name"], model["model_name"])
-                community_models.append(model_instance)
-        return community_models
-
-    @classmethod
-    def get_permissionable_models(cls):
-        """This helper method lets us indicate allowable targets for permission actions."""
-        # must be a way to find this automatically?
-        from concord.communities import community_models
-        from concord.conditionals import conditional_models
-        from concord.permission_resources import permission_models
-        from concord.resources import resource_models
-
-        targets = [community_models.Community, community_models.DefaultCommunity,
-        conditional_models.VoteCondition, conditional_models.ApprovalCondition, permission_models.PermissionsItem, 
-        permission_models.Template, resource_models.Resource, resource_models.Item]
-
-        # then get custom models added by third parties
-        if hasattr(settings, "ADDITIONAL_PERMISSIONED_MODELS"):
-            for model in settings.ADDITIONAL_PERMISSIONED_MODELS:
-                model_instance = apps.get_model(model["app_name"], model["model_name"])
-                targets.append(model_instance)
-        
-        return targets
+        from concord.actions.utils import get_all_community_models
+        return get_all_community_models()
 
     def stringify_list(self, objlist):
         """Helper method for use in displaying change info.  Probably belongs elsewhere."""
@@ -194,6 +157,7 @@ class ChangeOwnerStateChange(BaseStateChange):
 class EnableFoundationalPermissionStateChange(BaseStateChange):
     description = "Enable the foundational permission"
     preposition = "for"
+    is_foundational = True
 
     @classmethod
     def get_settable_classes(cls):
@@ -220,6 +184,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 class DisableFoundationalPermissionStateChange(BaseStateChange):
     description = "disable foundational permission"
     preposition = "for"
+    is_foundational = True
 
     @classmethod
     def get_settable_classes(cls):
@@ -246,6 +211,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 class EnableGoverningPermissionStateChange(BaseStateChange):
     description = "Enable the governing permission"
     preposition = "for"
+    is_foundational = True
 
     @classmethod
     def get_settable_classes(cls):
@@ -272,6 +238,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 class DisableGoverningPermissionStateChange(BaseStateChange):
     description = "disable governing permission"
     preposition = "for"
+    is_foundational = True
 
     @classmethod
     def get_settable_classes(cls):
@@ -295,8 +262,8 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         return target
 
 
-class ViewChangelessStateChange(BaseStateChange):
-    """'ViewChangelessStateChange' is a compromise name meant to indicate that,
+class ViewStateChange(BaseStateChange):
+    """'ViewStateChange' is a compromise name meant to indicate that,
     while the item inherits from BaseStateChange, it does not actually change
     any state - merely gets the specified fields."""
     description = "View"
@@ -412,90 +379,3 @@ class ApplyTemplateStateChange(BaseStateChange):
             supplied_fields=self.supplied_fields)
 
         return container
-
-
-# FIXME: must be a better approach than just listing these
-def foundational_changes():
-    return [
-        'concord.communities.state_changes.AddGovernorStateChange',
-        'concord.communities.state_changes.AddOwnerStateChange',
-        'concord.communities.state_changes.RemoveGovernorStateChange',
-        'concord.communities.state_changes.RemoveOwnerStateChange',
-        'concord.communities.state_changes.AddGovernorRoleStateChange',
-        'concord.communities.state_changes.AddOwnerRoleStateChange',
-        'concord.communities.state_changes.RemoveGovernorRoleStateChange',
-        'concord.communities.state_changes.RemoveOwnerRoleStateChange',
-        'concord.communities.state_changes.AddLeadershipConditionStateChange',
-        'concord.communities.state_changes.RemoveLeadershipConditionStateChange',
-        'concord.actions.state_changes.EnableFoundationalPermissionStateChange',
-        'concord.actions.state_changes.DisableFoundationalPermissionStateChange',
-        'concord.actions.state_changes.EnableGoverningPermissionStateChange',
-        'concord.actions.state_changes.DisableGoverningPermissionStateChange'
-    ]
-
-
-class Changes(object):
-    '''Helper object which lets developers easily access change types.'''
-
-    class Actions(object):
-
-        ChangeOwner = 'concord.actions.state_changes.ChangeOwnerStateChange'
-        EnableFoundationalPermission = 'concord.actions.state_changes.EnableFoundationalPermissionStateChange'
-        DisableFoundationalPermission = 'concord.actions.state_changes.DisableFoundationalPermissionStateChange'
-        EnableGoverningPermission = 'concord.actions.state_changes.EnableGoverningPermissionStateChange'
-        DisableGoverningPermission = 'concord.actions.state_changes.DisableGoverningPermissionStateChange'
-        ViewPermission = 'concord.actions.state_changes.ViewChangelessStateChange'
-        ApplyTemplate = 'concord.actions.state_changes.ApplyTemplateStateChange'
-
-    class Communities(object):
-
-        ChangeName = 'concord.communities.state_changes.ChangeNameStateChange'
-        AddMembers = 'concord.communities.state_changes.AddMembersStateChange'
-        RemoveMembers = 'concord.communities.state_changes.RemoveMembersStateChange'
-        AddGovernor = 'concord.communities.state_changes.AddGovernorStateChange'
-        RemoveGovernor = 'concord.communities.state_changes.RemoveGovernorStateChange'
-        AddGovernorRole = 'concord.communities.state_changes.AddGovernorRoleStateChange'
-        RemoveGovernorRole = 'concord.communities.state_changes.RemoveGovernorRoleStateChange'
-        AddOwner = 'concord.communities.state_changes.AddOwnerStateChange'
-        RemoveOwner = 'concord.communities.state_changes.RemoveOwnerStateChange'
-        AddOwnerRole = 'concord.communities.state_changes.AddOwnerRoleStateChange'
-        RemoveOwnerRole = 'concord.communities.state_changes.RemoveOwnerRoleStateChange'
-        AddRole = 'concord.communities.state_changes.AddRoleStateChange'
-        RemoveRole = 'concord.communities.state_changes.RemoveRoleStateChange'
-        AddPeopleToRole = 'concord.communities.state_changes.AddPeopleToRoleStateChange'
-        RemovePeopleFromRole = 'concord.communities.state_changes.RemovePeopleFromRoleStateChange'
-        AddLeadershipCondition = 'concord.communities.state_changes.AddLeadershipConditionStateChange'
-        RemoveLeadershipCondition = 'concord.communities.state_changes.RemoveLeadershipConditionStateChange'
-
-    class Conditionals(object):
-
-        AddConditionToAction = 'concord.conditionals.state_changes.SetConditionOnActionStateChange'
-        AddVote = 'concord.conditionals.state_changes.AddVoteStateChange'
-        Approve = 'concord.conditionals.state_changes.ApproveStateChange'
-        Reject = 'concord.conditionals.state_changes.RejectStateChange'
-
-    class Permissions(object):
-
-        AddPermission = 'concord.permission_resources.state_changes.AddPermissionStateChange'        
-        RemovePermission = 'concord.permission_resources.state_changes.RemovePermissionStateChange'        
-        AddActorToPermission = 'concord.permission_resources.state_changes.AddActorToPermissionStateChange'        
-        RemoveActorFromPermission = 'concord.permission_resources.state_changes.RemoveActorFromPermissionStateChange'        
-        AddRoleToPermission = 'concord.permission_resources.state_changes.AddRoleToPermissionStateChange'        
-        RemoveRoleFromPermission = 'concord.permission_resources.state_changes.RemoveRoleFromPermissionStateChange'        
-        ChangePermissionConfiguration = 'concord.permission_resources.state_changes.ChangePermissionConfigurationStateChange'        
-        AddConditionToPermission = 'concord.permission_resources.state_changes.AddPermissionConditionStateChange'
-        RemoveConditionFromPermission = 'concord.permission_resources.state_changes.RemovePermissionConditionStateChange'
-
-    class Resources(object):
-        
-        ChangeResourceName = 'concord.resources.state_changes.ChangeResourceNameStateChange'        
-        AddItem = 'concord.resources.state_changes.AddItemResourceStateChange'  #Remove 'Resource'?  
-        RemoveItem = 'concord.resources.state_changes.RemoveItemResourceStateChange'  # Remove 'Resource'?        
-        
-        
-    
-
-
-
-
-

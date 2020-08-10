@@ -115,7 +115,7 @@ class BaseClient(object):
         """Gets information about the target after passing request through permissions pipeline. Supply
         fields_to_include, a list of field names as strings, to limit the data requested, otherwise returns
         all fields."""
-        change = sc.ViewChangelessStateChange(fields_to_include=fields_to_include)
+        change = sc.ViewStateChange(fields_to_include=fields_to_include)
         return self.create_and_take_action(change)
 
     # Writing
@@ -221,7 +221,8 @@ class ActionClient(BaseClient):
     def get_foundational_actions_given_target(self, target=None) -> QuerySet:
         """Gets the action history of a target, filtered to include only foundational changes."""
         actions = self.get_action_history_given_target(target)
-        changes = sc.foundational_changes()
+        from concord.actions.utils import get_all_foundational_state_changes
+        changes = get_all_foundational_state_changes()
         return [action for action in actions if action.change.get_change_type() in changes]
 
     def get_governing_actions_given_target(self, target=None) -> QuerySet:

@@ -7,7 +7,6 @@ has_permission.
 
 import logging
 
-from concord.actions.state_changes import foundational_changes
 from concord.conditionals.client import ConditionalClient
 from concord.communities.client import CommunityClient
 from concord.permission_resources.client import PermissionResourceClient
@@ -175,7 +174,7 @@ def has_permission(action):
     """
 
     # Check for criteria indicating we should use the foundational permission pipeline
-    if action.change.get_change_type() in foundational_changes() or action.target.foundational_permission_enabled:
+    if action.change.is_foundational or action.target.foundational_permission_enabled:
         return foundational_permission_pipeline(action)
 
     # Check that object allows us to use governing permission, if yes, try governing pipeline

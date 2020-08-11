@@ -31,21 +31,13 @@ def create_invite_only_template():
         permission_roles="{{supplied_fields.addmembers_permission_roles}}")
     action_1.target="{{trigger_action.target}}"
 
-    # FIXME: doesn't work without a user interface for action-dependent fields for conditions (see issue #28)
-    # # Step 2: add condition to permission
-    # permission_data = [{ "permission_type": Changes.Conditionals.Approve, 
-    #     "permission_actors": "{{nested_trigger_action.change.member_pk_list}}"}]   
-    # action_2 = perm_client.add_condition_to_permission(permission_pk="{{previous.0.result.pk}}", 
-    #     condition_type="approvalcondition", permission_data=permission_data)
-    # action_2.target = "{{previous.0.result}}"
-
-    # Step 3: prepare supplied fields (see TemplateModel's get_supplied_form_fields method for syntax guidance)
+    # Step 2: prepare supplied fields (see TemplateModel's get_supplied_form_fields method for syntax guidance)
     supplied_fields = json.dumps({ 
         "addmembers_permission_roles": ["RoleListField", {"label": "What roles can invite new members?"}],
         "addmembers_permission_actors": ["ActorListField", {"label": "What actors can invite new members?"}] 
     })
 
-    # Step 4: create Template Model
+    # Step 3: create Template Model
     user_description = "Only the specified roles and/or users can invite members."
     template_data = Template(action_list=[action_1]) # Template(action_list=[action_1, action_2])
 

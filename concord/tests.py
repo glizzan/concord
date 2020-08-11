@@ -2104,55 +2104,7 @@ class MetaPermissionsFormTest(DataTestCase):
             actor=self.users.christen.pk)
         change_types = [perm.get_change_type() for perm in permissions_for_actor]
         self.assertCountEqual(change_types, [])
-
-    def test_adding_metapermission_to_nonexistent_permission(self):
-
-        # No one currently has the specific permission "remove people from role".
-        remove_permission = self.client.PermissionResource.get_specific_permissions(change_type=
-            Changes().Communities.RemovePeopleFromRole)
-        self.assertFalse(remove_permission)
-
-        # Pinoe tries to give JJ the ability to add or remove people from the permission
-        # 'remove people from role'.
-
-        # First, we get a mock permission to pass to the metapermission form.
-        ct = ContentType.objects.get_for_model(self.instance)
-        target_permission = self.client.PermissionResource.get_permission_or_return_mock(
-            permitted_object_id=self.instance.pk,
-            permitted_object_content_type=str(ct.pk),
-            permission_change_type=Changes().Communities.RemovePeopleFromRole)
-        self.assertEqual(target_permission.__class__.__name__, "MockMetaPermission")
-
-        # Then we actually update metapermissions via the form.
-        self.metapermissions_data["0~individuals"] = [self.users.jj.pk]
-        self.metapermission_form = MetaPermissionForm(instance=target_permission, 
-            request=self.request, data=self.metapermissions_data)
-        self.metapermission_form.is_valid()
-        self.metapermission_form.save()
-
-        # Now that Pinoe has done that, the specific permission exists.  
-        remove_permission = self.client.PermissionResource.get_specific_permissions(change_type=Changes().Communities.RemovePeopleFromRole)
-        ah = PermissionsItem.objects.filter(change_type=Changes().Communities.RemovePeopleFromRole)
-        self.assertEqual(len(remove_permission), 1)         
-
-        # The metapermission Pinoe created for JJ also exists.
-        perms = self.client.PermissionResource.get_permissions_on_object(object=remove_permission[0])
-        self.assertEqual(len(perms), 1)
-        self.assertEqual(perms[0].get_change_type(), "AddActorToPermissionStateChange")
-
-        # JJ can add Crystal to the permission "remove people from role".
-        self.permissions_data["14~individuals"] = [self.users.crystal.pk]
-        self.permission_form = PermissionForm(instance=self.instance, 
-            request=self.jjRequest, data=self.permissions_data)
-        self.permission_form.is_valid()
-        self.permission_form.save()
-
-        permissions_for_actor = self.client.PermissionResource.get_permissions_associated_with_actor(
-            actor=self.users.crystal.pk)
-        change_types = [perm.get_change_type() for perm in permissions_for_actor]
-        self.assertCountEqual(change_types, ["RemovePeopleFromRoleStateChange", 
-            "AddPeopleToRoleStateChange"])
-
+    
 
 @skip("Skipping forms for now")
 class ResourcePermissionsFormTest(DataTestCase):

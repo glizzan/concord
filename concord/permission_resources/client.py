@@ -49,20 +49,6 @@ class PermissionResourceClient(BaseClient):
     def actor_satisfies_permission(self, *, actor, permission: PermissionsItem) -> bool:
         return permission.match_actor(actor)
 
-    def get_permission_or_return_mock(self, permitted_object_id, 
-        permitted_object_content_type, permission_change_type):
-        permissions = PermissionsItem.objects.filter(
-            permitted_object_content_type = permitted_object_content_type,
-            permitted_object_id = permitted_object_id,
-            change_type = permission_change_type)
-        if permissions:
-            return permissions.first()
-        else:
-            return utils.MockMetaPermission(
-                permitted_object_id = permitted_object_id, 
-                permitted_object_content_type = permitted_object_content_type,
-                permission_change_type = permission_change_type)
-
     def get_all_permissions_in_db(self):
         """Gets all permissions in the DB.  We should swap this out with getting all permissions in a group
         plus all of its owned objects but for now, this is what we have."""

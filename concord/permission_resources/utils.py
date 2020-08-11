@@ -4,49 +4,6 @@ from collections import OrderedDict
 from django.contrib.contenttypes.models import ContentType
 
 
-class MockMetaPermission:
-    """Sometimes metapermissions are created for permissions that do not
-    themselves exist yet on a specific permitted object.  This mock 
-    item exists so that the MetaPermissionsForm can treat it as though
-    it's an instance."""
-    
-    def __init__(self, permitted_object_id, permitted_object_content_type, 
-        permission_change_type):
-        self.permitted_object_id = permitted_object_id
-        self.permitted_object_content_type = permitted_object_content_type
-        self.permission_change_type = permission_change_type
-        # Helper methods for template use
-        self.object_id = self.permitted_object_id
-        self.content_type = self.permitted_object_content_type
-
-    def get_permitted_object(self):
-        ct = ContentType.objects.get_for_id(id=self.permitted_object_content_type)
-        ct_class = ct.model_class()
-        self.permitted_object = ct_class.objects.get(pk=self.permitted_object_id)
-        return self.permitted_object
-
-    def get_state_change_objects(self):
-        import importlib, inspect
-        relative_import = ".permission_resources.state_changes"
-        state_changes_module = importlib.import_module(relative_import, package="concord")
-        return inspect.getmembers(state_changes_module) 
-
-    def get_owner(self):
-        permitted_object = self.get_permitted_object()
-        return permitted_object.get_owner()
-
-    def create_self(self, owner):
-        from concord.permission_resources.models import PermissionsItem
-        permitted_object = self.get_permitted_object()
-        if not hasattr(owner, "is_community") and owner.is_community:
-            raise TypeError("Owner should only be user or community")
-        return PermissionsItem.objects.create(
-            permitted_object = permitted_object,
-            change_type = self.permission_change_type,
-            owner_content_type = ContentType.objects.get_for_model(owner),
-            owner_object_id = owner.id)
-
-
 def get_settable_permissions(* , target):
     """Gets a list of all permissions that may be set on the model."""
 

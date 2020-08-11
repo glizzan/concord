@@ -421,7 +421,6 @@ class AddRoleStateChange(BaseStateChange):
         if target.roles.is_role(self.role_name):
             self.set_validation_error("The role " + self.role_name + " already exists.")
             return False
-        # TODO: maybe enforce limits on length, letter content, etc, possibly referencing field validation?
         return True
 
     def implement(self, actor, target):

@@ -297,8 +297,6 @@ class TemplateClient(BaseClient):
             if scope in template.get_scopes():
                 templates.append(template)
         return templates
-        # FIXME: need to make scopes an arrayfield (which requires switching Concord default backend to postgres)
-        # or find a way to more easily search for scope (I guess maybe could have models only have one scope?)
 
     # State changes
 
@@ -306,10 +304,8 @@ class TemplateClient(BaseClient):
         """Creates an ActionContainer, copying the template field of the template model specified by template_model_pk.
         If the Actions in the ActionContainer all successfully pass the permissions pipeline, only then are any of the
         state changes implemented. For now, we circumvent the permissions pipeline and allow anyone to apply templates
-        so long as they're not rejected by the foundational pipeline.
-
-        # FIXME: need to refactor, see https://github.com/glizzan/glizzan-concord/issues/64
-        """
+        so long as they're not rejected by the foundational pipeline."""
+        
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
         action, result = self.create_and_take_action(change)
         if action.resolution.foundational_status == "not tested" and action.status == "rejected":

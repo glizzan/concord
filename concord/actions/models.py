@@ -82,7 +82,6 @@ class Action(models.Model):
         """Perform an action defined by the Change object. Carries out its custom implementation using the actor
         and target."""
         if hasattr(self.change, "pass_action") and self.change.pass_action:
-            logger.debug("Implementing action through pass_action workaround")
             result = self.change.implement(actor=self.actor, target=self.target, action=self)
         else:
             result = self.change.implement(actor=self.actor, target=self.target)
@@ -102,7 +101,7 @@ class Action(models.Model):
 
             from concord.actions.permissions import has_permission
             self.resolution.refresh_status()
-            self = has_permission(action=self)  # TODO: try just has_permission, not sure assigning to self works here
+            has_permission(action=self)
             self.status = self.resolution.generate_status()
 
             if self.status == "waiting" and len(self.resolution.uncreated_conditions()) > 0:
@@ -248,14 +247,12 @@ class ActionContainer(models.Model):
             status = self.check_action_permission(action)
             logging.debug(f"Action {action} has permission {status}")
             ok_to_commit = False if status != "approved" else ok_to_commit
-            if status == "rejected":  # if status is rejected, skip implementing
-                continue
 
             # Implement action
             result = action.implement_action()
             self.context.add_result(unique_id=item["unique_id"], result=result)  # add to context
-            if status == "waiting":  # roll back status change that comes with implement_action()
-                action.status = "waiting"
+            if status in ["waiting", "rejected"]:  # roll back status change that comes with implement_action()
+                action.status = status
 
             action.save()  # save changes to action in DB
 
@@ -287,8 +284,6 @@ class ActionContainer(models.Model):
 
         raise ValueError("Unexpected state when determining overall status, individual action statuses: " +
                          f"{','.join([action.status for action in actions])}")
-
-        # FIXME: check for 'created' or other options?
 
     def commit_actions(self, test=False, generate_conditions=True):
         """Attempts to implement the actions in the container within an atomic transaction. If any of the actions
@@ -412,12 +407,7 @@ class PermissionedModel(models.Model):
         By default, the readable attributes of a permissioned model are all fields specified on the
         model.  However, we cannot simply use `self._meta.get_fields()` since the field name is sometimes
         different than the attribute name, for instance with related fields that are called X but show
-        up as X_set on the model.
-
-        TODO: For now we're assuming this is going to be user-facing. Eventually we need to refactor the
-        serialization done here, in the `state_change` serialization, and in the templates so it's all
-        relying on a single set of utils for consistency's sake.
-        """
+        up as X_set on the model."""
 
         # Generate list of fields
         fields = self._meta.get_fields()
@@ -431,7 +421,7 @@ class PermissionedModel(models.Model):
             elif "content_type" in field.name:
                 continue  # skip content_type fields used for gfks
             elif "object_id" in field.name:
-                continue  # skip id field used in gfks (FIXME: this is very brittle)
+                continue  # skip id field used in gfks
             else:
                 serialized_field = getattr(self, field.name)
             if hasattr(serialized_field, "foundational_permission_enabled"):
@@ -487,7 +477,7 @@ class PermissionedModel(models.Model):
             del curframe, caller
             return super().save(*args, **kwargs)
 
-        # FIXME: Hack to accommodate overriding save on subclasses
+        # Accommodate overriding save on subclasses
         if calling_function_name == "save":
             calling_function_name = caller[2].function
             if calling_function_name == "implement":
@@ -521,7 +511,6 @@ class TemplateModel(PermissionedModel):
 
     def set_scopes(self, scopes):
         """Saves a list of scopes to the template model."""
-        # TODO: possibly set a list of allowable scopes and check here for them here?
         if type(scopes) != list:
             raise TypeError(f"Scopes must be type list/array, not type {type(scopes)}")
         self.scopes = json.dumps(scopes)

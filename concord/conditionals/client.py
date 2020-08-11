@@ -4,7 +4,7 @@ from typing import Tuple, List, Any, Dict
 from django.db.models import Model
 
 from concord.actions.client import BaseClient
-from concord.actions.utils import Client
+from concord.actions.utils import Client, get_all_conditions
 from concord.actions.models import Action  # Just needed for type hinting
 
 from concord.conditionals.models import ApprovalCondition, VoteCondition
@@ -70,8 +70,7 @@ class ConditionalClient(BaseClient):
 
     def get_possible_conditions(self, *, formatted_as="objects"):
         
-        # FIXME: need to get this from a list of actual objects
-        conditions = [ApprovalCondition, VoteCondition]
+        conditions = get_all_conditions()
 
         if formatted_as == "objects":
             return conditions

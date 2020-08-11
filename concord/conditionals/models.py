@@ -13,7 +13,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.dispatch import receiver
 
 from concord.actions.models import PermissionedModel
-from concord.actions.utils import Changes, Client
+from concord.actions.utils import Changes, Client, get_all_conditions
 from concord.conditionals import utils
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 
@@ -40,6 +40,8 @@ class ConditionModel(PermissionedModel):
 
     descriptive_name = "condition"
     has_timeout = False
+
+    is_condition = True
 
     def get_name(self):
         return "%s (%d)" % (self.descriptive_name, self.pk)
@@ -363,5 +365,5 @@ def retry_action(sender, instance, created, **kwargs):
             client.Action.take_action(action=action)
 
 
-for conditionModel in [ApprovalCondition, VoteCondition]:  # FIXME: should be auto-detected
+for conditionModel in [ApprovalCondition, VoteCondition]:
     post_save.connect(retry_action, sender=conditionModel)

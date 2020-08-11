@@ -368,8 +368,6 @@ class ApplyTemplateStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, action=None):
-        # FIXME: I don't like that this is the only implement with a different signature :/
-        # but I can't figure out a low-hack way to get the action this change is set on
 
         # Get the template model
         from concord.actions.models import TemplateModel

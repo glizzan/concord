@@ -37,7 +37,7 @@ class AddCommentStateChange(BaseStateChange):
 
         comment = Comment(text=self.text, commentor=actor)
         comment.commented_object = target
-        comment.owner = target.get_owner() # FIXME: should it be the target owner though?
+        comment.owner = target.get_owner()
         
         comment.save()
         return comment
@@ -95,7 +95,6 @@ class DeleteCommentStateChange(BaseStateChange):
         return f"deleted comment {self.pk}"
 
     def validate(self, actor, target):
-        # TODO: real validation
         return True
 
     def implement(self, actor, target):
@@ -117,8 +116,6 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        # FIXME: if we want to let people inherit from abstract resource, we need to check
-        # parents here.
         from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
         return [AbstractResource, AbstractItem, Resource, Item]    
 
@@ -182,8 +179,6 @@ class RemoveItemStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        # FIXME: if we want to let people inherit from abstract resource, we need to check
-        # parents here.
         from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
         return [AbstractResource, AbstractItem, Resource, Item]    
 

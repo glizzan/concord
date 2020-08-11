@@ -54,6 +54,17 @@ def get_all_clients():
     return clients
 
 
+def get_all_conditions():
+    """Gets all possible condition models in Concord and the app using it."""
+    conditions = []
+    apps = get_all_apps()
+    for app in apps:
+        for model in app.get_models():
+            if hasattr(model, "is_condition") and model.is_condition and not model._meta.abstract:
+                conditions.append(model)
+    return conditions
+
+
 def get_all_state_changes():
     """Gets all possible state changes in Concord and the app using it."""
     all_state_changes = []
@@ -269,7 +280,7 @@ def replacer(key, value, context):
         if tokens[0] == "nested_trigger_action":
             """In this special case, we merely replace nested_trigger_action with trigger_action
             so that when this object is passed through replace_fields again, later, it will
-            *then* replace with *that* trigger_action.  (Yes, it's a HACK, don't judge me.)"""
+            *then* replace with *that* trigger_action."""
             logging.debug(f"nested_trigger_action: Replacing {key} {value} with 'trigger_action'")
             return value.replace("nested_trigger_action", "trigger_action")
 
@@ -279,11 +290,7 @@ def replacer(key, value, context):
 def replace_fields(*, action_to_change, mock_action, context):
     """Takes in the action to change and the mock_action, and looks for field on the mock_action which indicate
     that fields on the action to change need to be replaced.  For the change field, and the change field only,
-    also look for fields to replace within.
-
-    FIXME: we might have an issue when a previous result doesn't exist because it was rejected,
-        but we're continuing on with our mock actions to get more data - need to fail gracefully
-    """
+    also look for fields to replace within."""
 
     logger.debug(f"Replacing fields on {action_to_change} with {mock_action}")
 

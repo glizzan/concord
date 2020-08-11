@@ -358,8 +358,7 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
 
         self.instantiate_fields()
         configuration = self.permission.get_configuration()
-        # FIXME: might there be problems with formatting of configurable field value? like, how is a 
-        # list of role names formatted?
+
         configuration[self.configurable_field_name] = self.configurable_field_value
         self.permission.set_configuration(configuration)
         
@@ -367,7 +366,6 @@ class ChangePermissionConfigurationStateChange(PermissionResourceBaseStateChange
         return self.permission
 
 
-# FIXME:  Might just be a configurable field?
 class ChangeInverseStateChange(PermissionResourceBaseStateChange):
 
     description = "Toggle permission's inverse field"

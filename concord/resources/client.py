@@ -22,7 +22,6 @@ class CommentClient(BaseClient):
                 self.target = catcher[0]
             else:
                 if create:
-                    # FIXME: is there a better way to get the community which owns the target of the action?
                     owner = self.target.target.get_owner()
                     owner_content_type = ContentType.objects.get_for_model(owner.__class__)
                     catcher = CommentCatcher.objects.create(

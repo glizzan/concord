@@ -22,7 +22,7 @@ def get_or_create_superuser():
 def create_invite_only_template():
 
     user = get_or_create_superuser()
-    client = Client(actor=user)  # NOTE: This feels bad for reasons I can't explain
+    client = Client(actor=user)
     client.PermissionResource.mode = "mock"
 
     # Step 1: add permission to addMember change
@@ -50,7 +50,7 @@ def create_invite_only_template():
 def create_anyone_can_request_template():
 
     user = get_or_create_superuser()
-    client = Client(actor=user)  # NOTE: This feels bad for reasons I can't explain
+    client = Client(actor=user)
     client.PermissionResource.mode = "mock"
 
     # Step 1: add addMember permission with anyone set to True and self_only set to True
@@ -86,7 +86,7 @@ def create_anyone_can_request_template():
 def create_anyone_can_join_template():
 
     user = get_or_create_superuser()
-    client = Client(actor=user)  # NOTE: This feels bad for reasons I can't explain
+    client = Client(actor=user)
     client.PermissionResource.mode = "mock"
 
     # Step 1: add addMember permission with anyone set to True and self_only set to True
@@ -102,10 +102,6 @@ def create_anyone_can_join_template():
         scopes=json.dumps(["membership"]), name="Anyone Can Join", supplied_fields=json.dumps({}), owner=user)
 
     return template_model
-
-
-# FIXME: the 'template replacer' levels doesn't work, we need a different way to handle
-# setting a condition with a replaceable field inside a template
 
 
 def create_all_templates():

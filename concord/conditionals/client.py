@@ -4,6 +4,7 @@ from typing import Tuple, List, Any, Dict
 from django.db.models import Model
 
 from concord.actions.client import BaseClient
+from concord.actions.utils import Client
 from concord.actions.models import Action  # Just needed for type hinting
 
 from concord.conditionals.models import ApprovalCondition, VoteCondition
@@ -144,14 +145,15 @@ class ConditionalClient(BaseClient):
         return condition, container
 
     def trigger_condition_creation_from_source_id(self, *, action, source_id):
+
+                
         source, pk = source_id.split("_")
+        
         if source == "perm":
-            from concord.permission_resources.client import PermissionResourceClient
-            permission = PermissionResourceClient(system=True).get_permission(pk=int(pk))
+            permission = Client().PermissionResource.get_permission(pk=int(pk))
             return self.trigger_condition_creation(action=action, permission=permission)
         else:
-            from concord.communities.client import CommunityClient
-            community = CommunityClient(system=True).get_community(community_pk=pk)
+            community = Client().Community.get_community(community_pk=pk)
             return self.trigger_condition_creation(action=action, community=community, leadership_type=source)
 
     # State changes

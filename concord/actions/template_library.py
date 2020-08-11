@@ -6,9 +6,7 @@ import json
 from django.contrib.auth.models import User
 
 from concord.actions.customfields import Template
-from concord.actions.utils import Changes
-from concord.conditionals.client import ConditionalClient
-from concord.permission_resources.client import PermissionResourceClient
+from concord.actions.utils import Changes, Client
 from concord.actions.models import TemplateModel
 
 
@@ -24,11 +22,11 @@ def get_or_create_superuser():
 def create_invite_only_template():
 
     user = get_or_create_superuser()
-    perm_client = PermissionResourceClient(actor=user)    # NOTE: This feels bad for reasons I can't explain
-    perm_client.mode = "mock"
+    client = Client(actor=user)  # NOTE: This feels bad for reasons I can't explain
+    client.PermissionResource.mode = "mock"
 
     # Step 1: add permission to addMember change
-    action_1 = perm_client.add_permission(permission_type=Changes().Communities.AddMembers,
+    action_1 = client.PermissionResource.add_permission(permission_type=Changes().Communities.AddMembers,
         permission_actors="{{supplied_fields.addmembers_permission_actors}}",
         permission_roles="{{supplied_fields.addmembers_permission_roles}}")
     action_1.target="{{trigger_action.target}}"
@@ -60,11 +58,11 @@ def create_invite_only_template():
 def create_anyone_can_request_template():
 
     user = get_or_create_superuser()
-    perm_client = PermissionResourceClient(actor=user)    # NOTE: This feels bad for reasons I can't explain
-    perm_client.mode = "mock"
+    client = Client(actor=user)  # NOTE: This feels bad for reasons I can't explain
+    client.PermissionResource.mode = "mock"
 
     # Step 1: add addMember permission with anyone set to True and self_only set to True
-    action_1 = perm_client.add_permission(permission_type=Changes().Communities.AddMembers,
+    action_1 = client.PermissionResource.add_permission(permission_type=Changes().Communities.AddMembers,
         anyone=True, permission_configuration={"self_only": True})
     action_1.target="{{trigger_action.target}}"
     
@@ -73,7 +71,7 @@ def create_anyone_can_request_template():
         "permission_actors": "{{supplied_fields.approve_permission_actors}}",
         "permission_roles": "{{supplied_fields.approve_permission_roles}}"
     }]  
-    action_2 = perm_client.add_condition_to_permission(permission_pk="{{previous.0.result.pk}}", 
+    action_2 = client.PermissionResource.add_condition_to_permission(permission_pk="{{previous.0.result.pk}}", 
         condition_type="approvalcondition", permission_data=permission_data)
     action_2.target = "{{previous.0.result}}" 
 
@@ -96,11 +94,11 @@ def create_anyone_can_request_template():
 def create_anyone_can_join_template():
 
     user = get_or_create_superuser()
-    perm_client = PermissionResourceClient(actor=user)    # NOTE: This feels bad for reasons I can't explain
-    perm_client.mode = "mock"
+    client = Client(actor=user)  # NOTE: This feels bad for reasons I can't explain
+    client.PermissionResource.mode = "mock"
 
     # Step 1: add addMember permission with anyone set to True and self_only set to True
-    action_1 = perm_client.add_permission(permission_type=Changes().Communities.AddMembers,
+    action_1 = client.PermissionResource.add_permission(permission_type=Changes().Communities.AddMembers,
         anyone=True, permission_configuration={"self_only": True})
     action_1.target="{{trigger_action.target}}"
     

@@ -107,10 +107,10 @@ class Action(models.Model):
 
             if self.status == "waiting" and len(self.resolution.uncreated_conditions()) > 0:
 
-                from concord.conditionals.client import ConditionalClient
-                client = ConditionalClient(system=True)
+                from concord.actions.utils import Client
+                client = Client()
                 for source_id in self.resolution.uncreated_conditions():
-                    condition, container = client.trigger_condition_creation_from_source_id(action=self,
+                    condition, container = client.Conditional.trigger_condition_creation_from_source_id(action=self,
                                                                                             source_id=source_id)
                     logger.info(f"Created condition {condition.pk} on action {self.pk} with source_id {source_id}")
                     self.resolution.condition_created(source_id)
@@ -392,9 +392,9 @@ class PermissionedModel(models.Model):
 
         Returns all actions targeting the instance of the subclass which has inherited from
         `PermissionedModel`."""
-        from concord.actions.client import ActionClient
-        client = ActionClient(system=True, target=self)
-        return client.get_action_history_given_target(target=self)
+        from concord.actions.utils import Client
+        client = Client()
+        return client.Action.get_action_history_given_target(target=self)
 
     def get_nested_objects(self):
         """Gets objects that the model is nested within.

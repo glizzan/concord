@@ -201,13 +201,13 @@ class PermissionsItem(PermissionedModel):
         if actor.pk in actors:
             return True, None
 
-        from concord.communities.client import CommunityClient
-        cc = CommunityClient(system=True)
         community_owning_permitted_object = self.permitted_object.get_owner()
-        cc.set_target(community_owning_permitted_object)
 
+        from concord.actions.utils import Client
+        client = Client(target=community_owning_permitted_object)
+        
         for role in self.roles.get_roles():
-            if cc.has_role_in_community(role=role, actor_pk=actor.pk):
+            if client.Community.has_role_in_community(role=role, actor_pk=actor.pk):
                 return True, role
 
         return False, None

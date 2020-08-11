@@ -83,7 +83,7 @@ class RoleForm(forms.Form):
         self.request = kwargs.pop('request')
         super().__init__(*args, **kwargs)
 
-        self.commClient = CommunityClient(target=self.instance, system=True)
+        self.commClient = CommunityClient(target=self.instance)
         ACTOR_CHOICES = [(user.pk, user.username) for user in self.commClient.get_members()]
 
         # Get list of existing roles and generate fields

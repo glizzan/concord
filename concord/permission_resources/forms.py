@@ -19,7 +19,7 @@ class PermissionFormMixin(object):
         Afterwards, self.owner & self.commClient should be available to the form.'''
 
         from concord.communities.client import CommunityClient
-        self.commClient = CommunityClient(system=True)
+        self.commClient = CommunityClient()
 
         if not owned_object:
             owned_object = self.instance

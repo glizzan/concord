@@ -1,3 +1,4 @@
+from concord.actions.utils import Client
 
 
 def get_basic_condition_info(condition_object):
@@ -39,8 +40,7 @@ def generate_condition_form(condition_object, permissions_objects):
 def parse_action_list_into_condition_and_permission_objects(action_list):
 
     # get condition object
-    from concord.conditionals.client import ConditionalClient
-    condition_model = ConditionalClient(system=True).get_condition_class(condition_type=action_list[0].change.condition_type)
+    condition_model = Client().Conditional.get_condition_class(condition_type=action_list[0].change.condition_type)
     condition_object = condition_model(**action_list[0].change.condition_data)
 
     # get permissions objects

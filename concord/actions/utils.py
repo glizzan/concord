@@ -1,4 +1,4 @@
-import json, inspect, random, logging
+import json, inspect, random, logging, importlib
 from django.apps import apps
 
 
@@ -15,7 +15,7 @@ def get_all_apps(return_as="app_configs"):
     default, but can also be returned as app name string by passing 'strings' to return_as."""
     relevant_apps = []
     for name, app in apps.app_configs.items():
-        if hasattr(app, "get_state_changes_module"):
+        if hasattr(app, "get_concord_module"):
             if return_as == "app_configs":
                 relevant_apps.append(app)
             elif return_as == "strings":
@@ -42,11 +42,23 @@ def get_all_community_models():
     return community_models
 
 
+def get_all_clients():
+    """Gets all clients descended from Base Client in Concord and the app using it."""
+    clients = []
+    for app in get_all_apps():
+        client_module = app.get_concord_module("client")
+        client_members = inspect.getmembers(client_module)  # get_members returns (name, value) tuple
+        for name, value in client_members:
+            if hasattr(value, "is_client") and value.is_client and name != "BaseClient":
+                clients.append(value)
+    return clients
+
+
 def get_all_state_changes():
     """Gets all possible state changes in Concord and the app using it."""
     all_state_changes = []
     for app in get_all_apps():
-        state_changes_module = app.get_state_changes_module()
+        state_changes_module = app.get_concord_module("state_changes")
         state_changes = inspect.getmembers(state_changes_module)  # get_members returns (name, value) tuple
         all_state_changes += [value for (name, value) in state_changes if "StateChange" in name] 
     return all_state_changes
@@ -60,7 +72,7 @@ def get_all_foundational_state_changes():
 def get_state_changes_for_app(app_name):
     """Given an app name, gets state_changes as list of state change objects."""
     app_config = apps.get_app_config(app_name)
-    state_changes_module = app_config.get_state_changes_module()
+    state_changes_module = app_config.get_concord_module("state_changes")
     state_changes = inspect.getmembers(state_changes_module)  # get_members returns (name, value) tuple
     return [value for (name, value) in state_changes if "StateChange" in name]
 
@@ -138,6 +150,67 @@ class Changes(object):
 
             app_attr = getattr(self, app_name)
             setattr(app_attr, change_name, change.get_change_type())
+
+
+class Client(object):
+    """Helper object which lets developers easily access all clients at once.
+
+    If supplied with actor and/or target, will instantiate clients with that actor and target.
+
+    limit_to is a list of client names, if supplied actors and targets will only be supplied to 
+    the specified clients.    
+    """
+
+    community_client_override = None
+
+    def __init__(self, actor=None, target=None, limit_to=None):
+
+        self.client_names = []
+
+        for client_class in get_all_clients():
+
+            client_attribute_name = client_class.__name__.replace("Client", "")
+
+            if not limit_to or client_attribute_name in limit_to:
+                client_instance = client_class(actor=actor, target=target)
+            else:
+                client_instance = client_class()
+
+            if client_attribute_name == "Community":       # Helps deal with multiple community groups
+                client_attribute_name = "Concord" + client_attribute_name
+
+            setattr(self, client_attribute_name, client_instance)
+            self.client_names.append(client_attribute_name)
+
+    def get_clients(self):
+        return [getattr(self, client_name) for client_name in self.client_names]
+
+    def update_actor_on_all(self, actor):
+        for client in self.get_clients():
+            client.set_actor(actor=actor)
+
+    def update_target_on_all(self, target):
+        for client in self.get_clients():
+            client.set_target(target=target)
+
+    @property
+    def Community(self):
+        """Projects that use Concord may create a new model and client, descending from the Community model and
+        CommunityClient. To handle this scenario, we look for Clients with an attribute community_model and, if
+        something other than the CommunityClient exists, we use that. Users can override this behavior by 
+        explicitly setting community_client_override to whatever client they want to use."""
+
+        if self.community_client_override:
+            return self.community_client_override
+        
+        community_clients = [client for client in self.get_clients() if hasattr(client, "community_model")]
+
+        if len(community_clients) == 1:
+            return community_clients[0]
+
+        for client in community_clients:
+            if client.__class__.__name__ != "CommunityClient":
+                return client
 
 
 ############################

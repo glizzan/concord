@@ -487,23 +487,20 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
         The actions below are stored within the template, and copied+instantiated when a separate action triggers 
         the permission to do so."""
 
-        from concord.conditionals.client import ConditionalClient
-        from concord.permission_resources.client import PermissionResourceClient
-
-        cond_client = ConditionalClient(actor=actor)
-        cond_client.mode = "mock"
-        perm_client = PermissionResourceClient(actor=actor)   
-        perm_client.mode = "mock"
+        from concord.actions.utils import Client
+        client = Client(actor=actor)
+        client.Conditional.mode = "mock"
+        client.PermissionResource.mode = "mock"
 
         mock_action_list = []
-        action_1 = cond_client.set_condition_on_action(condition_type=self.condition_type, 
+        action_1 = client.Conditional.set_condition_on_action(condition_type=self.condition_type, 
             condition_data=self.condition_data, permission_pk=permission.pk)
         action_1.target = "{{trigger_action}}"
         mock_action_list.append(action_1)
 
-        perm_client.target = action_1
+        client.PermissionResource.target = action_1
         for permission_item_data in self.permission_data:
-            next_action = perm_client.add_permission(**permission_item_data)
+            next_action = client.PermissionResource.add_permission(**permission_item_data)
             next_action.target = "{{previous.0.result}}"
             mock_action_list.append(next_action)
 

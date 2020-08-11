@@ -11,13 +11,6 @@ from concord.communities.customfields import RoleHandler, RoleField
 from concord.actions.customfields import TemplateField, Template
 
 
-# FIXME: this duplicates stuff in templates.py, maybe templates.py should find a way to reference this?
-def english_list(list_to_display):
-    if len(list_to_display) <= 1:
-        return "".join(list_to_display)
-    return ", ".join(list_to_display[:-1]) + " and " + "".join(list_to_display[-1])
-
-
 ################################
 ### Community Resource/Items ###
 ################################

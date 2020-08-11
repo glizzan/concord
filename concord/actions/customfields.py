@@ -131,10 +131,10 @@ class Resolution:
             self.add_to_log(log)
 
     def add_to_log(self, message):
-        """Appends messsage to log field."""
-        self.log = self.log + "  " + message if self.log else message
-        # FIXME: this could grow long if we're checking waiting conditions over and over; find a way to overwrite
-        # log and possibly store older log in regular logging system
+        """Appends messsage to log field.  If log goes past 300 characters, we assume the log is just checking
+        a waiting condition over and over, and don't save."""
+        if len(self.log) < 300:
+            self.log = self.log + "  " + message if self.log else message
 
     def condition_created(self, source_id):
         """Marks a source_id as having a condition created for it."""

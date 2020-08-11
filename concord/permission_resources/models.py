@@ -27,13 +27,12 @@ class PermissionsItem(PermissionedModel):
 
     is_active = models.BooleanField(default=True)
     inverse = models.BooleanField(default=False)  # If toggled, applies to everyone BUT those listed in actors or roles
-    # NOTE: may make sense to apply inverse to specific roles but too complex for now
 
     permitted_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     permitted_object_id = models.PositiveIntegerField()
     permitted_object = GenericForeignKey('permitted_object_content_type', 'permitted_object_id')
 
-    condition = TemplateField(default=Template, system=True)   # Defaults to empty TEmplate object
+    condition = TemplateField(default=Template, system=True)   # Defaults to empty Template object
 
     actors = ActorListField(default=ActorList) # Defaults to empty ActorList object  
     roles = RoleListField(default=RoleList) # Defaults to empty RoleList object
@@ -106,10 +105,6 @@ class PermissionsItem(PermissionedModel):
         that will be created and get their info, to be used in forms"""
         from concord.conditionals.utils import generate_condition_form_from_action_list
         return generate_condition_form_from_action_list(self.condition.action_list, info)
-
-    def get_target(self):
-        # FIXME: does this get used? what does it do?
-        return self.permitted_object
 
     def get_permitted_object(self):
         return self.permitted_object

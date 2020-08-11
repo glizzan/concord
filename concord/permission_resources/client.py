@@ -14,8 +14,6 @@ from concord.permission_resources import state_changes as sc
 ### PermissionResourceClient ###
 ################################
 
-# NOTE: I *believe* the target of a PRC should be the target associated with the PR, but
-# need to verify and then document.
 
 class PermissionResourceClient(BaseClient):
     """
@@ -36,32 +34,16 @@ class PermissionResourceClient(BaseClient):
 
     def get_permissions_for_role(self, *, role_name):
         matching_permissions = []
-        # TODO: we probably want a way to easily filter to only the group
         for permission in PermissionsItem.objects.all():
             if permission.has_role(role=role_name):
                 matching_permissions.append(permission)
         return matching_permissions
 
     def permission_has_condition(self, permission: PermissionsItem) -> bool:
-        # TODO: may need to distinguish between None value vs a an empty template field
         return permission.condition is not None
 
     def actor_satisfies_permission(self, *, actor, permission: PermissionsItem) -> bool:
         return permission.match_actor(actor)
-
-    def get_permission_or_return_mock(self, permitted_object_id, 
-        permitted_object_content_type, permission_change_type):
-        permissions = PermissionsItem.objects.filter(
-            permitted_object_content_type = permitted_object_content_type,
-            permitted_object_id = permitted_object_id,
-            change_type = permission_change_type)
-        if permissions:
-            return permissions.first()
-        else:
-            return utils.MockMetaPermission(
-                permitted_object_id = permitted_object_id, 
-                permitted_object_content_type = permitted_object_content_type,
-                permission_change_type = permission_change_type)
 
     def get_all_permissions_in_db(self):
         """Gets all permissions in the DB.  We should swap this out with getting all permissions in a group
@@ -75,7 +57,7 @@ class PermissionResourceClient(BaseClient):
         client.mode = "mock"
         mock_action = getattr(client, method_name)(**parameters)
         mock_action = has_permission(mock_action)
-        mock_action.status = mock_action.resolution.generate_status()  # FIXME: code smell (also elsewhere in Concord)
+        mock_action.status = mock_action.resolution.generate_status()
         if mock_action.status == "approved":
             return True
         if not exclude_conditional and mock_action.status == "waiting":
@@ -89,14 +71,8 @@ class PermissionResourceClient(BaseClient):
         return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
             permitted_object_id=self.target.pk)
 
-    # FIXME: "specific" permissions is, ironically, a non-specific variable name
     def get_specific_permissions(self, *, change_type: str) -> PermissionsItem:
-        # FIXME: Possibly remove this check and refactor the permissions forms to be have more sensibly
-        # and not call this method if there's no valid target set.
-        if type(self.target) == utils.MockMetaPermission:
-            return []
         content_type = ContentType.objects.get_for_model(self.target)
-        # FIXME: I'm assuming the target is the permitted object but maybe that's wrong?
         return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
             permitted_object_id=self.target.pk, change_type=change_type)
 
@@ -122,8 +98,6 @@ class PermissionResourceClient(BaseClient):
 
     def get_condition_data(self, info="all") -> dict:       
         return self.target.get_condition_data(info)
-
-    # FIXME: also need to update tests
     
     def get_settable_permissions_for_model(self, model_class):
         """Given a model class (or, optionally, an instance of a model class), gets the state change objects
@@ -173,11 +147,8 @@ class PermissionResourceClient(BaseClient):
         change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
-    def change_configuration_of_permission(self, *, configurable_field_name: str, 
+    def change_configuration_of_permission(self, *, configurable_field_name: str,
         configurable_field_value: str, permission_pk: int) -> Tuple[int, Any]:
-        # FIXME: we should be able to change multiple fields at once, and then we can remove
-        # update_configuration - there should be a configurable_fields here so you can limit the 
-        # permission to one field
         change = sc.ChangePermissionConfigurationStateChange(configurable_field_name=configurable_field_name,
             configurable_field_value=configurable_field_value, permission_pk=permission_pk)
         return self.create_and_take_action(change)
@@ -257,59 +228,3 @@ class PermissionResourceClient(BaseClient):
             action_list.append(self.remove_actor_from_permission(actor=actor, permission_pk=permission.pk))
 
         return action_list
-
-    # FIXME: this is still too complex
-    def update_role_permissions(self, *, role_data, owner):
-        """Given a dict with roles and permissions on a target object which refer 
-        to those roles, goes through permissions on target object and adds or removes
-        references to roles to make them match the given dict."""
-        
-        actions = []
-
-        # Reformulate role_data with permissions as key for readability/usability
-        new_permissions = {}
-        for index, role in role_data.items():
-            for permission in role["permissions"]:
-                if permission not in new_permissions:
-                    new_permissions[permission] = [role["rolename"]]
-                else:
-                    new_permissions[permission].append(role["rolename"])
-
-        # Iterate through old_permissions.  
-        old_permissions = self.get_permissions_on_object(object=self.target)
-        for permission in old_permissions:
-
-            if permission.change_type not in new_permissions:
-
-                # If not in new_permissions, delete.
-                action = self.remove_permission(item_pk=permission.pk)
-                actions.append(action)
-
-            else:
-
-                # Otherwise, update role data.
-
-                old_roles = set(permission.roles.get_roles())
-                new_roles = set(new_permissions[permission.change_type])
-                roles_to_add = new_roles.difference(old_roles)
-                roles_to_remove = old_roles.difference(new_roles)
-
-                for role in roles_to_add:
-                    action = self.add_role_to_permission(role_name=role, permission_pk=permission.pk)
-                    actions.append(action)
-                
-                for role in roles_to_remove:
-                    action = self.remove_role_from_permission(role_name=role, permission_pk=permission.pk)
-                    actions.append(action)
-
-                # delete permission from new_permissions dict, leaving only newly created permissions
-                del(new_permissions[permission.change_type])
-            
-        # Iterate through remaining new_permissions, these should all be permissions to create
-        for permission, role_list in new_permissions.items():
-            action = self.add_permission(permission_type=permission, 
-                    permission_roles=role_list)
-            actions.append(action)
-
-        return actions
-

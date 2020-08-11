@@ -22,7 +22,7 @@ def field_helper(type_of_field, overrides=None):
             "label": "What roles have this permission?",
             "required": False,
             "default": None,
-            "type": "PermissionRoleField",   # TODO: adjust front end to expect type RoleListField?
+            "type": "PermissionRoleField",
             "value": None,
             "field_name": None,
             "full_name": None
@@ -33,7 +33,7 @@ def field_helper(type_of_field, overrides=None):
             "label": "What actors have this permission?",
             "required": False,
             "default": None,
-            "type": "PermissionActorField",   # TODO: adjust front end to expect type RoleListField?
+            "type": "PermissionActorField",
             "value": None,
             "field_name": None,
             "full_name": None

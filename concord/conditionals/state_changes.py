@@ -38,20 +38,17 @@ class SetConditionOnActionStateChange(BaseStateChange):
     
     def get_owner(self):
         """The owner of the condition should be the community in which it is created.  For now, this means
-        looking up permission and getting owner, or using community if community is set."""
+        looking up permission and getting owner, or using community if community is set.
+        
+        Note that if multiple community models are being used, and the community pk passed in is not the
+        primary/default model, this will break."""
 
         if self.permission_pk:
             permission = Client().PermissionResource.get_permission(pk=self.permission_pk)
             return permission.get_owner()
 
         if self.community_pk:
-            community_models = self.get_community_models()
-            for model in community_models:
-                found_communities = model.objects.filter(pk=self.community_pk)
-                if len(found_communities) > 0:
-                    return found_communities[0]     
-            # NOTE: this is a bit of a hack, we need a better way to agnostically set the community_model
-            # type here, and then we can just call get_community()  
+            return Client().Community.get_community(community_pk=self.community_pk)
 
     def generate_source_id(self):
         source_pk = self.permission_pk if self.permission_pk else self.community_pk
@@ -59,8 +56,6 @@ class SetConditionOnActionStateChange(BaseStateChange):
         return source_type + "_" + str(source_pk)
 
     def validate(self, actor, target):
-
-        # FIXME: since this is internal, do we want to actually raise the errors here?
 
         if not self.permission_pk and not self.community_pk:
             self.set_validation_error(message="Must supply either permission_pk or community_pk when setting condition")

@@ -62,18 +62,17 @@ def actors_to_text(actor_info):
 
 def replaceable_field_check(value):
     """Checks for replaceable fields and parses & returns their content if found.
-    
-    TODO: possibly make this a decorator for all of the utils above?
-    """
+
+    Note that is is pretty brittle (the remove change has member_pk_list as a param too,
+    what if we're removing people with this action?), and should be replaced by some kind 
+    of text_utils function."""
 
     if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
         command = value.replace("{{", "").replace("}}", "").strip()
         tokens = command.split(".")
     
         if tokens[0] == "trigger_action" and tokens[1] == "change" and tokens[2] == "member_pk_list":
-            return True, "users added by the action"   # HACK: this isn't workable as is, if for no other reason than
-                                                 # multiple changes have member_pk_list, not just add_members
-                                                 # I GUESS we could change the params to be more unique/descriptive
+            return True, "users added by the action"   
 
     return False, value
 
@@ -126,9 +125,6 @@ def condition_template_to_text(condition_action, permissions_actions):
             "actors": perm_action.change.permission_actors })
 
         change_type = get_state_change_object(perm_action.change.permission_type)
-
-        # FIXME: this logic should really be on the condition model, because how many people need to do X
-        # is controlled by condition configuration
 
         if change_type.action_helps_pass_condition:
             phrases.append(roles_and_actors_string + " " + change_type.verb_name)

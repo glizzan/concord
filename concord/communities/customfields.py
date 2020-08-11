@@ -237,7 +237,9 @@ class RoleHandler(object):
         return all_roles[role_name]
 
     def get_roles_given_user(self, pk):
-        # NOTE: this does not catch when a user is owner/governor through custom roles
+        """Gets all roles in the group, given a user's pk. 
+        
+        Note that this doesn't catch when a user is owner/governor through custom roles."""
         list_of_user_roles = []
         all_roles = self.get_roles()
         for role_name, role_data in all_roles.items():
@@ -279,19 +281,20 @@ class RoleHandler(object):
     # Custom roles
 
     def add_role(self, role_name):
-        # FIXME: we should probably check capitalization here
-        all_roles = self.get_roles()
-        if role_name not in all_roles:
+        """Checks if role passed in already exists and, if not, adds to the list of roles. Roles that differ
+        only by capitalization are not allowed."""
+        all_roles = [role.lower() for role in self.get_roles()]
+        if role_name.lower() not in all_roles:
             self.custom_roles.update({role_name: []})
         else:
             print("Role ", role_name, " already exists")
 
     def remove_role(self, role_name):
-        # FIXME: we should probably check capitalization here
-        if role_name in self.protected_roles:
+        """Removes the role passed in unless it is a protected role."""
+        if role_name.lower() in self.protected_roles:
             raise ValueError("Can't remove role ", role_name, "; role is protected.")
-        all_roles = self.get_roles()
-        if role_name not in all_roles:
+        all_roles = [role.lower() for role in self.get_roles()]
+        if role_name.lower() not in all_roles:
             print("No role ", role_name, " found; therefore it cannot be removed.")
         else:
             del self.custom_roles[role_name]

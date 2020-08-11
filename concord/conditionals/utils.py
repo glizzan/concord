@@ -75,10 +75,8 @@ def generate_condition_form_from_action_list(action_list, info):
     return generate_condition_form(condition, permissions)
 
 
-
 def description_for_passing_approval_condition(fill_dict=None):
 
-    # HACK to prevent key errors & fix formatting :/   FIXME actors should be usernames not pks too
     if fill_dict:
         fill_dict["approve_actors"] = [ str(actor) for actor in fill_dict.get("approve_actors", []) ]
         fill_dict["approve_roles"] = fill_dict.get("approve_roles", [])
@@ -114,9 +112,8 @@ def description_for_passing_approval_condition(fill_dict=None):
 
 def description_for_passing_voting_condition(condition, fill_dict=None):
 
-    # HACK to prevent key errors
     if fill_dict:
-        fill_dict["vote_actors"] = [ str(actor) for actor in fill_dict.get("vote_actors", []) ]
+        fill_dict["vote_actors"] = [str(actor) for actor in fill_dict.get("vote_actors", [])]
         fill_dict["vote_roles"] = fill_dict.get("vote_roles", [])
 
     if condition.require_majority:

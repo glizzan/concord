@@ -1,7 +1,8 @@
 from django.utils import timezone
-
 from django.core.management.base import BaseCommand, CommandError
 import django.dispatch
+
+from concord.actions.utils import get_all_conditions
 
 
 retry_action_signal = django.dispatch.Signal(providing_args=["instance"])
@@ -13,8 +14,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        from concord.conditionals.models import ApprovalCondition, VoteCondition
-        for condition_class in [ApprovalCondition, VoteCondition]:  # FIXME: we need a helper method for this
+        for condition_class in get_all_conditions():
 
             for instance in condition_class.objects.all():
 
@@ -22,9 +22,4 @@ class Command(BaseCommand):
 
                     if timezone.now() > instance.get_timeout():  
 
-                        # TODO: Right now, we're sending a signal for every condition that has ever finished. It would be 
-                        # nice to have some archiving mechanism.
                         retry_action_signal.send(sender=condition_class, instance=instance, created=False) 
-
-
-        

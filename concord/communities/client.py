@@ -29,7 +29,8 @@ class CommunityClient(BaseClient):
 
     def set_target(self, target):
         super().set_target(target)
-        # FIXME: insert a check that the community model here is valid
+        if not hasattr(target, "is_community"):
+            raise ValueError("Target of CommunityClient must be a Community model")
         self.community_model = self.target.__class__
 
     # Target-less methods (don't require a target to be set ahead of time)
@@ -133,12 +134,12 @@ class CommunityClient(BaseClient):
     def get_condition_data(self, leadership_type, info="all") -> dict:
         return self.target.get_condition_data(leadership_type=leadership_type, info=info)
 
-    def has_foundational_authority(self, *, actor) -> bool:  # Also returns role
+    def has_foundational_authority(self, *, actor) -> bool:
         return self.target.roles.is_owner(actor.pk) 
 
-    def has_governing_authority(self, *, actor) -> bool:  # Also returns role
-        self.target.refresh_from_db()  # FIXME: seems expensive to do this every time?
-        return self.target.roles.is_governor(actor.pk) # FIXME: actor should be pk
+    def has_governing_authority(self, *, actor) -> bool:
+        self.target.refresh_from_db()
+        return self.target.roles.is_governor(actor.pk)
 
     def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:
         return self.target.roles.has_specific_role(role, actor_pk)
@@ -301,8 +302,6 @@ class CommunityClient(BaseClient):
     def update_role_membership(self, *, role_data):
         """Takes in a list of roles with members, adds any missing members and 
         adds any which are missing from community."""
-        
-        # NOTE: this requires two different permissions
 
         actions = []
 

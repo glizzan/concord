@@ -13,9 +13,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.dispatch import receiver
 
 from concord.actions.models import PermissionedModel
-from concord.actions.client import ActionClient
-from concord.permission_resources.client import PermissionResourceClient
-from concord.actions.utils import Changes
+from concord.actions.utils import Changes, Client
 from concord.conditionals import utils
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 
@@ -56,8 +54,7 @@ class ConditionModel(PermissionedModel):
         return self.descriptive_name
 
     def get_action(self):
-        ac = ActionClient(system=True)
-        return ac.get_action_given_pk(pk=self.action)
+        return Client().Action.get_action_given_pk(pk=self.action)
 
     def get_configurable_fields_with_data(self, permission_data=None):
         """Returns form_dict with condition data set as value."""
@@ -357,13 +354,13 @@ class VoteCondition(ConditionModel):
 @receiver(retry_action_signal)
 def retry_action(sender, instance, created, **kwargs):
     if not created:
-        actionClient = ActionClient(system=True)
-        action = actionClient.get_action_given_pk(pk=instance.action)
+        client = Client()
+        action = client.Action.get_action_given_pk(pk=instance.action)
         if action.container is not None:
-            container = actionClient.get_container_given_pk(pk=action.container)
+            container = client.Action.get_container_given_pk(pk=action.container)
             container.commit_actions()  # retry processing all actions in container
         else:
-            actionClient.take_action(action=action)
+            client.Action.take_action(action=action)
 
 
 for conditionModel in [ApprovalCondition, VoteCondition]:  # FIXME: should be auto-detected

@@ -1,3 +1,5 @@
+import importlib
+
 from django.apps import AppConfig
 
 
@@ -6,7 +8,6 @@ class ActionsConfig(AppConfig):
     name = 'concord.actions'
     verbose_name = "Actions"
 
-    def get_state_changes_module(cls):
-        """Helper method used elsewhere to easily access state changes."""
-        import importlib
-        return importlib.import_module(".actions.state_changes", package="concord")
+    def get_concord_module(self, module_name):
+        """Helper method to let utils easily access specific files."""
+        return importlib.import_module(".actions." + module_name, package="concord")

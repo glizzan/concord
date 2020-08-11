@@ -7,9 +7,7 @@ has_permission.
 
 import logging
 
-from concord.conditionals.client import ConditionalClient
-from concord.communities.client import CommunityClient
-from concord.permission_resources.client import PermissionResourceClient
+from concord.actions.utils import Client
 from concord.permission_resources.utils import check_configuration
 
 
@@ -31,10 +29,10 @@ def check_conditional(action, community_or_permission, leadership_type=None):
     Returns a dict containing condition information if condition_item exists or, if condition item
     does not exist, the same dict structure populated by Nones."""
 
-    conditionalClient = ConditionalClient(system=True)
+    client = Client()
     source_id = f"{leadership_type}_{str(community_or_permission.pk)}" if leadership_type else \
                 f"perm_{str(community_or_permission.pk)}"
-    condition_item = conditionalClient.get_condition_item_given_action_and_source(action_pk=action.pk,
+    condition_item = client.Conditional.get_condition_item_given_action_and_source(action_pk=action.pk,
                                                                                   source_id=source_id)
 
     return {
@@ -49,12 +47,12 @@ def foundational_permission_pipeline(action):
 
     When an action is passed through the foundational pipeline, it is not passed through the governing or specific
     permission pipeline. So, if we don't have the authority, we reject the action."""
+    
+    client = Client()
+    community = client.Community.get_owner(owned_object=action.target)
+    client.Community.set_target(target=community)
 
-    communityClient = CommunityClient(system=True)
-    community = communityClient.get_owner(owned_object=action.target)
-    communityClient.set_target(target=community)
-
-    has_authority, matched_role = communityClient.has_foundational_authority(actor=action.actor)
+    has_authority, matched_role = client.Community.has_foundational_authority(actor=action.actor)
     if not has_authority:
         action.resolution.reject_action(pipeline="foundational")
         return action
@@ -85,8 +83,10 @@ def check_specific_permission(permission, action):
     if not check_configuration(action, permission):
         return False, None, None
 
-    permClient = PermissionResourceClient(actor="system", target=action.target)
-    actor_satisfies, matched_role = permClient.actor_satisfies_permission(actor=action.actor, permission=permission)
+    client = Client()
+    client.PermissionResource.set_target(target=action.target)
+    # permClient = PermissionResourceClient(actor="system", target=action.target)
+    actor_satisfies, matched_role = client.PermissionResource.actor_satisfies_permission(actor=action.actor, permission=permission)
     if not actor_satisfies:
         return False, None, None
 
@@ -113,10 +113,11 @@ def specific_permission_pipeline(action):
     At the end of all this, if any of these permissions pass, the action is approved. If any are waiting, the action
     is set to waiting. If none are approved or waiting, the action is rejected."""
 
-    permissionClient = PermissionResourceClient(system=True, target=action.target)
+    client = Client()
+    client.PermissionResource.set_target(target=action.target)
 
     # Get and check target level permissions
-    for permission in permissionClient.get_specific_permissions(change_type=action.change.get_change_type()):
+    for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
         passes, matched_role, condition_data = check_specific_permission(permission, action)
         action.resolution.process_resolution("specific", permission, passes, matched_role, condition_data)
         if passes:
@@ -124,8 +125,8 @@ def specific_permission_pipeline(action):
 
     # If we're still here, that means nothing matched without a condition, so now we look for nested permissions
     for nested_object in action.target.get_nested_objects():
-        permissionClient.set_target(target=nested_object)
-        for permission in permissionClient.get_specific_permissions(change_type=action.change.get_change_type()):
+        client.PermissionResource.set_target(target=nested_object)
+        for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
             passes, matched_role, condition_data = check_specific_permission(permission, action)
             action.resolution.process_resolution("specific", permission, passes, matched_role, condition_data)
             if passes:
@@ -140,11 +141,11 @@ def specific_permission_pipeline(action):
 def governing_permission_pipeline(action):
     """Checks whether the actor behind the action has governing permissions and if so, passes."""
 
-    communityClient = CommunityClient(system=True)
-    community = communityClient.get_owner(owned_object=action.target)
-    communityClient.set_target(target=community)
+    client = Client()
+    community = client.Community.get_owner(owned_object=action.target)
+    client.Community.set_target(target=community)
 
-    has_authority, matched_role = communityClient.has_governing_authority(actor=action.actor)
+    has_authority, matched_role = client.Community.has_governing_authority(actor=action.actor)
     if not has_authority:
         action.resolution.reject_action(pipeline="governing", log="user does not have governing permission")
         return action

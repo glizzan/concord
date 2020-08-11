@@ -22,24 +22,17 @@ class BaseClient(object):
 
     Args:
         actor: User Model
-            The User who the client is acting on behalf of. Required unless `system` is True.
+            The User who the client is acting on behalf of. Optional, but required for many 
+            Client methods.
         target: PermissionedModel Model
             The target that the change will be implemented on. Optional, but required for many
             Client methods.
-        system: boolean
-            Indicates whether the client is called without a user by the system. Optional and rarely used.
     """
 
+    is_client = True
     mode = "default"
 
-    def __init__(self, actor=None, target=None, system=False):
-        """Initializes client with params actor, target, and system. Actor is required unless
-        running with system = True."""
-        if system:  # FIXME: still don't like this hack
-            from django.contrib.auth.models import User
-            self.actor = User.objects.get_or_create(username="system")
-        elif actor is None:
-            raise BaseException("Actor is required")
+    def __init__(self, actor=None, target=None):
         self.actor = actor
         self.target = target
 
@@ -85,6 +78,13 @@ class BaseClient(object):
         """Sets actor."""
         self.actor = actor
 
+    def validate_actor(self):
+        """Helper method to check whether or not we've got an actor and whether they're a user."""
+        if not self.actor:
+            raise BaseException("An actor is required")
+        if not hasattr(self.actor, "is_authenticated") or not self.actor.is_authenticated:
+            raise BaseException(f"Actor {self.actor} must be an authenticated User.")
+
     def create_and_take_action(self, change):
         """Create an Action object using the change object passed in as well as the actor and target already
         set on the Client. Called by clients when making changes to state.
@@ -98,6 +98,7 @@ class BaseClient(object):
             return MockAction(actor=self.actor, target=self.target, change=change)
 
         self.validate_target()
+        self.validate_actor()
 
         if self.change_is_valid(change):
             action = Action.objects.create(actor=self.actor, target=self.target,
@@ -162,12 +163,11 @@ class ActionClient(BaseClient):
 
     Args:
         actor: User Model
-            The User who the client is acting on behalf of. Required unless `system` is True.
+            The User who the client is acting on behalf of. Optional, but required for many 
+            Client methods.
         target: PermissionedModel Model
             The target that the change will be implemented on. Optional, but required for many
             Client methods.
-        system: boolean
-            Indicates whether the client is called without a user by the system. Optional and rarely used.
     """
 
     # Read only
@@ -272,12 +272,11 @@ class TemplateClient(BaseClient):
 
     Args:
         actor: User Model
-            The User who the client is acting on behalf of. Required unless `system` is True.
+            The User who the client is acting on behalf of. Optional, but required for many 
+            Client methods.
         target: PermissionedModel Model
             The target that the change will be implemented on. Optional, but required for many
             Client methods.
-        system: boolean
-            Indicates whether the client is called without a user by the system. Optional and rarely used.
     """
 
     # Read-only methods

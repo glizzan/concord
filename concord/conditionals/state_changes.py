@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange
+from concord.actions.utils import Client
 
 
 ###################################
@@ -30,8 +31,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
         self.leadership_type = leadership_type 
 
     def get_condition_class(self):
-        from concord.conditionals.client import ConditionalClient
-        return ConditionalClient(system=True).get_condition_class(condition_type=self.condition_type)
+        return Client().Conditional.get_condition_class(condition_type=self.condition_type)
 
     def get_condition_verb(self):
         return self.get_condition_class().verb_name
@@ -41,9 +41,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
         looking up permission and getting owner, or using community if community is set."""
 
         if self.permission_pk:
-            from concord.permission_resources.client import PermissionResourceClient
-            permClient = PermissionResourceClient(system=True)
-            permission = permClient.get_permission(pk=self.permission_pk)
+            permission = Client().PermissionResource.get_permission(pk=self.permission_pk)
             return permission.get_owner()
 
         if self.community_pk:

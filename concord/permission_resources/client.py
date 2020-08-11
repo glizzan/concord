@@ -3,7 +3,7 @@ from typing import Tuple, Any, List
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Model
 
-from concord.actions.client import BaseClient, ActionClient
+from concord.actions.client import BaseClient
 
 from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources import utils, models

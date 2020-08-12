@@ -50,6 +50,10 @@ class BaseClient(object):
         if not hasattr(self.target, "is_permissioned_model") or not self.target.is_permissioned_model:
             raise BaseException(f"Target {self.target} must be a permissioned model.")
 
+    def get_target(self):
+        """Gets the target of the client."""
+        return self.target
+
     def refresh_target(self):
         """Re-populates model from database."""
         self.target.refresh_from_db()

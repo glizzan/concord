@@ -1,29 +1,36 @@
+"""Defines state changes for concord.actions.models, as well as the BaseStateChange object from which all
+state change objects inherit."""
+
 import json, warnings
 
 from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.models import ContentType
-from django.conf import settings
-from django.apps import apps
+
+from concord.actions.models import TemplateModel
+from concord.actions.utils import get_all_permissioned_models, get_all_community_models
 
 
 class BaseStateChange(object):
+    """The BaseStateChange object is the object which all other state change objects inherit from. It has a
+    variety of methods which must be implemented by those that inherit it."""
 
     allowable_targets = []
     settable_classes = []
     instantiated_fields = []
     is_foundational = False
 
-    @classmethod 
+    @classmethod
     def get_change_type(cls):
+        """Gets the full type of the change object in format 'concord.package.state_changes.SpecificStateChange'"""
         return cls.__module__ + "." + cls.__name__
 
-    @classmethod 
+    @classmethod
     def get_allowable_targets(cls):
         """Returns the classes that an action of this type may target.  Most likely called by the validate
         method in a state change."""
         return cls.allowable_targets
 
-    @classmethod 
+    @classmethod
     def get_settable_classes(cls):
         """Returns the classes that a permission with this change type may be set on.  This overlaps with
         allowable targets, but also includes classes that allowable targets may be nested on.  Most likely
@@ -33,21 +40,23 @@ class BaseStateChange(object):
     @classmethod
     def get_all_possible_targets(cls):
         """Gets all permissioned models in system that are not abstract."""
-        from concord.actions.utils import get_all_permissioned_models
         return get_all_permissioned_models()
 
-    @classmethod 
+    @classmethod
     def get_configurable_fields(cls):
-        if hasattr(cls, 'check_configuration'): 
-            warnings.warn("You have added a check_configuration method to your state change without specifying any configurable fields.")
+        """Gets the fields of a change object which may be configured when used in a Permission model."""
+        if hasattr(cls, 'check_configuration'):
+            warnings.warn("You have added check_configuration method to state change without specifying " +
+                          "any configurable fields.")
         return {}
 
-    @classmethod 
+    @classmethod
     def get_configurable_form_fields(cls):
+        """Gets the configurable fields of a change object as form fields."""
         fields = {}
         for field_name, field_data in cls.get_configurable_fields().items():
-            fields.update({ 
-                field_name : {
+            fields.update({
+                field_name: {
                     "field_name": field_name,
                     "display": field_data["display"],
                     "type": field_data["type"] if "type" in field_data else "CharField",
@@ -66,13 +75,20 @@ class BaseStateChange(object):
 
     @classmethod
     def get_community_models(cls):
-        """This helper method lets us indicate alternative community models as allowable targets for community actions."""
-        from concord.actions.utils import get_all_community_models
+        """Helper method which lets us use alternative community models as targets for community actions."""
         return get_all_community_models()
 
+    @classmethod
+    def get_preposition(cls):
+        """By default, we make changes "to" things but change types can override this default preposition with
+        "for", "with", etc."""
+        if hasattr(cls, "preposition"):
+            return cls.preposition
+        return "to"
+
     def instantiate_fields(self):
-        '''Helper method used by state change subclasses that have fields which require database
-        lookups.  Not called by default, to prevent unnecessary db queries.'''
+        """Helper method used by state change subclasses that have fields which require database
+        lookups.  Not called by default, to prevent unnecessary db queries."""
         return False
 
     def set_validation_error(self, message):
@@ -80,16 +96,16 @@ class BaseStateChange(object):
         self.validation_error = ValidationError(message)
 
     def validate(self, actor, target):
+        """Method to check whether the data provided to a change object in an action is valid for the change object."""
         ...
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
+        """Method that carries out the change of state."""
         ...
 
     def get_change_data(self):
-        '''
-        Given the python Change object, generates a json list of field names
-        and values.  Does not include instantiated fields.
-        '''
+        """Given the python Change object, generates a json list of field names and values.  Does not include
+        instantiated fields."""
         new_vars = vars(self)
         for field in self.instantiated_fields:
             if field in new_vars:
@@ -98,15 +114,18 @@ class BaseStateChange(object):
             del(new_vars)["validation_error"]
         return json.dumps(new_vars)
 
-    @classmethod 
-    def get_preposition(cls):
-        """By default, we make changes "to" things but change types can override this default preposition with "for", "with", etc."""
-        if hasattr(cls, "preposition"):
-            return cls.preposition
-        return "to"
+    def description_present_tense(self):
+        """Returns the description of the state change object, in present tense."""
+        return self.description
+
+    def description_past_tense(self):
+        """Returns the description of the state change object, in past tense."""
+        ...
 
 
 class ChangeOwnerStateChange(BaseStateChange):
+    """State change for changing which community owns the object. Not to be confused with state changes which
+    change who the owners are within a community."""
     description = "Change owner"
     preposition = "for"
 
@@ -119,10 +138,10 @@ class ChangeOwnerStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "change owner of community to %s" % (self.new_owner)  
+        return f"change owner of community to {self.new_owner}"
 
     def description_past_tense(self):
-        return "changed owner of community to %s" % (self.new_owner) 
+        return "changed owner of community to {self.new_owner}"
 
     def validate(self, actor, target):
         """
@@ -130,11 +149,11 @@ class ChangeOwnerStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
 
         # Given the content type and ID, instantiate owner
-        ct = ContentType.objects.get_for_id(self.new_owner_content_type)
-        model_class = ct.model_class()
+        content_type = ContentType.objects.get_for_id(self.new_owner_content_type)
+        model_class = content_type.model_class()
         new_owner = model_class.objects.get(id=self.new_owner_id)
 
         target.owner = new_owner
@@ -144,6 +163,7 @@ class ChangeOwnerStateChange(BaseStateChange):
 
 
 class EnableFoundationalPermissionStateChange(BaseStateChange):
+    """State change object for enabling the foundational permission of a permissioned model."""
     description = "Enable the foundational permission"
     preposition = "for"
     is_foundational = True
@@ -153,7 +173,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "enable the foundational permission" 
+        return "enable the foundational permission"
 
     def description_past_tense(self):
         return "enabled the foundational permission"
@@ -164,13 +184,14 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
         target.foundational_permission_enabled = True
         target.save()
         return target
 
 
 class DisableFoundationalPermissionStateChange(BaseStateChange):
+    """State change object for disabling the foundational permission of a permissioned model."""
     description = "disable foundational permission"
     preposition = "for"
     is_foundational = True
@@ -180,7 +201,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "disable the foundational permission" 
+        return "disable the foundational permission"
 
     def description_past_tense(self):
         return "disabled the foundational permission"
@@ -191,23 +212,24 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
         target.foundational_permission_enabled = False
         target.save()
         return target
 
 
 class EnableGoverningPermissionStateChange(BaseStateChange):
+    """State change object for enabling the governing permission of a permissioned model."""
     description = "Enable the governing permission"
     preposition = "for"
     is_foundational = True
 
     @classmethod
     def get_settable_classes(cls):
-        return cls.get_all_possible_targets() 
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "enable the governing permission" 
+        return "enable the governing permission"
 
     def description_past_tense(self):
         return "enabled the governing permission"
@@ -218,13 +240,14 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
         target.governing_permission_enabled = True
         target.save()
         return target
 
 
 class DisableGoverningPermissionStateChange(BaseStateChange):
+    """State change object for disabling the governing permission of a permissioned model."""
     description = "disable governing permission"
     preposition = "for"
     is_foundational = True
@@ -245,16 +268,15 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         """
         return True
 
-    def implement(self, actor, target, save=True):
-        target.governing_permission_enabled = False    
-        target.save()    
+    def implement(self, actor, target):
+        target.governing_permission_enabled = False
+        target.save()
         return target
 
 
 class ViewStateChange(BaseStateChange):
-    """'ViewStateChange' is a compromise name meant to indicate that,
-    while the item inherits from BaseStateChange, it does not actually change
-    any state - merely gets the specified fields."""
+    """ViewStateChange is a state change which doesn't actually change state. Instead, it returns the specified
+    fields. It exists so we can wrap view permissions in the same model as all the other permissions."""
     description = "View"
     preposition = "for"
 
@@ -263,30 +285,28 @@ class ViewStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return cls.get_all_possible_targets() 
+        return cls.get_all_possible_targets()
 
-    @classmethod 
-    def get_configurable_fields(self):
-        return { "fields_to_include": { "display": "Fields that can be viewed" }}
+    @classmethod
+    def get_configurable_fields(cls):
+        return {"fields_to_include": {"display": "Fields that can be viewed"}}
 
     def description_present_tense(self):
-        field_string = ", ".join(self.fields_to_include) if self.fields_to_include else "all fields"
-        return "view %s" % field_string  
+        return f"view {', '.join(self.fields_to_include) if self.fields_to_include else 'all fields'}"
 
     def description_past_tense(self):
-        field_string = ", ".join(self.fields_to_include) if self.fields_to_include else "all fields"
-        return "viewed %s" % field_string  
+        return f"viewed {', '.join(self.fields_to_include) if self.fields_to_include else 'all fields'}"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
         """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
         By contrast, check_configuration checks a specific action against an already-validated configuration."""
         if "fields_to_include" in configuration:
-            if type(configuration["fields_to_include"]) != list:
-                return False, "fields_to_include must be of type list, not %s " % str(type(configuration["fields_to_include"]))
-            if not all(type(field) == str for field in configuration["fields_to_include"]):
+            if not isinstance(configuration["fields_to_include"], list):
+                field_type = str(type(configuration['fields_to_include']))
+                return False, f"fields_to_include must be type list, not {field_type}"
+            if not all(isinstance(field, str) for field in configuration["fields_to_include"]):
                 return False, "fields_to_include must be a list of strings"
-        
         return True, ""
 
     def check_configuration(self, action, permission):
@@ -298,7 +318,7 @@ class ViewStateChange(BaseStateChange):
                 if targeted_field not in configuration["fields_to_include"]:
                     missing_fields.append(targeted_field)
         if missing_fields:
-            return False, "Cannot view fields %s " % ", ".join(missing_fields)
+            return False, f"Cannot view fields {', '.join(missing_fields)}"
         return True, None
 
     def validate(self, actor, target):
@@ -310,14 +330,11 @@ class ViewStateChange(BaseStateChange):
                     missing_fields.append(field)
         if not missing_fields:
             return True
-        self.set_validation_error("Attempting to view field(s) %s that are not on target %s" % (
-            ", ".join(missing_fields), target))
+        self.set_validation_error(f"Attempting to view field(s) {', '.join(missing_fields)} not on target {target}")
         return False
 
-    def implement(self, actor, target, save=True):
+    def implement(self, actor, target):
         """Gets data from specified fields, or from all fields, and returns as dictionary."""
-
-        data_dict = {}
 
         target_data = target.get_serialized_field_data()
 
@@ -326,12 +343,13 @@ class ViewStateChange(BaseStateChange):
 
         limited_data = {}
         for field in self.fields_to_include:
-            limited_data.update({ field : target_data[field] })
+            limited_data.update({field: target_data[field]})
 
         return limited_data
 
 
 class ApplyTemplateStateChange(BaseStateChange):
+    """State change object for applying a template."""
     description = "Apply template"
     preposition = "to"
     pass_action = True
@@ -345,7 +363,7 @@ class ApplyTemplateStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "apply template"  
+        return "apply template"
 
     def description_past_tense(self):
         return "applied template"
@@ -358,11 +376,9 @@ class ApplyTemplateStateChange(BaseStateChange):
 
     def implement(self, actor, target, action=None):
 
-        # Get the template model
-        from concord.actions.models import TemplateModel
         template_model = TemplateModel.objects.get(pk=self.template_model_pk)
 
-        container, log = template_model.template_data.apply_template(trigger_action=action, 
-            supplied_fields=self.supplied_fields)
+        container, log = template_model.template_data.apply_template(trigger_action=action,
+                                                                     supplied_fields=self.supplied_fields)
 
         return container

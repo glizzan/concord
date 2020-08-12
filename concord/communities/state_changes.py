@@ -1,9 +1,10 @@
-from concord.actions.state_changes import BaseStateChange
-from django.conf import settings
-from django.apps import apps
+"""Community state changes."""
+
 from django.core.exceptions import ValidationError
 
+from concord.actions.state_changes import BaseStateChange
 from concord.actions.text_utils import list_to_text, condition_template_to_text
+from concord.actions.utils import Client
 
 
 ###############################
@@ -12,6 +13,7 @@ from concord.actions.text_utils import list_to_text, condition_template_to_text
 
 
 class ChangeNameStateChange(BaseStateChange):
+    """State change to change name of Community."""
     description = "Change name of community"
     preposition = "for"
 
@@ -23,10 +25,10 @@ class ChangeNameStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "change name of community to %s" % (self.new_name)  
+        return f"change name of community to {self.new_name}"
 
     def description_past_tense(self):
-        return "changed name of community to %s" % (self.new_name) 
+        return f"changed name of community to {self.new_name}"
 
     def validate(self, actor, target):
         """
@@ -44,6 +46,7 @@ class ChangeNameStateChange(BaseStateChange):
 
 
 class AddMembersStateChange(BaseStateChange):
+    """State change to add members to Community."""
     description = "Add members to community"
 
     def __init__(self, member_pk_list, self_only=False):
@@ -54,9 +57,9 @@ class AddMembersStateChange(BaseStateChange):
     def get_settable_classes(cls):
         return cls.get_community_models()
 
-    @classmethod 
-    def get_configurable_fields(self):
-        return { "self_only": { "display": "Only allow actors to add themselves", "type": "BooleanField" } }
+    @classmethod
+    def get_configurable_fields(cls):
+        return {"self_only": {"display": "Only allow actors to add themselves", "type": "BooleanField"}}
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -71,16 +74,16 @@ class AddMembersStateChange(BaseStateChange):
         '''All configurations must pass for the configuration check to pass.'''
 
         configuration = permission.get_configuration()
-        if "self_only" in configuration and configuration['self_only'] == True:
+        if "self_only" in configuration and configuration['self_only']:
             if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
-                return False, "self_only is set to true, which means member_pk_list can contain only the pk of the actor"
+                return False, "self_only is set to true, so member_pk_list can contain only the pk of the actor"
         return True, None
 
     def description_present_tense(self):
-        return "add %s as members" % list_to_text(self.member_pk_list) 
+        return f"add {list_to_text(self.member_pk_list)} as members"
 
     def description_past_tense(self):
-        return "added %s as members" % list_to_text(self.member_pk_list) 
+        return f"added {list_to_text(self.member_pk_list)} as members"
 
     def validate(self, actor, target):
         """
@@ -89,12 +92,13 @@ class AddMembersStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.roles.add_members(self.member_pk_list) 
+        target.roles.add_members(self.member_pk_list)
         target.save()
         return target
 
 
 class RemoveMembersStateChange(BaseStateChange):
+    """State change to remove members from Community."""
     description = "Remove members from community"
     preposition = "from"
 
@@ -106,15 +110,15 @@ class RemoveMembersStateChange(BaseStateChange):
     def get_settable_classes(cls):
         return cls.get_community_models()
 
-    @classmethod 
-    def get_configurable_fields(self):
-        return { "self_only": { "display": "Only allow actors to remove themselves", "type": "BooleanField" } }
+    @classmethod
+    def get_configurable_fields(cls):
+        return {"self_only": {"display": "Only allow actors to remove themselves", "type": "BooleanField"}}
 
     def description_present_tense(self):
-        return "remove members %s" % list_to_text(self.member_pk_list)   
+        return f"remove members {list_to_text(self.member_pk_list)}"
 
     def description_past_tense(self):
-        return "removed members %s " % list_to_text(self.member_pk_list)   
+        return f"removed members {list_to_text(self.member_pk_list)}"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -129,9 +133,9 @@ class RemoveMembersStateChange(BaseStateChange):
         '''All configurations must pass for the configuration check to pass.'''
 
         configuration = permission.get_configuration()
-        if "self_only" in configuration and configuration['self_only'] == True:
+        if "self_only" in configuration and configuration['self_only']:
             if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
-                return False, "self_only is set to true, which means member_pk_list can contain only the pk of the actor"
+                return False, "self_only is set to true, so member_pk_list can contain only the pk of the actor"
         return True, None
 
     def validate(self, actor, target):
@@ -144,8 +148,8 @@ class RemoveMembersStateChange(BaseStateChange):
             if is_owner:
                 owner_list.append(str(pk))
         if governor_list or owner_list:
-            message = "Cannot remove members as some are owners or governors. Owners: %s, Governors: %s " % (
-                ", ".join(owner_list), ", ".join(governor_list))
+            message = f"Cannot remove members as some are owners or governors. Owners: {', '.join(owner_list)}, " + \
+                      f"Governors: {', '.join(governor_list)}"
             self.set_validation_error(message)
             return False
         return True
@@ -153,16 +157,17 @@ class RemoveMembersStateChange(BaseStateChange):
     def implement(self, actor, target):
 
         # Remove members from custom roles
-        for role_name, role_members in target.roles.get_custom_roles().items():
+        for role_name in target.roles.get_custom_roles():
             target.roles.remove_people_from_role(role_name, self.member_pk_list)
-        # Now remove them from members      
-        target.roles.remove_members(self.member_pk_list) 
+        # Now remove them from members
+        target.roles.remove_members(self.member_pk_list)
 
         target.save()
         return target
 
 
 class AddGovernorStateChange(BaseStateChange):
+    """State change to add governor to Community."""
     description = "Add governor of community"
     is_foundational = True
 
@@ -174,10 +179,10 @@ class AddGovernorStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add %s as governor" % (self.governor_pk)  
+        return f"add {self.governor_pk} as governor"
 
     def description_past_tense(self):
-        return "added %s as governor" % (self.governor_pk)  
+        return f"added {self.governor_pk} as governor"
 
     def validate(self, actor, target):
         """
@@ -186,12 +191,13 @@ class AddGovernorStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.roles.add_governor(self.governor_pk) 
+        target.roles.add_governor(self.governor_pk)
         target.save()
         return target
 
 
 class RemoveGovernorStateChange(BaseStateChange):
+    """State change to remove governor from Community."""
     description = "Remove governor from community"
     preposition = "from"
     is_foundational = True
@@ -204,10 +210,10 @@ class RemoveGovernorStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s as governor" % (self.governor_pk)  
+        return f"remove {self.governor_pk} as governor"
 
     def description_past_tense(self):
-        return "removed %s as governor" % (self.governor_pk)  
+        return f"removed {self.governor_pk} as governor"
 
     def validate(self, actor, target):
         """
@@ -216,12 +222,13 @@ class RemoveGovernorStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target):
-        target.roles.remove_governor(self.governor_pk)  
+        target.roles.remove_governor(self.governor_pk)
         target.save()
         return target
 
 
 class AddGovernorRoleStateChange(BaseStateChange):
+    """State change to add governor role to Community."""
     description = "Add role of governor to community"
     is_foundational = True
 
@@ -233,10 +240,10 @@ class AddGovernorRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add role %s as governor" % (self.role_name)  
+        return f"add role {self.role_name} as governor"
 
     def description_past_tense(self):
-        return "added role %s as governor" % (self.role_name)  
+        return f"added role {self.role_name} as governor"
 
     def validate(self, actor, target):
         """
@@ -251,6 +258,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
 
 class RemoveGovernorRoleStateChange(BaseStateChange):
+    """State change to remove governor role from Community."""
     description = "Remove role of governor from community"
     preposition = "from"
     is_foundational = True
@@ -263,10 +271,10 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove role %s as governor" % (self.role_name)  
+        return f"remove role {self.role_name} as governor"
 
     def description_past_tense(self):
-        return "removed role %s as governor" % (self.role_name) 
+        return f"removed role {self.role_name} as governor"
 
     def validate(self, actor, target):
         """
@@ -281,6 +289,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
 
 class AddOwnerStateChange(BaseStateChange):
+    """State change to add owner to Community."""
     description = "Add owner to community"
     is_foundational = True
 
@@ -292,10 +301,10 @@ class AddOwnerStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add %s as owner" % (self.owner_pk)  
+        return f"add {self.owner_pk} as owner"
 
     def description_past_tense(self):
-        return "added %s as owner" % (self.owner_pk)  
+        return f"added {self.owner_pk} as owner"
 
     def validate(self, actor, target):
         """
@@ -310,6 +319,7 @@ class AddOwnerStateChange(BaseStateChange):
 
 
 class RemoveOwnerStateChange(BaseStateChange):
+    """State change remove owner from Community."""
     description = "Remove owner from community"
     preposition = "from"
     is_foundational = True
@@ -322,10 +332,10 @@ class RemoveOwnerStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s as owner" % (self.owner_pk)  
+        return f"remove {self.owner_pk} as owner"
 
     def description_past_tense(self):
-        return "removed %s as owner" % (self.owner_pk) 
+        return f"removed {self.owner_pk} as owner"
 
     def validate(self, actor, target):
         """
@@ -340,6 +350,7 @@ class RemoveOwnerStateChange(BaseStateChange):
 
 
 class AddOwnerRoleStateChange(BaseStateChange):
+    """State change to add owner role to Community."""
     description = "Add role of owner to community"
     is_foundational = True
 
@@ -351,10 +362,10 @@ class AddOwnerRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add role %s as owner" % (self.role_name)  
+        return f"add role {self.role_name} as owner"
 
     def description_past_tense(self):
-        return "added role %s as owner" % (self.role_name) 
+        return f"added role {self.role_name} as owner"
 
     def validate(self, actor, target):
         """
@@ -369,6 +380,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
 
 class RemoveOwnerRoleStateChange(BaseStateChange):
+    """State change to remove owner role from Community."""
     description = "Remove role from owners of community"
     preposition = "from"
     is_foundational = True
@@ -381,10 +393,10 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove role %s as owner" % (self.role_name)  
+        return f"remove role {self.role_name} as owner"
 
     def description_past_tense(self):
-        return "remove role %s as owner" % (self.role_name) 
+        return f"removed role {self.role_name} as owner"
 
     def validate(self, actor, target):
         """
@@ -399,6 +411,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
 
 class AddRoleStateChange(BaseStateChange):
+    """State change to add role to Community."""
     description = "Add role to community"
 
     def __init__(self, role_name):
@@ -409,10 +422,10 @@ class AddRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "add role %s" % (self.role_name)  
+        return f"add role {self.role_name}"
 
     def description_past_tense(self):
-        return "added role %s" % (self.role_name) 
+        return f"added role {self.role_name}"
 
     def validate(self, actor, target):
         if self.role_name in ["members", "governors", "owners"]:
@@ -430,6 +443,7 @@ class AddRoleStateChange(BaseStateChange):
 
 
 class RemoveRoleStateChange(BaseStateChange):
+    """State change to remove role from Community."""
     description = "Remove role from community"
     preposition = "from"
 
@@ -441,10 +455,10 @@ class RemoveRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove role %s" % (self.role_name)  
+        return f"remove role {self.role_name}"
 
     def description_past_tense(self):
-        return "removed role %s" % (self.role_name) 
+        return f"removed role {self.role_name}"
 
     def validate(self, actor, target):
         return True
@@ -456,6 +470,7 @@ class RemoveRoleStateChange(BaseStateChange):
 
 
 class AddPeopleToRoleStateChange(BaseStateChange):
+    """State change to add people to role in Community."""
     description = "Add people to role in community"
     preposition = "in"
 
@@ -467,56 +482,54 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     def get_settable_classes(cls):
         return cls.get_community_models()
 
-    @classmethod 
-    def get_configurable_fields(self):
+    @classmethod
+    def get_configurable_fields(cls):
         return {"role_name": {"display": "Role people can be added to", "type": "PermissionRoleField",
-                "other_data": {"multiple": False}}}
+                              "other_data": {"multiple": False}}}
 
     @classmethod
-    def get_uninstantiated_description(self, **configuration_kwargs):
-        """Takes in an arbitrary number of configuration kwargs and uses them to 
+    def get_uninstantiated_description(cls, **configuration_kwargs):
+        """Takes in an arbitrary number of configuration kwargs and uses them to
         create a description.  Does not reference fields passed on init."""
         role_name = configuration_kwargs.get("role_name", None)
-        role_name = "'" + role_name + "'" if role_name else ""
-        return "add people to role %s" % (role_name)
+        return "add people to role" + f" '{role_name}'" if role_name else ""
 
     def description_present_tense(self):
-        return "add %s to role %s" % (list_to_text(self.people_to_add), self.role_name)  
+        return f"add {list_to_text(self.people_to_add)} to role {self.role_name}"
 
     def description_past_tense(self):
-        return "added %s to role %s" % (list_to_text(self.people_to_add), self.role_name)  
+        return f"added {list_to_text(self.people_to_add)} to role {self.role_name}"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
         """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
         By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "role_name" in configuration and configuration["role_name"] != None:
-            if type(configuration["role_name"]) != str:
-                return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
+        if "role_name" in configuration and configuration["role_name"] is not None:
+            if not isinstance(configuration["role_name"], str):
+                return False, f"Role name must be sent as string, not {str(type(configuration['role_name']))}"
         return True, ""
 
     def check_configuration(self, action, permission):
         '''All configurations must pass for the configuration check to pass.'''
         configuration = permission.get_configuration()
-        if "role_name" in configuration:  
+        if "role_name" in configuration:
             if self.role_name not in configuration["role_name"]:
-                return False, "Can't add people to role %s, configured role is %s" % (self.role_name,
-                    configuration["role_name"])
+                return False, f"Can't add people to role {self.role_name}, only {configuration['role_name']}"
         return True, None
 
     def validate(self, actor, target):
-        if type(self.role_name) != str:
-            self.set_validation_error("Role must be type str, not " + str(type(self.role_name)))
+        if not isinstance(self.role_name, str):
+            self.set_validation_error(f"Role must be type str, not {str(type(self.role_name))}")
             return False
         if not target.roles.is_role(self.role_name):
-            self.set_validation_error("Role " + self.role_name + " does not exist")
+            self.set_validation_error(f"Role {self.role_name} does not exist")
             return False
         people_already_in_role = []
         for person in self.people_to_add:
             if target.roles.has_specific_role(self.role_name, person):
                 people_already_in_role.append(str(person))
         if people_already_in_role:
-            message = "Users %s already in role %s " % (list_to_text(people_already_in_role), self.role_name)
+            message = f"Users {list_to_text(people_already_in_role)} already in role {self.role_name}"
             self.set_validation_error(message)
             return False
         return True
@@ -528,6 +541,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
 
 class RemovePeopleFromRoleStateChange(BaseStateChange):
+    """State change to remove people from role in Community."""
     description = "Remove people from role in community"
     preposition = "in"
 
@@ -540,10 +554,10 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s from role %s" % (list_to_text(self.people_to_remove), self.role_name)  
+        return f"remove {list_to_text(self.people_to_remove)} from role {self.role_name}"
 
     def description_past_tense(self):
-        return "removed %s from role %s" % (list_to_text(self.people_to_remove), self.role_name)  
+        return f"removed {list_to_text(self.people_to_remove)} from role {self.role_name}"
 
     def validate(self, actor, target):
         return True
@@ -555,6 +569,7 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
 
 class AddLeadershipConditionStateChange(BaseStateChange):
+    """State change to add leadership condition to Community."""
     description = "Add leadership condition"
     is_foundational = True
 
@@ -569,22 +584,22 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return f"add condition {self.condition_type} to {self.leadership_type}"   
+        return f"add condition {self.condition_type} to {self.leadership_type}"
 
     def description_past_tense(self):
-        return f"added condition {self.condition_type} to {self.leadership_type}"  
+        return f"added condition {self.condition_type} to {self.leadership_type}"
 
     def generate_mock_actions(self, actor, target):
         """Helper method with template generation logic, since we're using it in both validate and implement."""
 
-        from concord.actions.utils import Client
         client = Client(actor=actor)
         client.Conditional.mode = "mock"
         client.PermissionResource.mode = "mock"
 
         mock_action_list = []
-        action_1 = client.Conditional.set_condition_on_action(condition_type=self.condition_type, 
-            condition_data=self.condition_data, community_pk=target.pk, leadership_type=self.leadership_type)
+        action_1 = client.Conditional.set_condition_on_action(
+            condition_type=self.condition_type, condition_data=self.condition_data,
+            community_pk=target.pk, leadership_type=self.leadership_type)
         action_1.target = "{{trigger_action}}"
         mock_action_list.append(action_1)
 
@@ -593,13 +608,15 @@ class AddLeadershipConditionStateChange(BaseStateChange):
             next_action = client.PermissionResource.add_permission(**permission_item_data)
             next_action.target = "{{previous.0.result}}"
             mock_action_list.append(next_action)
-        
+
         return mock_action_list
 
     def get_template_description(self, mock_action_list):
+        """Get 'plain English' description of template."""
         return condition_template_to_text(mock_action_list[0], mock_action_list[1:])
 
     def apply_actions_to_conditions(self, action_list, target):
+        """Apply actions to condtions."""
         if self.leadership_type == "owner":
             target.owner_condition.action_list = action_list
             target.owner_condition.description = self.get_template_description(action_list)
@@ -611,18 +628,18 @@ class AddLeadershipConditionStateChange(BaseStateChange):
     def validate(self, actor, target):
 
         if not self.condition_type:
-            self.set_validation_error(message=f"condition_type cannont be None")
+            self.set_validation_error(message="condition_type cannont be None")
 
         if not self.leadership_type:
-            self.set_validation_error(message=f"leadership_type cannot be None")
+            self.set_validation_error(message="leadership_type cannot be None")
 
         try:
-            mock_action_list = self.generate_mock_actions(actor, target)    
+            self.generate_mock_actions(actor, target)
             return True
         except ValidationError as error:
             self.set_validation_error(message=error.message)
             return False
-        
+
     def implement(self, actor, target):
         action_list = self.generate_mock_actions(actor, target)
         target = self.apply_actions_to_conditions(action_list, target)
@@ -631,6 +648,7 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
 
 class RemoveLeadershipConditionStateChange(BaseStateChange):
+    """State change to remove leadership condition from Community."""
     description = "Remove leadership condition"
     is_foundational = True
 
@@ -642,20 +660,20 @@ class RemoveLeadershipConditionStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return f"remove {self.leadership_type} condition"   
+        return f"remove {self.leadership_type} condition"
 
     def description_past_tense(self):
-        return f"removed {self.leadership_type} condition"    
+        return f"removed {self.leadership_type} condition"
 
     def validate(self, actor, target):
         return True
-        
+
     def implement(self, actor, target):
 
         if self.leadership_type == "owner":
             target.owner_condition.action_list = []
         elif self.leadership_type == "governor":
             target.governor_condition.action_list = []
-        
+
         target.save()
         return target

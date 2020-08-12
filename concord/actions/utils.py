@@ -1,4 +1,6 @@
-import json, inspect, random, logging, importlib
+"""Utility methods/classes for actions package. Contains some Concord-wide utility methods/classes as well."""
+
+import inspect, random, logging
 from django.apps import apps
 
 
@@ -57,8 +59,8 @@ def get_all_clients():
 def get_all_conditions():
     """Gets all possible condition models in Concord and the app using it."""
     conditions = []
-    apps = get_all_apps()
-    for app in apps:
+    existing_apps = get_all_apps()
+    for app in existing_apps:
         for model in app.get_models():
             if hasattr(model, "is_condition") and model.is_condition and not model._meta.abstract:
                 conditions.append(model)
@@ -71,7 +73,7 @@ def get_all_state_changes():
     for app in get_all_apps():
         state_changes_module = app.get_concord_module("state_changes")
         state_changes = inspect.getmembers(state_changes_module)  # get_members returns (name, value) tuple
-        all_state_changes += [value for (name, value) in state_changes if "StateChange" in name] 
+        all_state_changes += [value for (name, value) in state_changes if "StateChange" in name]
     return all_state_changes
 
 
@@ -92,11 +94,11 @@ def get_state_change_object(state_change_name):
     """Given a full name string, gets the state change object."""
 
     name_elements = state_change_name.split(".")
-    
+
     if name_elements[0] == "concord":  # format: concord.app.state_changes.state_change_object
         app_name = name_elements[1]
         change_name = name_elements[3]
-    else:                              # format: app_name.state_changes.state_change_object 
+    else:                              # format: app_name.state_changes.state_change_object
         app_name = name_elements[0]
         change_name = name_elements[2]
 
@@ -168,8 +170,8 @@ class Client(object):
 
     If supplied with actor and/or target, will instantiate clients with that actor and target.
 
-    limit_to is a list of client names, if supplied actors and targets will only be supplied to 
-    the specified clients.    
+    limit_to is a list of client names, if supplied actors and targets will only be supplied to
+    the specified clients.
     """
 
     community_client_override = None
@@ -194,13 +196,16 @@ class Client(object):
             self.client_names.append(client_attribute_name)
 
     def get_clients(self):
+        """Gets a list of client objects set as attributes on Client()."""
         return [getattr(self, client_name) for client_name in self.client_names]
 
     def update_actor_on_all(self, actor):
+        """Update actor for all clients."""
         for client in self.get_clients():
             client.set_actor(actor=actor)
 
     def update_target_on_all(self, target):
+        """Update target for all clients."""
         for client in self.get_clients():
             client.set_target(target=target)
 
@@ -208,12 +213,12 @@ class Client(object):
     def Community(self):
         """Projects that use Concord may create a new model and client, descending from the Community model and
         CommunityClient. To handle this scenario, we look for Clients with an attribute community_model and, if
-        something other than the CommunityClient exists, we use that. Users can override this behavior by 
+        something other than the CommunityClient exists, we use that. Users can override this behavior by
         explicitly setting community_client_override to whatever client they want to use."""
 
         if self.community_client_override:
             return self.community_client_override
-        
+
         community_clients = [client for client in self.get_clients() if hasattr(client, "community_model")]
 
         if len(community_clients) == 1:
@@ -232,42 +237,41 @@ class Client(object):
 def replacer(key, value, context):
     """Given the value provided by mock_action, looks for fields that need replacing by finding strings with the right
     format, those that begin and end with {{ }}.  Uses information in context object to replace those fields. In
-    the special case of finding something referencing nested_trigger_action (always(?) in the context of a 
+    the special case of finding something referencing nested_trigger_action (always(?) in the context of a
     condition being set) it replaces nested_trigger_action with trigger_action."""
 
     logging.debug(f"Replacing {key} with placeholder value: {value}")
 
-    if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
+    if isinstance(value, str) and value[0:2] == "{{" and value[-2:] == "}}":
 
         command = value.replace("{{", "").replace("}}", "").strip()
         tokens = command.split(".")
 
         if tokens[0] == "supplied_fields":
-            """Always two tokens long, with format supplied_fields.field_name."""
+            # Always two tokens long, with format supplied_fields.field_name.
             logging.debug(f"Supplied Fields: Replacing {key} {value} with {context.supplied_fields[tokens[1]]}")
             return context.supplied_fields[tokens[1]]
 
         if tokens[0] == "trigger_action":
-            """Variable length - can be just the trigger action itself, an immediate attribute, or the
-            attribute of an attribute, for example trigger_action.change.role_name."""
+            # Variable length - can be just the trigger action itself, an immediate attribute, or the
+            # attribute of an attribute, for example trigger_action.change.role_name.
 
             if len(tokens) == 1:
                 new_value = context.trigger_action
 
             if len(tokens) == 2:
                 new_value = getattr(context.trigger_action, tokens[1])
-            
+
             if len(tokens) == 3:
                 intermediate = getattr(context.trigger_action, tokens[1])
                 new_value = getattr(intermediate, tokens[2])
-            
+
             logging.debug(f"trigger_action: Replacing {key} {value} with {new_value}")
             return new_value
 
         if tokens[0] == "previous":
-            """Always three or four tokens long, with format previous.position.action_or_result, for example
-            previous.0.action, or previous.position.action_or_result.attribute, for
-            example previous.1.result.pk """
+            # Always three or four tokens long, with format previous.position.action_or_result, for example
+            # previous.0.action, or previous.position.action_or_result.attribute, for example previous.1.result.pk
 
             position = int(tokens[1])
             action, result = context.get_action_and_result_for_position(position)
@@ -278,9 +282,8 @@ def replacer(key, value, context):
             return new_value
 
         if tokens[0] == "nested_trigger_action":
-            """In this special case, we merely replace nested_trigger_action with trigger_action
-            so that when this object is passed through replace_fields again, later, it will
-            *then* replace with *that* trigger_action."""
+            # In this special case, we merely replace nested_trigger_action with trigger_action so when this
+            # object is passed through replace_fields again, later, it will *then* replace with *that* trigger_action.
             logging.debug(f"nested_trigger_action: Replacing {key} {value} with 'trigger_action'")
             return value.replace("nested_trigger_action", "trigger_action")
 
@@ -301,7 +304,7 @@ def replace_fields(*, action_to_change, mock_action, context):
         if new_value is not ...:
             setattr(action_to_change, key, new_value)
             logger.debug(f"Replaced {key} on {action_to_change} with {new_value}")
-        
+
         # if the attribute is the change object, check the parameters to change obj to see if they need to be replaced
         if key == "change":
 
@@ -311,22 +314,22 @@ def replace_fields(*, action_to_change, mock_action, context):
                 if new_value is not ...:
                     # set parameter of change object to new value
                     change_obj_on_action_to_change = getattr(action_to_change, key)
-                    setattr(change_obj_on_action_to_change, change_key, new_value)  
+                    setattr(change_obj_on_action_to_change, change_key, new_value)
                     logger.debug(f"Replaced change obj attr {change_key} on {action_to_change} with {new_value}")
 
                 # if change obj parameter is permission_data check the elements to see if *they* need to be replaced
                 if change_key == "permission_data":
 
-                    for index, permission_dict in enumerate(change_value): # permission data is list of dicts
+                    for index, permission_dict in enumerate(change_value):  # permission data is list of dicts
                         for dict_key, dict_value in permission_dict.items():
                             new_value = replacer(dict_key, dict_value, context)
                             if new_value is not ...:
                                 change_obj_on_action_to_change = getattr(action_to_change, key)
-                                permission_data_on_change_obj = getattr(change_obj_on_action_to_change, "permission_data")
-                                permission_data_on_change_obj[index][dict_key] = new_value # set keyed value of dict parameter of change object to new value
+                                permission_data = getattr(change_obj_on_action_to_change, "permission_data")
+                                permission_data[index][dict_key] = new_value
                                 logger.debug(f"Replaced {dict_key} with {new_value} in permdata on {action_to_change}")
 
-    action_to_change.fields_replaced = True  # indicates that action has passed through replace_fields and is safe to use
+    action_to_change.fields_replaced = True  # indicates action has passed through replace_fields and is safe to use
     return action_to_change
 
 
@@ -355,19 +358,20 @@ class MockAction(object):
             resolution = Resolution()
         self.resolution = resolution
 
-        if not unique_id:       
+        if not unique_id:
             unique_id = random.randrange(1, 100000)
         self.unique_id = unique_id
 
     def __repr__(self):
         return f"MockAction(change={self.change}, actor={self.actor}, target={self.target})"
-    
+
     def __str__(self):
         return self.__repr__()
 
     def create_action_object(self, container_pk, save=True):
+        """Creates an action object given the data set on MockAction plus the container_pk passed in."""
         from concord.actions.models import Action
-      
+
         action = Action(actor=self.actor, target=self.target, change=self.change, container=container_pk)
         if save:
             action.save()
@@ -376,7 +380,7 @@ class MockAction(object):
 
 
 def check_permissions_for_action_group(list_of_actions):
-    """Takes in a list of MockActions, generated by clients in mock mode, and runs them 
+    """Takes in a list of MockActions, generated by clients in mock mode, and runs them
     through permissions pipeline."""
 
     action_log = {}
@@ -394,7 +398,7 @@ def check_permissions_for_action_group(list_of_actions):
         else:
             status, status_log = "invalid", action.change.validation_error.message
 
-        action_log[index] = { "action": action, "status": status, "log": status_log }
+        action_log[index] = {"action": action, "status": status, "log": status_log}
 
     status_list = [action["status"] for index, action in action_log.items()]
     if all([status == "approved" for status in status_list]):

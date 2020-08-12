@@ -6,7 +6,6 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 
 from concord.permission_resources.models import PermissionsItem
-from concord.permission_resources import utils, models
 from concord.permission_resources import state_changes as sc
 
 
@@ -18,7 +17,7 @@ from concord.permission_resources import state_changes as sc
 class PermissionResourceClient(BaseClient):
     """
     The "target" of a PermissionResourceClient is always the resource or community on which
-    the permission resource we're manipulating is set.  As with all Concord clients, a 
+    the permission resource we're manipulating is set.  As with all Concord clients, a
     target must be set for all methods not  explicitly grouped as target-less methods.
     """
 
@@ -27,10 +26,10 @@ class PermissionResourceClient(BaseClient):
     def get_permission(self, *, pk: int) -> PermissionsItem:
         return PermissionsItem.objects.get(pk=pk)
 
-    def get_permissions_on_object(self, *, object: Model) -> PermissionsItem:
-        content_type = ContentType.objects.get_for_model(object)
+    def get_permissions_on_object(self, *, target_object: Model) -> PermissionsItem:
+        content_type = ContentType.objects.get_for_model(target_object)
         return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
-            permitted_object_id=object.pk)
+                                              permitted_object_id=target_object.pk)
 
     def get_permissions_for_role(self, *, role_name):
         matching_permissions = []
@@ -68,13 +67,15 @@ class PermissionResourceClient(BaseClient):
 
     def get_all_permissions(self) -> PermissionsItem:
         content_type = ContentType.objects.get_for_model(self.target)
-        return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
-            permitted_object_id=self.target.pk)
+        return PermissionsItem.objects.filter(
+            permitted_object_content_type=content_type, permitted_object_id=self.target.pk
+        )
 
     def get_specific_permissions(self, *, change_type: str) -> PermissionsItem:
         content_type = ContentType.objects.get_for_model(self.target)
-        return PermissionsItem.objects.filter(permitted_object_content_type=content_type, 
-            permitted_object_id=self.target.pk, change_type=change_type)
+        return PermissionsItem.objects.filter(
+            permitted_object_content_type=content_type, permitted_object_id=self.target.pk, change_type=change_type
+        )
 
     def get_permissions_associated_with_role_for_target(self, *, role_name: str) -> List[PermissionsItem]:
         permissions = self.get_permissions_on_object(object=self.target)
@@ -107,7 +108,7 @@ class PermissionResourceClient(BaseClient):
             model_class = model_class.__class__   # just in case we've been passed in an instance
         return get_state_changes_settable_on_model_and_parents(model_class)
 
-    def get_settable_permissions(self, return_format="tuples") -> List[Tuple[str,str]]:
+    def get_settable_permissions(self, return_format="tuples") -> List[Tuple[str, str]]:
         """Gets a list of permissions it is possible to set on the target, in various formats"""
         permissions = self.get_settable_permissions_for_model(self.target)
         if return_format == "tuples":
@@ -118,13 +119,14 @@ class PermissionResourceClient(BaseClient):
 
     # State changes
 
-    def add_permission(self, *, permission_type: str, permission_actors: list = None, 
-            permission_roles: list = None, permission_configuration: dict = None, anyone=False) -> Tuple[int, Any]:
+    def add_permission(self, *, permission_type: str, permission_actors: list = None, permission_roles: list = None,
+                       permission_configuration: dict = None, anyone=False) -> Tuple[int, Any]:
         if not permission_actors and not permission_roles and anyone is not True:
-            raise Exception("Either actor or roles must be supplied when creating a permission")  
-        change = sc.AddPermissionStateChange(permission_type=permission_type, 
-            permission_actors=permission_actors, permission_roles=permission_roles,
-            permission_configuration=permission_configuration, anyone=anyone)
+            raise Exception("Either actor or roles must be supplied when creating a permission")
+        change = sc.AddPermissionStateChange(
+            permission_type=permission_type, permission_actors=permission_actors, permission_roles=permission_roles,
+            permission_configuration=permission_configuration, anyone=anyone
+        )
         return self.create_and_take_action(change)
 
     def remove_permission(self, *, item_pk: int) -> Tuple[int, Any]:
@@ -147,10 +149,12 @@ class PermissionResourceClient(BaseClient):
         change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name, permission_pk=permission_pk)
         return self.create_and_take_action(change)
 
-    def change_configuration_of_permission(self, *, configurable_field_name: str,
-        configurable_field_value: str, permission_pk: int) -> Tuple[int, Any]:
-        change = sc.ChangePermissionConfigurationStateChange(configurable_field_name=configurable_field_name,
-            configurable_field_value=configurable_field_value, permission_pk=permission_pk)
+    def change_configuration_of_permission(self, *, configurable_field_name: str, configurable_field_value: str,
+                                           permission_pk: int) -> Tuple[int, Any]:
+        change = sc.ChangePermissionConfigurationStateChange(
+            configurable_field_name=configurable_field_name, configurable_field_value=configurable_field_value,
+            permission_pk=permission_pk
+        )
         return self.create_and_take_action(change)
 
     def change_inverse_field_of_permission(self, *, change_to: bool, permission_pk=int) -> Tuple[int, Any]:
@@ -166,8 +170,10 @@ class PermissionResourceClient(BaseClient):
         return self.create_and_take_action(change)
 
     def add_condition_to_permission(self, *, permission_pk, condition_type, condition_data=None, permission_data=None):
-        change = sc.AddPermissionConditionStateChange(permission_pk=permission_pk, condition_type=condition_type, 
-            condition_data=condition_data, permission_data=permission_data)
+        change = sc.AddPermissionConditionStateChange(
+            permission_pk=permission_pk, condition_type=condition_type, condition_data=condition_data,
+            permission_data=permission_data
+        )
         return self.create_and_take_action(change)
 
     def remove_condition_from_permission(self, permission_pk):
@@ -186,9 +192,11 @@ class PermissionResourceClient(BaseClient):
         for field_name, field_value in configuration_dict.items():
 
             if (field_name in old_configuration and old_configuration[field_name] != field_value) or \
-                (field_name not in old_configuration and field_value not in [None, '', []]):
-                action, result = self.change_configuration_of_permission(configurable_field_name=field_name,
-                    configurable_field_value=field_value, permission_pk=permission.pk)
+                            (field_name not in old_configuration and field_value not in [None, '', []]):
+                action, result = self.change_configuration_of_permission(
+                    configurable_field_name=field_name, configurable_field_value=field_value, 
+                    permission_pk=permission.pk
+                )
                 actions.append(action)
 
         return actions

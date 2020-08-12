@@ -1,11 +1,10 @@
 import json
-from typing import Tuple, List, Any, Dict
+from typing import Tuple, Any, Dict
 
 from django.db.models import Model
 
 from concord.actions.client import BaseClient
 from concord.actions.utils import Client, get_all_conditions
-from concord.actions.models import Action  # Just needed for type hinting
 
 from concord.conditionals.models import ApprovalCondition, VoteCondition
 from concord.conditionals import state_changes as sc
@@ -113,7 +112,7 @@ class ConditionalClient(BaseClient):
 
     def get_or_create_condition_on_community(self, action, community, leadership_type):
         condition_item = self.get_condition_item_on_community(action_pk=action.pk, community_pk=community.pk,
-            leadership_type=leadership_type)
+                                                              leadership_type=leadership_type)
         if not condition_item:
             condition_item, container = self.trigger_condition_creation(action=action, community=community, leadership_type=leadership_type)
             if container.summary_status != "committed":

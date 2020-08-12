@@ -262,7 +262,7 @@ class ActionClient(BaseClient):
     def take_action(self, action=None, pk=None):
         """Helper method to take an action (or, usually, retry taking an action) from the client."""
         if not action and not pk:
-            print("Warning: take_action called with neither action nor pk")
+            logger.warn("Take_action called with neither action nor pk")
         action = action if action else self.get_action_given_pk(pk=pk)
         action.take_action()
 
@@ -305,7 +305,6 @@ class TemplateClient(BaseClient):
         If the Actions in the ActionContainer all successfully pass the permissions pipeline, only then are any of the
         state changes implemented. For now, we circumvent the permissions pipeline and allow anyone to apply templates
         so long as they're not rejected by the foundational pipeline."""
-        
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
         action, result = self.create_and_take_action(change)
         if action.resolution.foundational_status == "not tested" and action.status == "rejected":

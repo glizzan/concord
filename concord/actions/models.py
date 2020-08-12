@@ -102,8 +102,8 @@ class Action(models.Model):
                 from concord.actions.utils import Client
                 client = Client()
                 for source_id in self.resolution.uncreated_conditions():
-                    condition, container = client.Conditional.trigger_condition_creation_from_source_id(action=self,
-                                                                                            source_id=source_id)
+                    condition, container = client.Conditional.trigger_condition_creation_from_source_id(
+                        action=self, source_id=source_id)
                     logger.info(f"Created condition {condition.pk} on action {self.pk} with source_id {source_id}")
                     self.resolution.condition_created(source_id)
 

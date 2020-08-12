@@ -1,8 +1,9 @@
-"""
-This module contains functions which take in various Concord objects and return human-readable English descriptions.
-"""
+"""This module contains functions which take in various Concord objects and return human-readable English
+descriptions."""
 
 import copy
+
+from concord.actions.utils import get_state_change_object
 
 
 ########################
@@ -13,6 +14,7 @@ import copy
 
 
 def is_plural(new_list):
+    """Returns true if list past in contains more than one item, otherwise False."""
     return True if len(new_list) > 1 else False
 
 
@@ -24,14 +26,14 @@ def capitalize_first_letter(text):
 def list_to_text(list_to_convert):
     """Given a list with items that can be turned into strings, return them as text in format
     'apple, banana and carrot'."""
-    
+
     list_to_convert = copy.deepcopy(list_to_convert)   # since we're mutating the list, need to deep copy it
 
     if len(list_to_convert) == 0:
         return ""
     if len(list_to_convert) == 1:
         return str(list_to_convert[0])
-    
+
     last_item = list_to_convert.pop(-1)   # pop is a mutation
     text = ", ".join([str(item) for item in list_to_convert])
     text += " and " + str(last_item)
@@ -39,7 +41,7 @@ def list_to_text(list_to_convert):
 
 
 def roles_to_text(roles):
-    """Given a list of roles, returns them in format 'everyone with role 'banana''."""
+    """Given a list of roles, returns them in format 'those with role 'banana''."""
 
     if roles is None:
         return ""
@@ -54,7 +56,7 @@ def actors_to_text(actor_info):
 
     if actor_info is None:
         return ""
-    
+
     actor_string = "individuals " if len(actor_info) > 1 else "individual "
 
     return actor_string + list_to_text(actor_info)
@@ -64,20 +66,23 @@ def replaceable_field_check(value):
     """Checks for replaceable fields and parses & returns their content if found.
 
     Note that is is pretty brittle (the remove change has member_pk_list as a param too,
-    what if we're removing people with this action?), and should be replaced by some kind 
+    what if we're removing people with this action?), and should be replaced by some kind
     of text_utils function."""
 
-    if type(value) == str and value[0:2] == "{{" and value[-2:] == "}}":
+    if isinstance(value, str) and value[0:2] == "{{" and value[-2:] == "}}":
         command = value.replace("{{", "").replace("}}", "").strip()
         tokens = command.split(".")
-    
+
         if tokens[0] == "trigger_action" and tokens[1] == "change" and tokens[2] == "member_pk_list":
-            return True, "users added by the action"   
+            return True, "users added by the action"
 
     return False, value
 
 
 def roles_and_actors(role_and_actor_dict):
+    """Given a dict specifying roles and/or actions, returns a string of the format:
+    'those with role 'banana', 'orange' and 'pineapple' and individuals '1', '2' and '3'. If dicts are empty,
+    returns 'no one'."""
 
     text = ""
 
@@ -87,7 +92,7 @@ def roles_and_actors(role_and_actor_dict):
             text += response
         else:
             text += roles_to_text(role_and_actor_dict["roles"])
-    
+
     if len(role_and_actor_dict["roles"]) > 0 and len(role_and_actor_dict["actors"]) > 0:
         text += " and "
 
@@ -112,12 +117,11 @@ def roles_and_actors(role_and_actor_dict):
 
 def condition_template_to_text(condition_action, permissions_actions):
     """This function assumes the first parameter is a condition to be set on an action and the second parameter
-    a list of permissions on that condition. Written to be understood by people setting conditions on permissions, 
+    a list of permissions on that condition. Written to be understood by people setting conditions on permissions,
     so typically we're adding the second part of a sentence that begins 'X has permission to Y...'"""
 
     # For now, we ignore the configuration in condition_action, and build our text from the permissions_actions
-    from concord.actions.utils import get_state_change_object
-    
+
     phrases = []
     for perm_action in permissions_actions:
 
@@ -135,13 +139,13 @@ def condition_template_to_text(condition_action, permissions_actions):
 
     if len(phrases) == 0:
         # This means that the default permissions will be used, but this function has no way of knowing what
-        # the default permission is, so we must be vague.  Condition action should always be 
+        # the default permission is, so we must be vague.  Condition action should always be
         # SetConditionOnActionStateChange so get_condition_verb should always be valid.
         return text + "the governors and/or owners " + condition_action.change.get_condition_verb()
 
     if len(phrases) == 1:
         return text + phrases[0]
-    
+
     if len(phrases) == 2:
         return text + phrases[0] + " and " + phrases[1]
 
@@ -150,6 +154,7 @@ def condition_template_to_text(condition_action, permissions_actions):
 
 
 def community_basic_info_to_text(community):
+    """Gets the basic info about a community, including its name, owners, and governors."""
     owners = roles_and_actors(community.roles.get_owners())
     governors = roles_and_actors(community.roles.get_governors())
     return f"Community {community.name} is owned by {owners}. It is governed by {governors}. "
@@ -176,7 +181,7 @@ def community_governance_info_to_text(community):
         text += "The governors of the community can take actions only when specified"
 
     if community.has_governor_condition():
-        text += ", " + community.governor_condition.description + ". " 
+        text += ", " + community.governor_condition.description + ". "
     else:
         text += ". "
 
@@ -192,7 +197,7 @@ def action_status_to_text(resolution):
         if resolution.foundational_status == "waiting":
             return "waiting on condition set on foundational permission"
         pipelines = filter(lambda x: x is not None, ["governing" if resolution.governing_status else None,
-                            "specific" if resolution.specific_status else None])
+                                                     "specific" if resolution.specific_status else None])
         return "waiting on condition(s) for " + list_to_text(list(pipelines))
     if resolution.generate_status() == "created":
         return "action has not been put through pipeline yet"
@@ -202,6 +207,7 @@ def action_status_to_text(resolution):
 
 
 def action_to_text(action, with_target=True):
+    """Gets a text description of an action."""
 
     target_string = f" {action.change.get_preposition()} {action.target.get_name()}" if with_target else ""
 
@@ -212,6 +218,7 @@ def action_to_text(action, with_target=True):
 
 
 def permission_change_to_text(permission):
+    """Gets the text description of the change object on a permission."""
 
     state_change_object = permission.get_state_change_object()
     if hasattr(state_change_object, "get_uninstantiated_description"):
@@ -220,6 +227,7 @@ def permission_change_to_text(permission):
 
 
 def permission_to_text(permission):
+    """Gets the text description of a permission item."""
 
     action_str = permission.get_state_change_object().description.lower()
 
@@ -233,6 +241,6 @@ def permission_to_text(permission):
 
 
 def get_verb_given_permission_type(permission_type):
-    from concord.actions.utils import get_state_change_object
+    """Given a permission type, get the verb specified by the corresponding change object."""
     state_change_object = get_state_change_object(permission_type)
     return state_change_object.description.lower()

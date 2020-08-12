@@ -593,8 +593,8 @@ class TemplateContext(object):
 
                 if not condition_data["pk"] and not condition_data["ct"]:  # if no condition in DB, create
                     action = self.get_action_model_given_unique_id(unique_id)
-                    condition, container = client.Conditional.trigger_condition_creation_from_source_id(action=action,
-                                                                                            source_id=source_id)
+                    condition, container = client.Conditional.trigger_condition_creation_from_source_id(
+                        action=action, source_id=source_id)
 
                     if condition:
                         ct = ContentType.objects.get_for_model(condition)

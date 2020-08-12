@@ -9,6 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
 from concord.actions.utils import get_state_changes_settable_on_model_and_parents, replace_fields
+from concord.actions.text_utils import action_to_text
 from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField,
                                           TemplateContextField, Template, TemplateContext)
 
@@ -62,19 +63,11 @@ class Action(models.Model):
 
     def get_description(self):
         """Gets description of the action by reference to `change_types` set via change field, including the target."""
-        if self.status == "implemented":
-            description, target_preposition = self.change.description_past_tense(), self.change.get_preposition()
-            return f"{self.actor.username} {description} {target_preposition} {self.target.get_name()}"
-        else:
-            description, target_preposition = self.change.description_present_tense(), self.change.get_preposition()
-            return f"{self.actor.username} asked to {description} {target_preposition} {self.target.get_name()}"
+        return action_to_text(self)
 
     def get_targetless_description(self):
         """Gets description of the action by reference to `change_types` set via change field, without the target."""
-        if self.status == "implemented":
-            return f"{self.actor.username} {self.change.description_past_tense()}"
-        else:
-            return f"{self.actor.username} asked to {self.change.description_present_tense()}"
+        return action_to_text(self, with_target=False)
 
     # Steps of action execution
 
@@ -316,7 +309,7 @@ class ActionContainer(models.Model):
         logging.debug(f"Saved container {self.pk} with overall status {self.status}")
         return self.status
 
-    def get_action_data(self):
+    def get_action_data(self):    # NOTE: field_util?
         """Gets a list of dicts with action, result and condition data for each action."""
 
         actions = []
@@ -401,7 +394,7 @@ class PermissionedModel(models.Model):
         """
         return []
 
-    def get_serialized_field_data(self):
+    def get_serialized_field_data(self):  # NOTE: field_util?
         """Returns data that has been been serialized.
 
         By default, the readable attributes of a permissioned model are all fields specified on the
@@ -519,7 +512,7 @@ class TemplateModel(PermissionedModel):
         """Get supplied fields as dictionary."""
         return json.loads(self.supplied_fields)
 
-    def get_supplied_form_fields(self):
+    def get_supplied_form_fields(self):  # NOTE: field_util?
         """Loads template supplied fields and gets their forms, using field_helper.  Supplied
         fields typically have format like:
 

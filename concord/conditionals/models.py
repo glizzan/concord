@@ -315,7 +315,7 @@ class VoteCondition(ConditionModel):
                 "required": False, "value": None, "field_name": "vote_actors", "full_name": Changes().Conditionals.AddVote },
         }
 
-    def display_fields(self):        
+    def display_fields(self):
         individual_votes = self.voted if self.publicize_votes else []
         return [
             # configuration data
@@ -337,15 +337,14 @@ class VoteCondition(ConditionModel):
         return "waiting"
 
     def display_status(self):
-        base_string = "%d yea votes vs %d nay votes" % (self.yeas, self.nays)
-        if self.allow_abstain:
-            base_string += " with %s abstentions" % self.abstains
+        base_str = f"{self.yeas} yea votes vs {self.nays} nay votes"
+        base_str += f" with {self.abstains} abstentions" if self.allow_abstain else ""
         if self.condition_status() == "waiting":
-            base_string += " and %s time remaining" % self.voting_time_remaining()
-            base_string += ". If the vote ended right now, the result would be: %s" % self.current_standing()
+            base_str += f" and {self.voting_time_remaining()} time remaining. If the vote ended right now, " + \
+                           f"the result would be: {self.current_standing()}."
         else:
-            base_string += ". The vote ended with result %s." % self.condition_status()
-        return base_string
+            base_str += f". The vote ended with result {self.condition_status()}."
+        return base_str
 
     def description_for_passing_condition(self, fill_dict=None):
         return utils.description_for_passing_voting_condition(condition=self, fill_dict=None)

@@ -111,9 +111,9 @@ class PermissionResourceClient(BaseClient):
         """Gets a list of permissions it is possible to set on the target, in various formats"""
         permissions = self.get_settable_permissions_for_model(self.target)
         if return_format == "tuples":
-            return utils.format_as_tuples(permissions)
+            return [(permission.get_change_type(), permission.description) for permission in permissions]
         elif return_format == "list_of_strings":
-            return utils.format_as_list_of_strings(permissions)
+            return [permission.get_change_type() for permission in permissions]
         return permissions
 
     # State changes

@@ -85,7 +85,6 @@ def check_specific_permission(permission, action):
 
     client = Client()
     client.PermissionResource.set_target(target=action.target)
-    # permClient = PermissionResourceClient(actor="system", target=action.target)
     actor_satisfies, matched_role = client.PermissionResource.actor_satisfies_permission(actor=action.actor, permission=permission)
     if not actor_satisfies:
         return False, None, None

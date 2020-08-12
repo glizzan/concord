@@ -60,24 +60,18 @@ class ConditionalClient(BaseClient):
         condition_class = self.get_condition_class(condition_type=condition_type)
         return condition_class.objects.get(pk=int(condition_pk))
 
-    def get_vote_condition_as_client(self, *, pk: int) -> VoteConditionClient:
-        vote_object = VoteCondition.objects.get(pk=pk)
-        return VoteConditionClient(target=vote_object, actor=self.actor)
+    def get_condition_as_client(self, *, condition_type: str, pk: int) -> BaseClient:
+        """Given a condition type and pk, gets that condition object and returns it wrapped in a client.
+        Note: condition type MUST be capitalized to match the client name."""
+        client = getattr(Client(actor=self.actor), condition_type, None)
+        if not client:
+            raise ValueError(f"No client '{condition_type}', must be one of: {', '.join(Client().client_names)}")
+        client.set_target(target=self.get_condition_item(condition_pk=pk, condition_type=condition_type.lower()))
+        return client
 
-    def get_approval_condition_as_client(self, *, pk: int) -> ApprovalConditionClient:
-        approval_object = ApprovalCondition.objects.get(pk=pk)
-        return ApprovalConditionClient(target=approval_object, actor=self.actor)
-
-    def get_possible_conditions(self, *, formatted_as="objects"):
-        
-        conditions = get_all_conditions()
-
-        if formatted_as == "objects":
-            return conditions
-        if formatted_as == "string":
-            return [cond.__name__.lower() for cond in conditions]
-        if formatted_as == "shortstring":
-            return [cond.__name__.lower().split("condition")[0] for cond in conditions]
+    def get_possible_conditions(self):
+        """Get all possible conditions."""
+        return get_all_conditions()
 
     def get_condition_class(self, *, condition_type):
         for condition in self.get_possible_conditions():
@@ -144,8 +138,7 @@ class ConditionalClient(BaseClient):
         return condition, container
 
     def trigger_condition_creation_from_source_id(self, *, action, source_id):
-
-                
+        
         source, pk = source_id.split("_")
         
         if source == "perm":

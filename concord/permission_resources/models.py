@@ -9,6 +9,7 @@ from django.db.models.signals import post_save
 from concord.actions.models import PermissionedModel
 from concord.actions.customfields import Template, TemplateField
 from concord.permission_resources.customfields import ActorList, ActorListField, RoleList, RoleListField
+from concord.actions.text_utils import permission_to_text, permission_change_to_text
 
 
 class PermissionsItem(PermissionedModel):
@@ -47,35 +48,18 @@ class PermissionsItem(PermissionedModel):
         return "Permission %s (for %s on %s)" % (str(self.pk), self.change_type, self.permitted_object)
 
     def display_string(self):
+        """Helper method for displaying permissions."""
+        return permission_to_text(self)
 
-        display_string = ""
-        
-        if self.anyone:
-            display_string += "anyone has permission to "
-        else:
-            actor_names = self.get_actor_names(seperator=", ")
-            role_names = ", ".join(self.get_role_names())
-            if actor_names:
-                if "," in actor_names:
-                    display_string += "individuals " + actor_names
-                else:
-                    display_string += "individual " + actor_names
-            if actor_names and role_names:
-                display_string += " and "
-            if role_names:
-                if "," in role_names:
-                    display_string += "those with roles " + role_names
-                else:
-                    display_string += "those with role " + role_names
-            display_string += " have permission to " 
-
-        return display_string + self.get_state_change_object().description.lower()
+    def change_display_string(self):
+        """Helper method for displaying the change element of permissions."""
+        return permission_change_to_text(self)
 
     def get_change_type(self):
         return self.change_type.split(".")[-1]
 
     def set_fields(self, *, owner=None, permitted_object=None, anyone=None, change_type=None, inverse=None, 
-        actors=None, roles=None, configuration=None):
+                   actors=None, roles=None, configuration=None):
         """Helper method to make it easier to save permissions fields in the format our model expects."""
 
         self.owner = owner if owner else self.owner
@@ -90,7 +74,7 @@ class PermissionsItem(PermissionedModel):
             self.roles.add_roles(role_list=roles)
         
         if configuration:
-            configuration_dict = { key : value for key, value in configuration.items() if value not in [None, [], ""] }
+            configuration_dict = {key: value for key, value in configuration.items() if value not in [None, [], ""]}
             self.set_configuration(configuration_dict)
 
     # Get misc info
@@ -112,14 +96,6 @@ class PermissionsItem(PermissionedModel):
     def get_state_change_object(self):
         from concord.actions.utils import get_state_change_object
         return get_state_change_object(self.change_type)
-
-    def full_description(self):
-        """Helper method for displaying permsisions."""
-        state_change_object = self.get_state_change_object()
-        configuration = self.get_configuration()
-        if hasattr(state_change_object, "get_uninstantiated_description"):
-            return state_change_object.get_uninstantiated_description(**configuration)
-        return state_change_object.description.lower()
 
     # Get change type and configuration info (replace with customfield?)
 
@@ -149,19 +125,14 @@ class PermissionsItem(PermissionedModel):
         called via signals when a permission is updated to remove all actors and roles."""
         ...
     
-    # ActorList-related methods
+    # ActorList and RoleList related methods
 
     def get_actors(self, as_instances=False):
         if as_instances:
             return self.actors.as_instances()
         return self.actors.as_pks()
 
-    def get_actor_names(self, seperator=" "):
-        return seperator.join([user.username for user in self.actors.as_instances()])
-
-    # RoleList-related methods
-
-    def get_role_names(self):
+    def get_roles(self):
         return self.roles.role_list
 
     def has_role(self, *, role: str):

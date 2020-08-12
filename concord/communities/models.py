@@ -104,7 +104,8 @@ class DefaultCommunity(BaseCommunityModel):
     """
     user_owner = models.OneToOneField(User, on_delete=models.CASCADE, 
         related_name="default_community")
-        
+ 
+
 def create_default_community(sender, instance, created, **kwargs):
     if created:
         name = "%s's Default Community" % instance.username

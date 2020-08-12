@@ -5,6 +5,7 @@ import logging
 
 from django.db import models
 from concord.actions.utils import MockAction
+from concord.actions.text_utils import action_status_to_text
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.serializers import (serialize_state_change, serialize_resolution, serialize_template,
@@ -39,6 +40,33 @@ class Resolution:
         self.approved_role = approved_role
         self.approved_condition = approved_condition
 
+    def __str__(self):
+        return f"Action status {self.generate_status()} - {self.get_status_string()}"
+
+    def __repr__(self):
+        return f"Action Resolution(foundational_status={self.foundational_status}, " + \
+               f"specific_status={self.specific_status}, governing_status={self.governing_status}, " + \
+               f"conditions={self.conditions}, log={self.log}, approved_through={self.approved_through}, " + \
+               f"approved_role={self.approved_role}, approved_condition={self.approved_condition})"
+
+    @property
+    def is_resolved(self):
+        """Property method returning True if the generated status is a 'final' status, False if otherwise."""
+        return True if self.generate_status() in ["approved", "rejected", "implemented"] else False
+
+    @property
+    def is_approved(self):
+        """Property method returning True if the generated status is 'approved' or 'implemented'."""
+        return True if self.generate_status() in ["approved", "implemented"] else False
+
+    @property
+    def passed_as(self):
+        """Property method returning whether the action was approved via a role or individual, if it was approved.
+        Otherwise returns None."""
+        if self.is_approved:
+            return "role" if self.approved_role else "individual"
+        return None
+
     def refresh_status(self):
         """When re-running an action, we need to refresh the pipeline-specific statuses."""
         self.foundational_status, self.governing_status, self.specific_status = "not tested", "not tested", "not tested"
@@ -61,50 +89,9 @@ class Resolution:
         # We haven't actually run the permissions pipeline yet
         return "created"
 
-    @property
-    def is_resolved(self):
-        """Property method returning True if the generated status is a 'final' status, False if otherwise."""
-        return True if self.generate_status() in ["approved", "rejected", "implemented"] else False
-
-    @property
-    def is_approved(self):
-        """Property method returning True if the generated status is 'approved' or 'implemented'."""
-        return True if self.generate_status() in ["approved", "implemented"] else False
-
-    @property
-    def passed_as(self):
-        """Property method returning whether the action was approved via a role or individual, if it was approved.
-        Otherwise returns None."""
-        if self.is_approved:
-            return "role" if self.approved_role else "individual"
-        return None
-
-    def __str__(self):
-        return f"Action status {self.generate_status()} - {self.get_status_string()}"
-
-    def __repr__(self):
-        return f"Action Resolution(foundational_status={self.foundational_status}, " + \
-               f"specific_status={self.specific_status}, governing_status={self.governing_status}, " + \
-               f"conditions={self.conditions}, log={self.log}, approved_through={self.approved_through}, " + \
-               f"approved_role={self.approved_role}, approved_condition={self.approved_condition})"
-
     def get_status_string(self):
-        """Helper method to get human-readable string displaying action status"""
-        if self.is_approved:
-            return f"approved through {self.approved_through} with role {self.approved_role} and condition " + \
-                   f"{self.approved_condition}"
-        if self.generate_status() == "waiting":
-            if self.foundational_status == "waiting":
-                return "waiting on condition set on foundational permission"
-            pipeline_strings = []
-            pipeline_strings.append("governing") if self.governing_status else None
-            pipeline_strings.append("specific") if self.specific_status else None
-            return f"waiting on condition(s) for { ', '.join(pipeline_strings) }"
-        if self.generate_status() == "created":
-            return "action has not been put through pipeline yet"
-        if self.foundational_status == "rejected":
-            return "actor does not have foundational authority"
-        return "action did not meet any permission criteria"
+        """Helper method which returns a 'plain English' description of the action status."""
+        return action_status_to_text(self)
 
     def approve_action(self, pipeline, approved_role=None, approved_condition=None):
         """Sets the status for the calling pipeline to approved, which will set overall status to approved."""
@@ -345,8 +332,7 @@ class TemplateField(models.Field):
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
-        # only include kwargs if it's not the default
-        if self.system:
+        if self.system:    # only include kwargs if it's not the default
             kwargs['system'] = self.system
         return name, path, args, kwargs
 
@@ -377,7 +363,7 @@ class TemplateField(models.Field):
 
         if issubclass(value.__class__, Template):
             if self.system and not value.system:
-                # This is a system field (likely a condition) that for some reason got initialized without this setting
+                # This is a system field (likely a condition) that somehow got initialized without this setting
                 value.system = True
             return serialize_template(value)
 

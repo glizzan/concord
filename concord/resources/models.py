@@ -1,3 +1,5 @@
+"""Resource models."""
+
 from typing import List
 
 from django.db import models
@@ -9,6 +11,7 @@ from concord.actions.models import PermissionedModel
 
 
 class Comment(PermissionedModel):
+    """Comment model."""
 
     commented_object_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     commented_object_id = models.PositiveIntegerField()
@@ -22,19 +25,19 @@ class Comment(PermissionedModel):
     text = models.CharField(max_length=1000)
 
 
-
 class CommentCatcher(PermissionedModel):
     """The comment catcher model is a hack to deal with leaving comments on non-permissioned models.  Right now,
     the only model we're doing this for is Action."""
 
-    action =  models.IntegerField(unique=True)
+    action = models.IntegerField(unique=True)
 
     def get_name(self):
+        """Get name of object."""
         return f"Comment catcher for action {self.action}"
 
 
-
 class AbstractResource(PermissionedModel):
+    """Abstract Resource model contains basic functionality that developers can inherit."""
 
     name = models.CharField(max_length=200)
 
@@ -44,11 +47,13 @@ class AbstractResource(PermissionedModel):
     # Basics
 
     def get_name(self):
+        """Gets name of abstract resource."""
         return self.name
 
     # Read-only
 
     def get_items(self) -> List[str]:
+        """Gets item associated with resource."""
         result = []
         for item in self.item_set.all():
             result.append(item.name)
@@ -56,6 +61,7 @@ class AbstractResource(PermissionedModel):
 
 
 class AbstractItem(PermissionedModel):
+    """Abstract item model that developers can inherit from."""
 
     name = models.CharField(max_length=200)
 
@@ -63,18 +69,19 @@ class AbstractItem(PermissionedModel):
         abstract = True
 
     def get_name(self):
+        """Get name of abstract item."""
         return self.name
 
 
 class Resource(AbstractResource):
-    ...
+    """Non-abstract resource model."""
 
     def get_nested_objects(self):
+        """Get objects that Resource is nested on, in this case the owner."""
         return [self.get_owner()]
-    
+
 
 class Item(AbstractItem):
+    """Non-abstract item model."""
 
     resource = models.ForeignKey(Resource, on_delete=models.CASCADE)
-
-

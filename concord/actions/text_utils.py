@@ -39,14 +39,14 @@ def list_to_text(list_to_convert):
 
 
 def roles_to_text(roles):
-    """Given a list of roles, returns in readable format."""
+    """Given a list of roles, returns them in format 'everyone with role 'banana''."""
 
     if roles is None:
         return ""
 
     role_string = "roles " if len(roles) > 1 else "role "
 
-    return "everyone with " + role_string + list_to_text(roles)
+    return "those with " + role_string + list_to_text(roles)
 
 
 def actors_to_text(actor_info):
@@ -100,7 +100,7 @@ def roles_and_actors(role_and_actor_dict):
 
     if len(role_and_actor_dict["roles"]) == 0 and len(role_and_actor_dict["actors"]) == 0:
         return "no one"
-    
+
     return text
 
 
@@ -121,8 +121,8 @@ def condition_template_to_text(condition_action, permissions_actions):
     phrases = []
     for perm_action in permissions_actions:
 
-        roles_and_actors_string = roles_and_actors({ "roles": perm_action.change.permission_roles, 
-            "actors": perm_action.change.permission_actors })
+        roles_and_actors_string = roles_and_actors({"roles": perm_action.change.permission_roles,
+                                                    "actors": perm_action.change.permission_actors})
 
         change_type = get_state_change_object(perm_action.change.permission_type)
 
@@ -181,3 +181,58 @@ def community_governance_info_to_text(community):
         text += ". "
 
     return text
+
+
+def action_status_to_text(resolution):
+    """Gives details of the status of an action."""
+    if resolution.is_approved:
+        return f"approved through {resolution.approved_through} with role {resolution.approved_role} " + \
+               f"and condition {resolution.approved_condition}"
+    if resolution.generate_status() == "waiting":
+        if resolution.foundational_status == "waiting":
+            return "waiting on condition set on foundational permission"
+        pipelines = filter(lambda x: x is not None, ["governing" if resolution.governing_status else None,
+                            "specific" if resolution.specific_status else None])
+        return "waiting on condition(s) for " + list_to_text(list(pipelines))
+    if resolution.generate_status() == "created":
+        return "action has not been put through pipeline yet"
+    if resolution.foundational_status == "rejected":
+        return "actor does not have foundational authority"
+    return "action did not meet any permission criteria"
+
+
+def action_to_text(action, with_target=True):
+
+    target_string = f" {action.change.get_preposition()} {action.target.get_name()}" if with_target else ""
+
+    if action.status == "implemented":
+        return f"{action.actor.username} {action.change.description_past_tense()}" + target_string
+    else:
+        return f"{action.actor.username} asked to {action.change.description_present_tense()}" + target_string
+
+
+def permission_change_to_text(permission):
+
+    state_change_object = permission.get_state_change_object()
+    if hasattr(state_change_object, "get_uninstantiated_description"):
+        return state_change_object.get_uninstantiated_description(**permission.get_configuration())
+    return state_change_object.description.lower()
+
+
+def permission_to_text(permission):
+
+    action_str = permission.get_state_change_object().description.lower()
+
+    if permission.anyone:
+        return f"anyone has permission to {action_str}"
+
+    actors = [user.username for user in permission.get_actors(as_instances=True)]
+    people_str = roles_and_actors({"roles": permission.get_roles(), "actors": actors})
+
+    return f"{people_str} have permission to {action_str}"
+
+
+def get_verb_given_permission_type(permission_type):
+    from concord.actions.utils import get_state_change_object
+    state_change_object = get_state_change_object(permission_type)
+    return state_change_object.description.lower()

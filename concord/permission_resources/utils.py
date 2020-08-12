@@ -1,7 +1,5 @@
-import inspect, json
+import json
 from collections import OrderedDict
-
-from django.contrib.contenttypes.models import ContentType
 
 
 def get_settable_permissions(* , target):
@@ -20,21 +18,6 @@ def get_settable_permissions(* , target):
 
     # Remove duplicates while preserving order
     return list(OrderedDict.fromkeys(settable_permissions))
-
-
-def format_as_tuples(permissions):
-    formatted_permissions = []
-    for permission in permissions:
-        formatted_permissions.append((permission.get_change_type(), 
-            permission.description))
-    return formatted_permissions
-
-
-def format_as_list_of_strings(permissions):
-    formatted_permissions = []
-    for permission in permissions:
-        formatted_permissions.append(permission.get_change_type())
-    return formatted_permissions
 
 
 def check_configuration(action, permission):
@@ -56,9 +39,3 @@ def check_configuration(action, permission):
     if result == False and message:
         action.resolution.add_to_log(message)
     return result
-
-
-def get_verb_given_permission_type(permission):
-    from concord.actions.utils import get_state_change_object
-    state_change_object = get_state_change_object(permission)
-    return state_change_object.description.lower()

@@ -1,4 +1,5 @@
 from concord.actions.utils import Client
+from concord.actions.text_utils import roles_and_actors
 
 
 def get_basic_condition_info(condition_object):
@@ -77,57 +78,33 @@ def generate_condition_form_from_action_list(action_list, info):
 
 def description_for_passing_approval_condition(fill_dict=None):
 
-    if fill_dict:
-        fill_dict["approve_actors"] = [ str(actor) for actor in fill_dict.get("approve_actors", []) ]
-        fill_dict["approve_roles"] = fill_dict.get("approve_roles", [])
-        fill_dict["reject_actors"] = [ str(actor) for actor in fill_dict.get("reject_actors", []) ]
-        fill_dict["reject_roles"] = fill_dict.get("reject_roles", [])
+    approve_actors = fill_dict.get("approve_actors", []) if fill_dict else None
+    approve_roles = fill_dict.get("approve_roles", []) if fill_dict else None
+    reject_actors = fill_dict.get("reject_actors", []) if fill_dict else None
+    reject_roles = fill_dict.get("reject_roles", []) if fill_dict else None
 
-    if fill_dict and (fill_dict["approve_roles"] or fill_dict["approve_actors"]):
-        base_str = "one person "
-        if fill_dict["approve_roles"]:
-            role_string = "roles " if len(fill_dict["approve_roles"]) > 1 else "role "
-            base_str += "with " + role_string + " " +  ", ".join(fill_dict["approve_roles"])
-        if fill_dict["approve_actors"]: 
-            if fill_dict["approve_roles"]:
-                base_str += " (or in list of individuals: " + ", ".join(fill_dict["approve_actors"]) + ")"
-            else:
-                base_str += "in list of individuals (" + ", ".join(fill_dict["approve_actors"]) + ")"
-        base_str += " needs to approve"
-        if fill_dict["reject_actors"] or fill_dict["reject_roles"]:
-            base_str += ", with no one "
-            if fill_dict["reject_roles"]:
-                role_string = "roles " if len(fill_dict["reject_roles"]) > 1 else "role "
-                base_str += "with " + role_string + " " +  ", ".join(fill_dict["reject_roles"])
-            if fill_dict["reject_actors"]:
-                if fill_dict["reject_roles"]:
-                    base_str += " (or in list of individuals: " +  ", ".join(fill_dict["reject_actors"]) + ")"
-                else:
-                    base_str += "in list of individuals (" + ", ".join(fill_dict["reject_actors"]) + ")"
-            base_str += " rejecting."
-        return base_str
-    else:
+    if not fill_dict or (not approve_roles and not approve_actors):
         return "one person needs to approve this action"
+    
+    approve_str = roles_and_actors({"roles": approve_roles, "actors": approve_actors})
+    if reject_actors or reject_roles:
+        reject_str = f", without {roles_and_actors({'roles': reject_roles, 'actors': reject_actors})} rejecting."
+    else:
+        reject_str = ""
+
+    return f"one person {approve_str} needs to approve{reject_str}"
 
 
 def description_for_passing_voting_condition(condition, fill_dict=None):
 
-    if fill_dict:
-        fill_dict["vote_actors"] = [str(actor) for actor in fill_dict.get("vote_actors", [])]
-        fill_dict["vote_roles"] = fill_dict.get("vote_roles", [])
+    vote_actors = fill_dict.get("vote_actors", []) if fill_dict else None
+    vote_roles = fill_dict.get("vote_roles", []) if fill_dict else None
 
-    if condition.require_majority:
-        base_str = "a majority of people "
+    vote_type = "majority" if condition.require_majority else "plurality"
+
+    if fill_dict and (vote_roles or vote_actors):
+        people_str = roles_and_actors({'roles': vote_roles, 'actors': vote_actors})
     else:
-        base_str = "a plurality of people "
-    if fill_dict and (fill_dict["vote_roles"] or fill_dict["vote_actors"]):
-        if fill_dict["vote_roles"]:
-            role_string = "roles " if len(fill_dict["vote_roles"]) > 1 else "role "
-            base_str += "with " + role_string + " " +  ", ".join(fill_dict["vote_roles"])
-        if fill_dict["vote_actors"]:
-            if fill_dict["vote_roles"]:
-                base_str += " (or in list of individuals: " + ", ".join(fill_dict["vote_actors"]) + ")"
-            else:
-                base_str += "in list of individuals (" + ", ".join(fill_dict["vote_actors"]) + ")"
-    base_str += " vote for it within %s" % condition.describe_voting_period()
-    return base_str
+        people_str = ""
+
+    return f"a {vote_type} of people{people_str} vote for it within {condition.describe_voting_period()}"

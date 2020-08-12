@@ -3,7 +3,7 @@ from django.conf import settings
 from django.apps import apps
 from django.core.exceptions import ValidationError
 
-from concord.actions import text_utils
+from concord.actions.text_utils import list_to_text, condition_template_to_text
 
 
 ###############################
@@ -77,10 +77,10 @@ class AddMembersStateChange(BaseStateChange):
         return True, None
 
     def description_present_tense(self):
-        return "add %s as members" % self.stringify_list(self.member_pk_list) 
+        return "add %s as members" % list_to_text(self.member_pk_list) 
 
     def description_past_tense(self):
-        return "added %s as members" % self.stringify_list(self.member_pk_list) 
+        return "added %s as members" % list_to_text(self.member_pk_list) 
 
     def validate(self, actor, target):
         """
@@ -111,10 +111,10 @@ class RemoveMembersStateChange(BaseStateChange):
         return { "self_only": { "display": "Only allow actors to remove themselves", "type": "BooleanField" } }
 
     def description_present_tense(self):
-        return "remove members %s" % self.stringify_list(self.member_pk_list)   
+        return "remove members %s" % list_to_text(self.member_pk_list)   
 
     def description_past_tense(self):
-        return "removed members %s " % self.stringify_list(self.member_pk_list)   
+        return "removed members %s " % list_to_text(self.member_pk_list)   
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -469,8 +469,8 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
     @classmethod 
     def get_configurable_fields(self):
-        return { "role_name": { "display": "Role people can be added to", "type": "PermissionRoleField",
-        "other_data": { "multiple": False } } }
+        return {"role_name": {"display": "Role people can be added to", "type": "PermissionRoleField",
+                "other_data": {"multiple": False}}}
 
     @classmethod
     def get_uninstantiated_description(self, **configuration_kwargs):
@@ -481,10 +481,10 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return "add people to role %s" % (role_name)
 
     def description_present_tense(self):
-        return "add %s to role %s" % (self.stringify_list(self.people_to_add), self.role_name)  
+        return "add %s to role %s" % (list_to_text(self.people_to_add), self.role_name)  
 
     def description_past_tense(self):
-        return "added %s to role %s" % (self.stringify_list(self.people_to_add), self.role_name)  
+        return "added %s to role %s" % (list_to_text(self.people_to_add), self.role_name)  
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -516,7 +516,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
             if target.roles.has_specific_role(self.role_name, person):
                 people_already_in_role.append(str(person))
         if people_already_in_role:
-            message = "Users %s already in role %s " % (self.stringify_list(people_already_in_role), self.role_name)
+            message = "Users %s already in role %s " % (list_to_text(people_already_in_role), self.role_name)
             self.set_validation_error(message)
             return False
         return True
@@ -540,10 +540,10 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return "remove %s from role %s" % (self.stringify_list(self.people_to_remove), self.role_name)  
+        return "remove %s from role %s" % (list_to_text(self.people_to_remove), self.role_name)  
 
     def description_past_tense(self):
-        return "removed %s from role %s" % (self.stringify_list(self.people_to_remove), self.role_name)  
+        return "removed %s from role %s" % (list_to_text(self.people_to_remove), self.role_name)  
 
     def validate(self, actor, target):
         return True
@@ -597,7 +597,7 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         return mock_action_list
 
     def get_template_description(self, mock_action_list):
-        return text_utils.condition_template_to_text(mock_action_list[0], mock_action_list[1:])
+        return condition_template_to_text(mock_action_list[0], mock_action_list[1:])
 
     def apply_actions_to_conditions(self, action_list, target):
         if self.leadership_type == "owner":

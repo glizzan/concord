@@ -70,17 +70,6 @@ class BaseStateChange(object):
         from concord.actions.utils import get_all_community_models
         return get_all_community_models()
 
-    def stringify_list(self, objlist):
-        """Helper method for use in displaying change info.  Probably belongs elsewhere."""
-        if len(objlist) > 1:
-            objlist, last_item = objlist[:-1], objlist[-1]
-        else:
-            objlist, last_item = objlist, None
-        display_string = ", ".join([str(item) for item in objlist])
-        if last_item:
-            display_string += " and " + str(last_item)
-        return display_string
-
     def instantiate_fields(self):
         '''Helper method used by state change subclasses that have fields which require database
         lookups.  Not called by default, to prevent unnecessary db queries.'''
@@ -245,7 +234,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "disable the governing permission" 
+        return "disable the governing permission"
 
     def description_past_tense(self):
         return "disabled the governing permission"
@@ -327,7 +316,7 @@ class ViewStateChange(BaseStateChange):
 
     def implement(self, actor, target, save=True):
         """Gets data from specified fields, or from all fields, and returns as dictionary."""
-        
+
         data_dict = {}
 
         target_data = target.get_serialized_field_data()

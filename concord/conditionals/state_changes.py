@@ -73,7 +73,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
             condition_class = self.get_condition_class()
             source_id = self.generate_source_id()
 
-            condition_instance = condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(), 
+            condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
                 **(self.condition_data if self.condition_data else {}))
 
             return True

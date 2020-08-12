@@ -11,7 +11,6 @@ from concord.actions.models import PermissionedModel
 from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
-from concord.communities.utils import get_membership_setting
 
 
 ######################
@@ -143,12 +142,6 @@ class CommunityClient(BaseClient):
 
     def has_role_in_community(self, *, role: str, actor_pk: int) -> bool:
         return self.target.roles.has_specific_role(role, actor_pk)
-
-    def get_membership_setting(self, extra_data=False):
-        setting, permission, condition = get_membership_setting(self.actor, self.target)
-        if extra_data:
-            return setting, permission, condition
-        return setting
 
     # State changes
 

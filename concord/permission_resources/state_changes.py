@@ -4,8 +4,7 @@ from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
-from concord.permission_resources.utils import get_verb_given_permission_type
-from concord.actions import text_utils
+from concord.actions.text_utils import condition_template_to_text, get_verb_given_permission_type
 
 
 ################################
@@ -29,7 +28,7 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
     description = "Add permission"
 
     def __init__(self, permission_type, permission_actors, permission_roles, 
-        permission_configuration, anyone=False, inverse=False):
+                 permission_configuration, anyone=False, inverse=False):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
         self.permission_type = permission_type
@@ -44,17 +43,13 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         from concord.resources.models import Resource, Item
         return cls.get_community_models() + [Resource, Item, PermissionsItem]     
 
-    def description_present_tense(self):        
-        permission_string = "add permission '%s'" % get_verb_given_permission_type(self.permission_type)
-        if self.permission_configuration:
-            permission_string += " (configuration: %s)" % (str(self.permission_configuration))
-        return permission_string
+    def description_present_tense(self):
+        config_str = f" (configuration: {str(self.permission_configuration)})" if self.permission_configuration else ""
+        return f"add permission {get_verb_given_permission_type(self.permission_type)}" + config_str
 
     def description_past_tense(self):
-        permission_string = "added permission '%s'" % get_verb_given_permission_type(self.permission_type)
-        if self.permission_configuration:
-            permission_string += " (configuration: %s)" % (str(self.permission_configuration))
-        return permission_string
+        config_str = f" (configuration: {str(self.permission_configuration)})" if self.permission_configuration else ""
+        return f"added permission {get_verb_given_permission_type(self.permission_type)}" + config_str
 
     def validate(self, actor, target):
         """ To validate a permission being added, we need to instantiate the permission and check its configuration is valid.
@@ -148,19 +143,12 @@ class AddActorToPermissionStateChange(PermissionResourceBaseStateChange):
         return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
-        if hasattr(self, "permission"):
-            return "add actor %s to permission %d (%s)" % (self.actor_to_add, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "add actor %s to permission %d" % (self.actor_to_add, self.permission_pk) 
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"add actor {self.actor_to_add} to permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
-        if hasattr(self, "permission"):
-            return "added actor %s to permission %d (%s)" % (self.actor_to_add, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "added actor %s to permission %d" % (self.actor_to_add, self.permission_pk)
-
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"added actor {self.actor_to_add} to permission {self.permission_pk}" + permission_str
 
     def validate(self, actor, target):
         # put real logic here
@@ -187,21 +175,15 @@ class RemoveActorFromPermissionStateChange(PermissionResourceBaseStateChange):
     @classmethod
     def get_settable_classes(cls):
         from concord.resources.models import Resource, Item
-        return cls.get_community_models() + [Resource, Item, PermissionsItem]   
+        return cls.get_community_models() + [Resource, Item, PermissionsItem]  
 
     def description_present_tense(self):
-        if hasattr(self, "permission"):
-            return "remove actor %s from permission %d (%s)" % (self.actor_to_remove, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "remove actor %s from permission %d" % (self.actor_to_remove, self.permission_pk) 
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"remove actor {self.actor_to_remove} from permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
-        if hasattr(self, "permission"):
-            return "removed actor %s from permission %d (%s)" % (self.actor_to_remove, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "removed actor %s from permission %d" % (self.actor_to_remove, self.permission_pk)
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"removed actor {self.actor_to_remove} from permission {self.permission_pk}" + permission_str
 
     def validate(self, actor, target):
         # put real logic here
@@ -230,18 +212,12 @@ class AddRoleToPermissionStateChange(PermissionResourceBaseStateChange):
         return cls.get_community_models() + [Resource, Item, PermissionsItem]   
 
     def description_present_tense(self):
-        if hasattr(self, "permission"):
-            return "add role %s to permission %d (%s)" % (self.role_name, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "add role %s to permission %d" % (self.role_name, self.permission_pk) 
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"add role {self.role_name} to permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
-        if hasattr(self, "permission"):
-            return "added role %s to permission %d (%s)" % (self.role_name, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "added role %s to permission %d" % (self.role_name, self.permission_pk)
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"added role {self.role_name} to permission {self.permission_pk}" + permission_str
 
     def validate(self, actor, target):
         # put real logic here
@@ -282,18 +258,12 @@ class RemoveRoleFromPermissionStateChange(PermissionResourceBaseStateChange):
         return "remove role %s from permission" % (role_name)
 
     def description_present_tense(self):
-        if hasattr(self, "permission"):
-            return "remove role %s from permission %d (%s)" % (self.role_name, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "remove role %s from permission %d" % (self.role_name, self.permission_pk) 
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"remove role {self.role_name} from permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
-        if hasattr(self, "permission"):
-            return "removed role %s from permission %d (%s)" % (self.role_name, self.permission_pk, 
-                self.permission.get_change_type())
-        else:
-            return "removed role %s from permission %d" % (self.role_name, self.permission_pk)
+        permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
+        return f"removed role {self.role_name} from permission {self.permission_pk}" + permission_str
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -529,7 +499,7 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
         
         permission.condition.action_list = self.generate_mock_actions(actor, permission)
         condition_action, permissions_actions = permission.condition.action_list[0], permission.condition.action_list[1:]
-        permission.condition.description = text_utils.condition_template_to_text(condition_action, permissions_actions)
+        permission.condition.description = condition_template_to_text(condition_action, permissions_actions)
         
         permission.save()
         return permission

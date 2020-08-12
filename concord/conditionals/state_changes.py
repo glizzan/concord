@@ -1,11 +1,10 @@
-from typing import Dict
-import json
-
-from django.contrib.contenttypes.models import ContentType
+"""State Changes for conditional models"""
 from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange
 from concord.actions.utils import Client
+from concord.conditionals.models import VoteCondition, ApprovalCondition
+from concord.actions.models import Action
 
 
 ###################################
@@ -14,32 +13,32 @@ from concord.actions.utils import Client
 
 
 class SetConditionOnActionStateChange(BaseStateChange):
-    """
-    State change which actually creates a condition item associated with a specific action. I'm not actually 100%
+    """State change which actually creates a condition item associated with a specific action. I'm not actually 100%
     sure this should be a state change, since as far as I can tell this will always be triggered by the system
     internally, but we're doing it this way for now.  Also not sure if this should be split up into permission
-    condition and leadership condition.  ¯\_(ツ)_/¯
-    """
+    condition and leadership condition."""
     description = "Set condition on action"
 
-    def __init__(self, *, condition_type, condition_data=None, permission_pk=None, community_pk=None, 
-        leadership_type=None):
-        self.condition_type = condition_type  
+    def __init__(self, *, condition_type, condition_data=None, permission_pk=None, community_pk=None,
+                 leadership_type=None):
+        self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else {}
-        self.permission_pk = permission_pk 
-        self.community_pk = community_pk 
-        self.leadership_type = leadership_type 
+        self.permission_pk = permission_pk
+        self.community_pk = community_pk
+        self.leadership_type = leadership_type
 
     def get_condition_class(self):
+        """Gets the condition class object given the condition type."""
         return Client().Conditional.get_condition_class(condition_type=self.condition_type)
 
     def get_condition_verb(self):
+        """Get the verb of the associated condition."""
         return self.get_condition_class().verb_name
-    
+
     def get_owner(self):
         """The owner of the condition should be the community in which it is created.  For now, this means
         looking up permission and getting owner, or using community if community is set.
-        
+
         Note that if multiple community models are being used, and the community pk passed in is not the
         primary/default model, this will break."""
 
@@ -51,6 +50,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
             return Client().Community.get_community(community_pk=self.community_pk)
 
     def generate_source_id(self):
+        """Generates a source_id to use when creating condition item."""
         source_pk = self.permission_pk if self.permission_pk else self.community_pk
         source_type = "perm" if self.permission_pk else self.leadership_type
         return source_type + "_" + str(source_pk)
@@ -62,7 +62,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
             return False
 
         if self.community_pk and not self.leadership_type:
-            self.set_validation_error(message="Must supply leadership type ('own' or 'gov') if setting condition on community")
+            self.set_validation_error(message="Must supply leadership type ('own' or 'gov') if conditioning community")
             return False
 
         if target.__class__.__name__ not in ["Action"]:  # allow "MockAction"?
@@ -74,7 +74,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
             source_id = self.generate_source_id()
 
             condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **(self.condition_data if self.condition_data else {}))
+                            **(self.condition_data if self.condition_data else {}))
 
             return True
         except ValidationError as error:
@@ -86,10 +86,10 @@ class SetConditionOnActionStateChange(BaseStateChange):
         condition_class = self.get_condition_class()
         source_id = self.generate_source_id()
 
-        condition_data = self.condition_data if self.condition_data else {} # replaces none so ** doesn't give an error
-        condition_instance = condition_class.objects.create(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                **condition_data)
-        
+        condition_data = self.condition_data if self.condition_data else {}  # replaces none so ** doesn't give an error
+        condition_instance = condition_class.objects.create(
+            action=target.pk, source_id=source_id, owner=self.get_owner(), **condition_data)
+
         return condition_instance
 
 
@@ -99,6 +99,7 @@ class SetConditionOnActionStateChange(BaseStateChange):
 
 
 class AddVoteStateChange(BaseStateChange):
+    """State change for adding a vote."""
     description = "Add vote"
     verb_name = "vote"
     action_helps_pass_condition = True
@@ -108,14 +109,13 @@ class AddVoteStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.conditionals.models import VoteCondition
-        return [VoteCondition]    
+        return [VoteCondition]
 
     def description_present_tense(self):
-        return "add vote %s" % (self.vote)  
+        return f"add vote {self.vote}"
 
     def description_past_tense(self):
-        return "added vote %s" % (self.vote)
+        return f"added vote {self.vote}"
 
     def validate(self, actor, target):
         """
@@ -124,7 +124,7 @@ class AddVoteStateChange(BaseStateChange):
         b) if the vote is abstain, abstentions are allowed
         """
         if self.vote not in ["yea", "nay", "abstain"]:
-            self.set_validation_error("Vote type must be 'yea', 'nay' or 'abstain', not %s" % self.vote)
+            self.set_validation_error(f"Vote type must be 'yea', 'nay' or 'abstain', not {self.vote}")
             return False
         if target.has_voted(actor):
             self.set_validation_error("Actor may only vote once")
@@ -147,6 +147,7 @@ class AddVoteStateChange(BaseStateChange):
 
 
 class ApproveStateChange(BaseStateChange):
+    """State change for approving a condition."""
     description = "Approve"
     preposition = ""
     verb_name = "approve"
@@ -154,8 +155,7 @@ class ApproveStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.conditionals.models import ApprovalCondition
-        return [ApprovalCondition]    
+        return [ApprovalCondition]
 
     def description_present_tense(self):
         return "approve"
@@ -168,8 +168,7 @@ class ApproveStateChange(BaseStateChange):
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:
             return True
-            
-        from concord.actions.models import Action
+
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
             self.set_validation_error("Self approval is not allowed.")
@@ -184,6 +183,7 @@ class ApproveStateChange(BaseStateChange):
 
 
 class RejectStateChange(BaseStateChange):
+    """State change for rejecting a condition.."""
     description = "Reject"
     preposition = ""
     verb_name = "reject"
@@ -191,8 +191,7 @@ class RejectStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.conditionals.models import ApprovalCondition
-        return [ApprovalCondition]    
+        return [ApprovalCondition]
 
     def description_present_tense(self):
         return "reject"
@@ -207,8 +206,7 @@ class RejectStateChange(BaseStateChange):
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:
             return True
-            
-        from concord.actions.models import Action
+
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
             self.set_validation_error("Actor cannot approve or reject their own action.")

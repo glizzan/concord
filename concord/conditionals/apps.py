@@ -1,9 +1,12 @@
+"""AppConfig for conditionals."""
+
 import importlib
 
 from django.apps import AppConfig
 
 
 class ConditionalsConfig(AppConfig):
+    """AppConfig for conditionals."""
     name = 'concord.conditionals'
     verbose_name = "Conditionals"
 

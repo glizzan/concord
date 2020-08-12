@@ -1,19 +1,16 @@
+"""Condition models."""
+
 import datetime
 import json
-import decimal
 from abc import abstractmethod
-from collections import namedtuple
 
 from django.db import models
 from django.utils import timezone
-from django.urls import reverse
 from django.db.models.signals import post_save
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
 from django.dispatch import receiver
 
 from concord.actions.models import PermissionedModel
-from concord.actions.utils import Changes, Client, get_all_conditions
+from concord.actions.utils import Changes, Client
 from concord.conditionals import utils
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 
@@ -28,14 +25,14 @@ class ConditionModel(PermissionedModel):
     Attributes:
 
     action: integer representing the pk of the action that triggered the creation of this condition
-    source_id : consists of a type and a pk, separated by a _, for example "perm_" + str(permission_pk) or 
+    source_id : consists of a type and a pk, separated by a _, for example "perm_" + str(permission_pk) or
                     "owner_" + str(community_pk)
     """
 
     class Meta:
         abstract = True
 
-    action =  models.IntegerField()
+    action = models.IntegerField()
     source_id = models.CharField(max_length=20)
 
     descriptive_name = "condition"
@@ -44,25 +41,26 @@ class ConditionModel(PermissionedModel):
     is_condition = True
 
     def get_name(self):
-        return "%s (%d)" % (self.descriptive_name, self.pk)
+        """Get name of condition."""
+        return f"{self.descriptive_name}, {self.pk}"
 
     def get_model_name(self):
+        """Get name of condition model."""
         return self.__class__.__name__.lower()
 
-    def get_url(self):
-        return reverse('conditionals:condition_detail', kwargs={'action_pk': self.action })
-
     def get_display_string(self):
+        """Get display text describing condition.."""
         return self.descriptive_name
 
     def get_action(self):
+        """Get action associated with condition instance."""
         return Client().Action.get_action_given_pk(pk=self.action)
 
     def get_configurable_fields_with_data(self, permission_data=None):
         """Returns form_dict with condition data set as value."""
 
         form_dict = self.configurable_fields()
-        
+
         for field_name, field_dict in form_dict.items():
 
             if field_dict["type"] in ["PermissionRoleField", "PermissionActorField"]:
@@ -70,7 +68,7 @@ class ConditionModel(PermissionedModel):
                 field_dict["value"] = permission_field_value if permission_field_value else field_dict["value"]
             else:
                 field_dict["value"] = getattr(self, field_name)
-        
+
         return form_dict
 
     def user_condition_status(self, user):
@@ -84,25 +82,22 @@ class ConditionModel(PermissionedModel):
     # Class methods with default implementation
 
     @classmethod
-    def get_slug(cls):
-        return cls.__name__.lower()
-
-    @classmethod
     def get_configurable_fields(cls):
         """Returns field values as list instead of dict"""
-        return [ value for key, value in cls.configurable_fields().items() ]
+        return [value for key, value in cls.configurable_fields().items()]
 
     @classmethod
     def get_configurable_field_names(cls):
         """Return field names as list."""
-        return [ key for key, value in cls.configurable_fields().items() ]
+        return [key for key, value in cls.configurable_fields().items()]
 
     @classmethod
     def get_form_dict_for_field(cls, field):
-        return { 
-            'field_name': field.name, 
-            'type': field.__class__.__name__, 
-            'required': "required" if field.blank else "", 
+        """Get dictionary with form data for supplied field."""
+        return {
+            'field_name': field.name,
+            'type': field.__class__.__name__,
+            'required': "required" if field.blank else "",
             'value': field.default
         }
 
@@ -111,37 +106,34 @@ class ConditionModel(PermissionedModel):
     @classmethod
     @abstractmethod
     def configurable_fields(cls):
-        '''All conditions must supply their own version of the configurable_fields method, 
-        which should return a dict with field names as keys and field objects as values.'''
+        """All conditions must supply their own version of the configurable_fields method,
+        which should return a dict with field names as keys and field objects as values."""
         return {}
 
     @abstractmethod
     def description_for_passing_condition(self, fill_dict):
         """This method returns a verbose, human-readable description of what will fulfill this condition.  It optionally
         accepts permission data from the configured condition_template to be more precise about who can do what."""
-        pass
 
     @abstractmethod
     def display_fields(self):
         """This method returns a list of fields and their values which can be shown to the user. Some overlap with
         get_configurable_fields_with_data since in many cases we're just showing the configured fields, but some
         data may be specific to the condition instance.  Note that we do not, for now, return permission data."""
-        pass
 
     @abstractmethod
     def condition_status(self):
         """This method returns one of status 'approved', 'rejected', or 'waiting', after checking the condition
         for its unqiue status logic."""
-        pass
 
     @abstractmethod
     def display_status(self):
         """This method returns a more verbose, human-readable description of the condition status, after checking
         the condition for its unique status logic."""
-        pass
 
 
 class ApprovalCondition(ConditionModel):
+    """Approval Condition class."""
 
     descriptive_name = "Approval Condition"
     verb_name = "approve"
@@ -150,35 +142,47 @@ class ApprovalCondition(ConditionModel):
     self_approval_allowed = models.BooleanField(default=False)
 
     def approve(self):
+        """Approve a condition."""
         self.approved = True
-    
+
     def reject(self):
+        """Reject a condition."""
         self.approved = False
 
     # Required methods
 
     @classmethod
     def configurable_fields(cls):
-        return {          
-            "self_approval_allowed": { "display": "Can individuals approve their own actions?",
-                **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))},
-            "approve_roles" : { "display": "Roles who can approve", "type": "PermissionRoleField", "required": False, 
-                "value": None, "field_name": "approve_roles", "full_name": Changes().Conditionals.Approve },
-            "approve_actors" : { "display": "People who can approve", "type": "PermissionActorField", "required": False, 
-                "value": None, "field_name": "approve_actors", "full_name": Changes().Conditionals.Approve },
-            "reject_roles" : { "display": "Roles who can reject", "type": "PermissionRoleField", "required": False, 
-                "value": None, "field_name": "reject_roles", "full_name": Changes().Conditionals.Reject },
-            "reject_actors": { "display": "People who can reject", "type": "PermissionActorField", "required": False, 
-                "value": None, "field_name": "reject_actors", "full_name": Changes().Conditionals.Reject }
+        return {
+            "self_approval_allowed": {
+                "display": "Can individuals approve their own actions?",
+                **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))
+            },
+            "approve_roles": {
+                "display": "Roles who can approve", "type": "PermissionRoleField", "required": False,
+                "value": None, "field_name": "approve_roles", "full_name": Changes().Conditionals.Approve
+            },
+            "approve_actors": {
+                "display": "People who can approve", "type": "PermissionActorField", "required": False,
+                "value": None, "field_name": "approve_actors", "full_name": Changes().Conditionals.Approve
+            },
+            "reject_roles": {
+                "display": "Roles who can reject", "type": "PermissionRoleField", "required": False,
+                "value": None, "field_name": "reject_roles", "full_name": Changes().Conditionals.Reject
+            },
+            "reject_actors": {
+                "display": "People who can reject", "type": "PermissionActorField", "required": False,
+                "value": None, "field_name": "reject_actors", "full_name": Changes().Conditionals.Reject
+            }
         }
 
     def display_fields(self):
-        return [{ "field_name": "self_approval_allowed", "field_value": self.self_approval_allowed, "hidden": False }]
+        return [{"field_name": "self_approval_allowed", "field_value": self.self_approval_allowed, "hidden": False}]
 
     def condition_status(self):
-        if self.approved == True:
+        if self.approved is True:
             return "approved"
-        if self.approved == False:
+        if self.approved is False:
             return "rejected"
         return "waiting"
 
@@ -196,6 +200,7 @@ class ApprovalCondition(ConditionModel):
 
 
 class VoteCondition(ConditionModel):
+    """Vote Condition class."""
 
     descriptive_name = "Vote Condition"
     verb_name = "vote"
@@ -208,7 +213,7 @@ class VoteCondition(ConditionModel):
     allow_abstain = models.BooleanField(default=True)
     abstains = models.IntegerField(default=0)
     require_majority = models.BooleanField(default=False)
-    
+
     # 'voted' should eventually be a list field or json field or something
     publicize_votes = models.BooleanField(default=False)
     voted = models.CharField(max_length=500, default="[]")
@@ -218,26 +223,31 @@ class VoteCondition(ConditionModel):
     voting_period = models.IntegerField(default=168)
 
     def user_condition_status(self, user):
+        """Checks whether a user has voted already."""
         if self.has_voted(user):
             return False, "has voted"
         return True, "has not voted"
 
     def get_timeout(self):
+        """Get when condition closes, aka the voting deadline."""
         return self.voting_deadline()
 
     def current_results(self):
-        results = { "yeas": self.yeas, "nays": self.nays }
+        """Get the current results of the vote."""
+        results = {"yeas": self.yeas, "nays": self.nays}
         if self.allow_abstain:
-            results.update({ "abstains": self.abstains })
+            results.update({"abstains": self.abstains})
         return results
 
     def has_voted(self, actor):
+        """Returns True if actor has voted, otherwise False."""
         voted = json.loads(self.voted)
         if actor.username in voted:
             return True
         return False
 
     def add_vote(self, vote):
+        """Increments vote depending on vote type."""
         if vote == "yea":
             self.yeas += 1
         elif vote == "nay":
@@ -246,29 +256,35 @@ class VoteCondition(ConditionModel):
             self.abstains += 1
 
     def add_vote_record(self, actor):
+        """Adds vote to record."""
         voted = json.loads(self.voted)
         voted.append(actor.username)
         self.voted = json.dumps(voted)
 
     def voting_time_remaining(self):
+        """Gets time remaining to vote."""
         seconds_passed = (timezone.now() - self.voting_starts).total_seconds()
         hours_passed = seconds_passed / 360
         return self.voting_period - hours_passed
 
     def voting_deadline(self):
+        """Gets deadline of vote given starting point and length of vote."""
         return self.voting_starts + datetime.timedelta(hours=self.voting_period)
 
     def yeas_have_majority(self):
+        """Helper method, returns True if yeas currently have majority."""
         if self.yeas > (self.nays + self.abstains):
             return True
         return False
 
     def yeas_have_plurality(self):
+        """Helper method, returns True if yeas currently have plurality."""
         if self.yeas > self.nays and self.yeas > self.abstains:
             return True
         return False
 
     def current_standing(self):
+        """If voting ended right now, returns what the status would be."""
         if self.require_majority or not self.allow_abstain:
             if self.yeas_have_majority():
                 return "approved"
@@ -279,6 +295,7 @@ class VoteCondition(ConditionModel):
             return "rejected"
 
     def get_voting_period_in_units(self):
+        """Gets configured voting period in units of weeks, days and hours."""
         weeks = int(self.voting_period / 168)
         time_remaining = self.voting_period - (weeks*168)
         days = int(time_remaining / 24)
@@ -286,6 +303,7 @@ class VoteCondition(ConditionModel):
         return weeks, days, hours
 
     def describe_voting_period(self):
+        """Gets human readable description of voting period."""
         weeks, days, hours = self.get_voting_period_in_units()
         time_pieces = []
         if weeks > 0:
@@ -300,43 +318,61 @@ class VoteCondition(ConditionModel):
 
     @classmethod
     def configurable_fields(cls):
+        """Gets fields on condition which may be configured by user."""
         return {
-            "allow_abstain": { "display": "Let people abstain from voting?",
-                **cls.get_form_dict_for_field(cls._meta.get_field("allow_abstain")) },
-            "require_majority": { "display": "Require a majority rather than a plurality to pass?",
-                **cls.get_form_dict_for_field(cls._meta.get_field("require_majority")) },
-            "publicize_votes": { "display": "Publicize peoples' votes?",
-                **cls.get_form_dict_for_field(cls._meta.get_field("publicize_votes")) },
-            "voting_period":  { "display": "How long should the vote go on, in hours?",
-                **cls.get_form_dict_for_field(cls._meta.get_field("voting_period")) },
-            "vote_roles" : { "display": "Roles who can vote", "type": "PermissionRoleField", 
-                "required": False, "value": None, "field_name": "vote_roles", "full_name": Changes().Conditionals.AddVote },
-            "vote_actors": { "display": "People who can vote", "type": "PermissionActorField", 
-                "required": False, "value": None, "field_name": "vote_actors", "full_name": Changes().Conditionals.AddVote },
+            "allow_abstain": {
+                "display": "Let people abstain from voting?",
+                **cls.get_form_dict_for_field(cls._meta.get_field("allow_abstain"))
+            },
+            "require_majority": {
+                "display": "Require a majority rather than a plurality to pass?",
+                **cls.get_form_dict_for_field(cls._meta.get_field("require_majority"))
+            },
+            "publicize_votes": {
+                "display": "Publicize peoples' votes?",
+                **cls.get_form_dict_for_field(cls._meta.get_field("publicize_votes"))
+            },
+            "voting_period": {
+                "display": "How long should the vote go on, in hours?",
+                **cls.get_form_dict_for_field(cls._meta.get_field("voting_period"))
+            },
+            "vote_roles": {
+                "display": "Roles who can vote", "type": "PermissionRoleField",
+                "required": False, "value": None, "field_name": "vote_roles",
+                "full_name": Changes().Conditionals.AddVote
+            },
+            "vote_actors": {
+                "display": "People who can vote", "type": "PermissionActorField",
+                "required": False, "value": None, "field_name": "vote_actors",
+                "full_name": Changes().Conditionals.AddVote
+            },
         }
 
     def display_fields(self):
+        """Gets condition fields in form dict format."""
         individual_votes = self.voted if self.publicize_votes else []
         return [
             # configuration data
-            { "field_name": "allow_abstain", "field_value": self.allow_abstain, "hidden": False },
-            { "field_name": "require_majority", "field_value": self.require_majority, "hidden": False },
-            { "field_name": "publicize_votes", "field_value": self.publicize_votes, "hidden": False },
-            { "field_name": "voting_period", "field_value": self.voting_period, "hidden": False},
+            {"field_name": "allow_abstain", "field_value": self.allow_abstain, "hidden": False},
+            {"field_name": "require_majority", "field_value": self.require_majority, "hidden": False},
+            {"field_name": "publicize_votes", "field_value": self.publicize_votes, "hidden": False},
+            {"field_name": "voting_period", "field_value": self.voting_period, "hidden": False},
             # instance-specific data
-            { "field_name": "current_yeas", "field_value": self.yeas, "hidden": False },
-            { "field_name": "current_nays", "field_value": self.nays, "hidden": False },
-            { "field_name": "current_abstains", "field_value": self.abstains, "hidden": False },
-            { "field_name": "individual_votes", "field_value": individual_votes, "hidden": not self.publicize_votes },
-            { "field_name": "voting_deadline", "field_value": self.voting_deadline(), "hidden": False }
+            {"field_name": "current_yeas", "field_value": self.yeas, "hidden": False},
+            {"field_name": "current_nays", "field_value": self.nays, "hidden": False},
+            {"field_name": "current_abstains", "field_value": self.abstains, "hidden": False},
+            {"field_name": "individual_votes", "field_value": individual_votes, "hidden": not self.publicize_votes},
+            {"field_name": "voting_deadline", "field_value": self.voting_deadline(), "hidden": False}
         ]
 
     def condition_status(self):
+        """Gets status of condition."""
         if self.voting_time_remaining() <= 0:
             return self.current_standing()
         return "waiting"
 
     def display_status(self):
+        """Gets 'plain English' display of status."""
         base_str = f"{self.yeas} yea votes vs {self.nays} nay votes"
         base_str += f" with {self.abstains} abstentions" if self.allow_abstain else ""
         if self.condition_status() == "waiting":
@@ -347,13 +383,15 @@ class VoteCondition(ConditionModel):
         return base_str
 
     def description_for_passing_condition(self, fill_dict=None):
+        """Gets plain English description of what must be done to pass the condition."""
         return utils.description_for_passing_voting_condition(condition=self, fill_dict=None)
 
 
 # Set up signals so that when a condition is updated, the action it's linked to is retried.
-        
+
 @receiver(retry_action_signal)
 def retry_action(sender, instance, created, **kwargs):
+    """Signal handler which retries the corresponding action or action container when condition has been updated."""
     if not created:
         client = Client()
         action = client.Action.get_action_given_pk(pk=instance.action)

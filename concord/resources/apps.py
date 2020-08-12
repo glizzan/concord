@@ -1,9 +1,12 @@
+"""AppConfig for resources."""
+
 import importlib
 
 from django.apps import AppConfig
 
 
 class ResourcesConfig(AppConfig):
+    """AppConfig for resources."""
     name = 'concord.resources'
     verbose_name = "Resources"
 

@@ -1,6 +1,14 @@
-from concord.actions.state_changes import BaseStateChange
+"""Resource State Changes"""
 
-from concord.resources.models import Item, Comment
+import logging
+
+from django.core.exceptions import ObjectDoesNotExist
+
+from concord.actions.state_changes import BaseStateChange
+from concord.resources.models import AbstractResource, AbstractItem, Resource, Item, Comment
+
+
+logger = logging.getLogger(__name__)
 
 
 #############################
@@ -9,6 +17,7 @@ from concord.resources.models import Item, Comment
 
 
 class AddCommentStateChange(BaseStateChange):
+    """State Change to add a comment."""
     description = "Add comment"
 
     def __init__(self, text):
@@ -21,14 +30,14 @@ class AddCommentStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return "add comment"  
+        return "add comment"
 
     def description_past_tense(self):
         return "added comment"
 
     def validate(self, actor, target):
         """Checks that text is a string of at least one character long."""
-        if self.text and type(self.text) == str and len(self.text) > 0:
+        if self.text and isinstance(self.text, str) and len(self.text) > 0:
             return True
         self.set_validation_error(message="Comment text must be a string at least one character long.")
         return False
@@ -38,12 +47,13 @@ class AddCommentStateChange(BaseStateChange):
         comment = Comment(text=self.text, commentor=actor)
         comment.commented_object = target
         comment.owner = target.get_owner()
-        
+
         comment.save()
         return comment
 
 
 class EditCommentStateChange(BaseStateChange):
+    """State Change to edit a comment."""
     description = "Edit comment"
 
     def __init__(self, pk, text):
@@ -57,14 +67,14 @@ class EditCommentStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return f"edit comment {self.pk}"  
+        return f"edit comment {self.pk}"
 
     def description_past_tense(self):
-        return f"edited comment {self.pk}" 
+        return f"edited comment {self.pk}"
 
     def validate(self, actor, target):
         """Checks that text is a string of at least one character long."""
-        if self.text and type(self.text) == str and len(self.text) > 0:
+        if self.text and isinstance(self.text, str) and len(self.text) > 0:
             return True
         self.set_validation_error(message="Comment text must be a string at least one character long.")
         return False
@@ -77,6 +87,7 @@ class EditCommentStateChange(BaseStateChange):
 
 
 class DeleteCommentStateChange(BaseStateChange):
+    """State Change to delete a comment."""
     description = "Delete comment"
 
     def __init__(self, pk):
@@ -108,6 +119,7 @@ class DeleteCommentStateChange(BaseStateChange):
 #####################################
 
 class ChangeResourceNameStateChange(BaseStateChange):
+    """State Change to change a resource name."""
     description = "Change name of resource"
     preposition = "for"
 
@@ -116,14 +128,13 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
-        return [AbstractResource, AbstractItem, Resource, Item]    
+        return [AbstractResource, AbstractItem, Resource, Item]
 
     def description_present_tense(self):
-        return "change name of resource to %s" % (self.new_name)  
+        return f"change name of resource to {self.new_name}"
 
     def description_past_tense(self):
-        return "changed name of resource to %s" % (self.new_name) 
+        return f"changed name of resource to {self.new_name}"
 
     def validate(self, actor, target):
         """
@@ -138,6 +149,7 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
 
 class AddItemStateChange(BaseStateChange):
+    """State Change to add item to a resource."""
     description = "Add item to resource"
 
     def __init__(self, item_name):
@@ -147,14 +159,13 @@ class AddItemStateChange(BaseStateChange):
     def get_settable_classes(cls):
         """An AddItem permission can be set on an item, a resource, or on the community that owns the
         item or resource."""
-        from concord.resources.models import Resource, Item
         return [Resource, Item] + cls.get_community_models()
 
     def description_present_tense(self):
-        return "add item %s" % (self.item_name)  
+        return f"add item {self.item_name}"
 
     def description_past_tense(self):
-        return "added item %s" % (self.item_name)
+        return f"added item {self.item_name}"
 
     def validate(self, actor, target):
         """
@@ -165,12 +176,12 @@ class AddItemStateChange(BaseStateChange):
         return False
 
     def implement(self, actor, target):
-        item = Item.objects.create(name=self.item_name, resource=target, 
-                owner=actor.default_community)
+        item = Item.objects.create(name=self.item_name, resource=target, owner=actor.default_community)
         return item
 
 
 class RemoveItemStateChange(BaseStateChange):
+    """State Change to remove item from a resource."""
     description = "Remove item from resource"
     preposition = "from"
 
@@ -179,14 +190,13 @@ class RemoveItemStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        from concord.resources.models import AbstractResource, AbstractItem, Resource, Item
-        return [AbstractResource, AbstractItem, Resource, Item]    
+        return [AbstractResource, AbstractItem, Resource, Item]
 
     def description_present_tense(self):
-        return "remove item with pk %s" % (self.item_pk)  
+        return f"remove item with pk {self.item_pk}"
 
     def description_past_tense(self):
-        return "removed item with pk %s" % (self.item_pk)
+        return f"removed item with pk {self.item_pk}"
 
     def validate(self, actor, target):
         """
@@ -201,6 +211,6 @@ class RemoveItemStateChange(BaseStateChange):
             item = Item.objects.get(pk=self.item_pk)
             item.delete()
             return True
-        except Exception as exception:
-            print(exception)
+        except ObjectDoesNotExist as exception:
+            logger.warning(exception)
             return False

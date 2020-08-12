@@ -1,9 +1,12 @@
+"""AppConfig for Community app."""
+
 import importlib
 
 from django.apps import AppConfig
 
 
 class CommunitiesConfig(AppConfig):
+    """AppConfig for Community app."""
     name = 'concord.communities'
     verbose_name = "Communities"
 

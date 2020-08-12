@@ -1,6 +1,11 @@
+"""Helper methods to serialize objects."""
+
 import json
 from django.utils.module_loading import import_string
 from django.contrib.contenttypes.models import ContentType
+
+from concord.actions.utils import MockAction
+from django.contrib.auth.models import User
 
 
 def load_json_as_needed(func):
@@ -23,15 +28,13 @@ def serialize_state_change(state_change_object, dump_to_json=True):
 
 @load_json_as_needed
 def deserialize_state_change(state_change_dict):
-    """
-    Finds change object using change_type and instantiates with change_data.
-    """
+    """Finds change object using change_type and instantiates with change_data."""
     change_type = state_change_dict["change_type"]
     change_data = state_change_dict["change_data"]
-    changeClass = import_string(change_type)
+    change_class = import_string(change_type)
     if type(change_data) != dict:
         change_data = json.loads(change_data)
-    return changeClass(**change_data)
+    return change_class(**change_data)
 
 
 def serialize_resolution(resolution, dump_to_json=True):
@@ -77,8 +80,8 @@ def deserialize_mock_action_target(mock_action_target_data):
     """Deserialize mock action targets"""
     if mock_action_target_data is not None:
         if "pk" in mock_action_target_data:
-            ct = ContentType.objects.get(pk=mock_action_target_data["content_type_pk"])
-            return ct.get_object_for_this_type(pk=mock_action_target_data["pk"])
+            content_type = ContentType.objects.get(pk=mock_action_target_data["content_type_pk"])
+            return content_type.get_object_for_this_type(pk=mock_action_target_data["pk"])
     return mock_action_target_data
 
 
@@ -97,8 +100,6 @@ def serialize_mock_action(mock_action, dump_to_json=True):
 @load_json_as_needed
 def deserialize_mock_action(mock_action_data):
     """Deserialize mock action"""
-    from concord.actions.utils import MockAction
-    from django.contrib.auth.models import User
     change = deserialize_state_change(mock_action_data["change"])
     actor = User.objects.get(pk=mock_action_data["actor"])
     target = deserialize_mock_action_target(mock_action_data["target"])

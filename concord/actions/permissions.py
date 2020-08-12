@@ -32,8 +32,8 @@ def check_conditional(action, community_or_permission, leadership_type=None):
     client = Client()
     source_id = f"{leadership_type}_{str(community_or_permission.pk)}" if leadership_type else \
                 f"perm_{str(community_or_permission.pk)}"
-    condition_item = client.Conditional.get_condition_item_given_action_and_source(action_pk=action.pk,
-                                                                                  source_id=source_id)
+    condition_item = client.Conditional.get_condition_item_given_action_and_source(
+        action_pk=action.pk, source_id=source_id)
 
     return {
         "condition_item": condition_item,
@@ -47,7 +47,7 @@ def foundational_permission_pipeline(action):
 
     When an action is passed through the foundational pipeline, it is not passed through the governing or specific
     permission pipeline. So, if we don't have the authority, we reject the action."""
-    
+
     client = Client()
     community = client.Community.get_owner(owned_object=action.target)
     client.Community.set_target(target=community)
@@ -76,7 +76,6 @@ def check_specific_permission(permission, action):
         Str or the role that the actor matched to, if it exists, or None
         Dict of the condition data from the condition set on the permission, or None
     """
-
     if not permission.is_active:
         return False, None, None
 
@@ -85,7 +84,8 @@ def check_specific_permission(permission, action):
 
     client = Client()
     client.PermissionResource.set_target(target=action.target)
-    actor_satisfies, matched_role = client.PermissionResource.actor_satisfies_permission(actor=action.actor, permission=permission)
+    actor_satisfies, matched_role = client.PermissionResource.actor_satisfies_permission(
+        actor=action.actor, permission=permission)
     if not actor_satisfies:
         return False, None, None
 
@@ -125,7 +125,8 @@ def specific_permission_pipeline(action):
     # If we're still here, that means nothing matched without a condition, so now we look for nested permissions
     for nested_object in action.target.get_nested_objects():
         client.PermissionResource.set_target(target=nested_object)
-        for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
+        for permission in client.PermissionResource.get_specific_permissions(
+                                                change_type=action.change.get_change_type()):
             passes, matched_role, condition_data = check_specific_permission(permission, action)
             action.resolution.process_resolution("specific", permission, passes, matched_role, condition_data)
             if passes:

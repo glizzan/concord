@@ -102,7 +102,7 @@ class PermissionResourceModelTests(DataTestCase):
         action, permission = self.client.PermissionResource.add_permission(
             permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.pinoe.pk])
-        items = self.client.PermissionResource.get_permissions_on_object(object=resource)
+        items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
 
     def test_remove_permission_from_resource(self):
@@ -114,10 +114,10 @@ class PermissionResourceModelTests(DataTestCase):
         action, permission = self.client.PermissionResource.add_permission(
             permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.pinoe.pk])
-        items = self.client.PermissionResource.get_permissions_on_object(object=resource)
+        items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
         self.client.PermissionResource.remove_permission(item_pk=permission.pk)
-        items = self.client.PermissionResource.get_permissions_on_object(object=resource)
+        items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(list(items), [])
 
 
@@ -141,7 +141,7 @@ class PermissionSystemTest(DataTestCase):
         action, permission = self.client.PermissionResource.add_permission(
             permission_type=Changes().Resources.AddItem,
             permission_actors=[self.users.rose.pk])
-        items = self.client.PermissionResource.get_permissions_on_object(object=resource)
+        items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(), 
             'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
 
@@ -1716,27 +1716,27 @@ class PermissionedReadTest(DataTestCase):
             permission_roles=["forwards"], permission_configuration={"fields_to_include": ["name", "id"]})
 
         # They try to get other fields, get error
-        action, result = self.tobinClient.Resource.get_target_data(fields_to_include=["owner"])
+        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["owner"])
         self.assertEquals(action.status, "rejected")
         self.assertTrue("Cannot view fields owner" in action.resolution.log)
         
         # They try to get the right field, success
-        action, result = self.tobinClient.Resource.get_target_data(fields_to_include=["name"])
+        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["name"])
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, {'name': 'Go USWNT!'})
 
         # They try to get two fields at once, success
-        action, result = self.tobinClient.Resource.get_target_data(fields_to_include=["name", "id"])
+        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["name", "id"])
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, {'name': 'Go USWNT!', "id": 1})
 
         # They try to get one allowed field and one unallowed field, error
-        action, result = self.tobinClient.Resource.get_target_data(fields_to_include=["name", "owner"])
+        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["name", "owner"])
         self.assertEquals(action.status, "rejected")
         self.assertTrue("Cannot view fields owner" in action.resolution.log)
 
         # They try to get a nonexistent field, error
-        result = self.tobinClient.Resource.get_target_data(fields_to_include=["potato"])
+        result = self.tobinClient.Community.get_target_data(fields_to_include=["potato"])
         self.assertTrue(result, "Attempting to view field(s) potato that are not on target Resource object (1)")
 
     def test_multiple_readpermissions(self):

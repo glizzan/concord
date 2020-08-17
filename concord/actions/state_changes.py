@@ -1,6 +1,7 @@
 """Defines state changes for concord.actions.models, as well as the BaseStateChange object from which all
 state change objects inherit."""
 
+from typing import List
 import json, warnings
 
 from django.core.exceptions import ValidationError
@@ -8,15 +9,16 @@ from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.models import TemplateModel
 from concord.actions.utils import get_all_permissioned_models, get_all_community_models
+from concord.actions.models import PermissionedModel
 
 
 class BaseStateChange(object):
     """The BaseStateChange object is the object which all other state change objects inherit from. It has a
     variety of methods which must be implemented by those that inherit it."""
 
-    allowable_targets = []
-    settable_classes = []
-    instantiated_fields = []
+    allowable_targets: List[PermissionedModel] = []
+    settable_classes: List[PermissionedModel] = []
+    instantiated_fields: List[str] = []
     is_foundational = False
 
     @classmethod

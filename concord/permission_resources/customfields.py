@@ -1,5 +1,6 @@
 """Custom Fields used by Permission Resource models."""
 
+from typing import List
 import json, logging
 
 from django.db import models
@@ -20,8 +21,8 @@ class ActorList(object):
     PKs, so we don't have to constantly query the DB.  If pks and instances are not
     identical, the pk_list is assumed authoritative."""
 
-    pk_list = []
-    instance_list = []
+    pk_list: List[int] = []
+    instance_list: List[User] = []
 
     def __init__(self, actor_list=None):
         """If an actor list is passed in, checks type of object in list. If the objects
@@ -182,7 +183,7 @@ class ActorListField(models.Field):
 class RoleList(object):
     """Helper object to manage roles set in permission."""
 
-    role_list = []
+    role_list: List[str] = []
 
     def __init__(self, role_list=None):
         """Accepts a variety of formats, saves to role_list as a list of RolePair namedtuples."""

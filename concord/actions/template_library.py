@@ -73,7 +73,7 @@ def create_anyone_can_request_template():
     }]
     action_2 = client.PermissionResource.add_condition_to_permission(
         permission_pk="{{previous.0.result.pk}}", condition_type="approvalcondition", permission_data=permission_data
-        )
+    )
     action_2.target = "{{previous.0.result}}"
 
     # Step 3: prepare supplied fields (see TemplateModel's get_supplied_form_fields method for syntax guidance)

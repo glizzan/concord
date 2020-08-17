@@ -46,8 +46,8 @@ class BaseStateChange(object):
     def get_configurable_fields(cls):
         """Gets the fields of a change object which may be configured when used in a Permission model."""
         if hasattr(cls, 'check_configuration'):
-            warnings.warn("You have added check_configuration method to state change without specifying " +
-                          "any configurable fields.")
+            warnings.warn("You have added check_configuration method to state change without specifying "
+                          + "any configurable fields.")
         return {}
 
     @classmethod

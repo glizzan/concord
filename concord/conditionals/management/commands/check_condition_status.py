@@ -1,5 +1,5 @@
 from django.utils import timezone
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 import django.dispatch
 
 from concord.actions.utils import get_all_conditions
@@ -9,8 +9,7 @@ retry_action_signal = django.dispatch.Signal(providing_args=["instance"])
 
 
 class Command(BaseCommand):
-    help = 'Checks conditions to see if their status has changed and, if status has changed, re-runs associated actions.'
-
+    help = 'Checks conditions to see if their status has changed and, if it has, re-runs associated actions.'
 
     def handle(self, *args, **options):
 
@@ -20,6 +19,6 @@ class Command(BaseCommand):
 
                 if instance.has_timeout:
 
-                    if timezone.now() > instance.get_timeout():  
+                    if timezone.now() > instance.get_timeout():
 
-                        retry_action_signal.send(sender=condition_class, instance=instance, created=False) 
+                        retry_action_signal.send(sender=condition_class, instance=instance, created=False)

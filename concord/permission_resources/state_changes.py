@@ -71,8 +71,8 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
         # check that target is a valid class for the permission to be set on
         if target.__class__ not in permission.get_settable_classes():
             settable_classes_str = ", ".join([str(option) for option in permission.get_settable_classes()])
-            self.set_validation_error(f"This kind of permission cannot be set on target {target} of class " +
-                                      f"{target.__class__}, must be {settable_classes_str}")
+            self.set_validation_error(f"This kind of permission cannot be set on target {target} of class "
+                                      + f"{target.__class__}, must be {settable_classes_str}")
             return False
 
         # check configuration
@@ -487,8 +487,8 @@ class AddPermissionConditionStateChange(PermissionResourceBaseStateChange):
         try:
             int(self.permission_pk)
         except TypeError:
-            self.set_validation_error(message="permission_pk must be value that can be an int, " +
-                                      f"not {self.permission_pk}")
+            self.set_validation_error(message="permission_pk must be value that can be an int, "
+                                      + f"not {self.permission_pk}")
             return False
 
         if not self.condition_type:

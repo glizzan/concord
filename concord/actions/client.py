@@ -22,7 +22,7 @@ class BaseClient(object):
 
     Args:
         actor: User Model
-            The User who the client is acting on behalf of. Optional, but required for many 
+            The User who the client is acting on behalf of. Optional, but required for many
             Client methods.
         target: PermissionedModel Model
             The target that the change will be implemented on. Optional, but required for many
@@ -109,8 +109,8 @@ class BaseClient(object):
                                            change=change)
             return action.take_action()
         else:
-            logging.info(f"Invalid action by {self.actor} on target {self.target} with change type {change}: " +
-                         f"{change.validation_error.message}")
+            logging.info(f"Invalid action by {self.actor} on target {self.target} with change type {change}: "
+                         + f"{change.validation_error.message}")
             InvalidAction = namedtuple('InvalidAction', ['error_message', 'pk'])
             return InvalidAction(error_message=change.validation_error.message, pk="Invalid Action"), None
 
@@ -167,7 +167,7 @@ class ActionClient(BaseClient):
 
     Args:
         actor: User Model
-            The User who the client is acting on behalf of. Optional, but required for many 
+            The User who the client is acting on behalf of. Optional, but required for many
             Client methods.
         target: PermissionedModel Model
             The target that the change will be implemented on. Optional, but required for many
@@ -276,7 +276,7 @@ class TemplateClient(BaseClient):
 
     Args:
         actor: User Model
-            The User who the client is acting on behalf of. Optional, but required for many 
+            The User who the client is acting on behalf of. Optional, but required for many
             Client methods.
         target: PermissionedModel Model
             The target that the change will be implemented on. Optional, but required for many

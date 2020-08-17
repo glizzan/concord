@@ -1,5 +1,6 @@
 """Defines customfields used in Community."""
 
+from typing import List, Dict
 import json, logging
 
 from django.db import models
@@ -16,10 +17,10 @@ class RoleHandler(object):
 
     A person cannot be added as owner, governor or custom role unless they're already a member."""
 
-    members = []
-    owners = {}
-    governors = {}
-    custom_roles = {}
+    members: List[int] = []
+    owners: Dict = {}
+    governors: Dict = {}
+    custom_roles: Dict = {}
     protected_roles = ["owners", "governors", "members"]
 
     def __str__(self):

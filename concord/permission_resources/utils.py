@@ -35,7 +35,7 @@ def check_configuration(action, permission):
     # If configuration exists, instantiate the action's change type with its
     # change data.
     change_object = deserialize_state_change({
-        "change_type": action.change.get_change_type(), "change_data":  action.change.get_change_data()})
+        "change_type": action.change.get_change_type(), "change_data": action.change.get_change_data()})
 
     # Then call check_configuration on the state_change, passing in the permission
     # configuration data, and return the result.

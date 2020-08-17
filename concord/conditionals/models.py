@@ -296,10 +296,10 @@ class VoteCondition(ConditionModel):
 
     def get_voting_period_in_units(self):
         """Gets configured voting period in units of weeks, days and hours."""
-        weeks = int(self.voting_period / 168)
-        time_remaining = self.voting_period - (weeks*168)
+        weeks = int(int(self.voting_period) / 168)
+        time_remaining = self.voting_period - (weeks * 168)
         days = int(time_remaining / 24)
-        hours = time_remaining - (days*24)
+        hours = time_remaining - (days * 24)
         return weeks, days, hours
 
     def describe_voting_period(self):
@@ -377,7 +377,7 @@ class VoteCondition(ConditionModel):
         base_str += f" with {self.abstains} abstentions" if self.allow_abstain else ""
         if self.condition_status() == "waiting":
             base_str += f" and {self.voting_time_remaining()} time remaining. If the vote ended right now, " + \
-                           f"the result would be: {self.current_standing()}."
+                        f"the result would be: {self.current_standing()}."
         else:
             base_str += f". The vote ended with result {self.condition_status()}."
         return base_str

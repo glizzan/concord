@@ -126,7 +126,7 @@ def specific_permission_pipeline(action):
     for nested_object in action.target.get_nested_objects():
         client.PermissionResource.set_target(target=nested_object)
         for permission in client.PermissionResource.get_specific_permissions(
-                                                change_type=action.change.get_change_type()):
+                change_type=action.change.get_change_type()):
             passes, matched_role, condition_data = check_specific_permission(permission, action)
             action.resolution.process_resolution("specific", permission, passes, matched_role, condition_data)
             if passes:

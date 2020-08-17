@@ -210,7 +210,7 @@ class PermissionResourceClient(BaseClient):
         for field_name, field_value in configuration_dict.items():
 
             if (field_name in old_configuration and old_configuration[field_name] != field_value) or \
-                            (field_name not in old_configuration and field_value not in [None, '', []]):
+                    (field_name not in old_configuration and field_value not in [None, '', []]):
                 action, result = self.change_configuration_of_permission(
                     configurable_field_name=field_name, configurable_field_value=field_value,
                     permission_pk=permission.pk

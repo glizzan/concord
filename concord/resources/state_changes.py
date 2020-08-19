@@ -5,7 +5,7 @@ import logging
 from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.state_changes import BaseStateChange
-from concord.resources.models import AbstractResource, AbstractItem, Resource, Item, Comment
+from concord.resources.models import Resource, Item, Comment
 
 
 logger = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [AbstractResource, AbstractItem, Resource, Item]
+        return [Resource, Item]
 
     def description_present_tense(self):
         return f"change name of resource to {self.new_name}"
@@ -190,7 +190,7 @@ class RemoveItemStateChange(BaseStateChange):
 
     @classmethod
     def get_settable_classes(cls):
-        return [AbstractResource, AbstractItem, Resource, Item]
+        return [Resource, Item]
 
     def description_present_tense(self):
         return f"remove item with pk {self.item_pk}"

@@ -36,13 +36,16 @@ class CommentCatcher(PermissionedModel):
         return f"Comment catcher for action {self.action}"
 
 
-class AbstractResource(PermissionedModel):
-    """Abstract Resource model contains basic functionality that developers can inherit."""
+class Resource(PermissionedModel):
+    """Simple resource model.
+
+    Will eventually be removed when a more usable resource is added."""
 
     name = models.CharField(max_length=200)
 
-    class Meta:
-        abstract = True
+    def get_nested_objects(self):
+        """Get objects that Resource is nested on, in this case the owner."""
+        return [self.get_owner()]
 
     # Basics
 
@@ -60,28 +63,14 @@ class AbstractResource(PermissionedModel):
         return result
 
 
-class AbstractItem(PermissionedModel):
-    """Abstract item model that developers can inherit from."""
+class Item(PermissionedModel):
+    """Simple item model.
+
+    Will eventually be removed when more usable resource is added."""
 
     name = models.CharField(max_length=200)
-
-    class Meta:
-        abstract = True
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE)
 
     def get_name(self):
-        """Get name of abstract item."""
+        """Get name of item."""
         return self.name
-
-
-class Resource(AbstractResource):
-    """Non-abstract resource model."""
-
-    def get_nested_objects(self):
-        """Get objects that Resource is nested on, in this case the owner."""
-        return [self.get_owner()]
-
-
-class Item(AbstractItem):
-    """Non-abstract item model."""
-
-    resource = models.ForeignKey(Resource, on_delete=models.CASCADE)

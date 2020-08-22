@@ -297,7 +297,7 @@ class VoteCondition(ConditionModel):
     def get_voting_period_in_units(self):
         """Gets configured voting period in units of weeks, days and hours."""
         weeks = int(int(self.voting_period) / 168)
-        time_remaining = self.voting_period - (weeks * 168)
+        time_remaining = int(self.voting_period) - (weeks * 168)
         days = int(time_remaining / 24)
         hours = time_remaining - (days * 24)
         return weeks, days, hours
@@ -307,11 +307,11 @@ class VoteCondition(ConditionModel):
         weeks, days, hours = self.get_voting_period_in_units()
         time_pieces = []
         if weeks > 0:
-            time_pieces.append("%d weeks" % weeks if weeks > 1 else "1 week")
+            time_pieces.append(f"{weeks} weeks" if weeks > 1 else "1 week")
         if days > 0:
-            time_pieces.append("%d days" % days if days > 1 else "1 day")
+            time_pieces.append(f"{days} days" if days > 1 else "1 day")
         if hours > 0:
-            time_pieces.append("%d hours" % hours if hours > 1 else "1 hour")
+            time_pieces.append(f"{hours} hours" if hours > 1 else "1 hour")
         return ", ".join(time_pieces)
 
     # Required methods

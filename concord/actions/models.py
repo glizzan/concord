@@ -315,9 +315,10 @@ class ActionContainer(models.Model):
         actions = []
 
         if self.status == "implemented":
-            for action_dict in self.context.actions_and_results:
-                action, result = self.context.get_action_and_result_data_from_cache(action_dict)
+            for index, action_dict in enumerate(self.context.actions_and_results):
+                action, result = self.context.get_action_and_result_for_position(index)
                 conditions = self.context.get_condition_dicts_for_action(action_dict["unique_id"])
+                print(conditions)
                 actions.append({"action": action, "result": result, "conditions": conditions, "mock_action": None})
                 logging.debug(f"Getting implemented actions: {actions}")
         else:

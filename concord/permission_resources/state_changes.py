@@ -57,11 +57,11 @@ class AddPermissionStateChange(PermissionResourceBaseStateChange):
 
     def description_present_tense(self):
         config_str = f" (configuration: {str(self.permission_configuration)})" if self.permission_configuration else ""
-        return f"add permission {get_verb_given_permission_type(self.permission_type)}" + config_str
+        return f"add permission '{get_verb_given_permission_type(self.permission_type)}" + config_str + "'"
 
     def description_past_tense(self):
         config_str = f" (configuration: {str(self.permission_configuration)})" if self.permission_configuration else ""
-        return f"added permission {get_verb_given_permission_type(self.permission_type)}" + config_str
+        return f"added permission '{get_verb_given_permission_type(self.permission_type)}" + config_str + "'"
 
     def validate(self, actor, target):
         """ To validate a permission being added, we need to instantiate the permission and check its configuration

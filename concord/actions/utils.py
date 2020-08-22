@@ -249,21 +249,21 @@ def replacer(key, value, context):
 
         if tokens[0] == "supplied_fields":
             # Always two tokens long, with format supplied_fields.field_name.
-            logging.debug(f"Supplied Fields: Replacing {key} {value} with {context.supplied_fields[tokens[1]]}")
-            return context.supplied_fields[tokens[1]]
+            logging.debug(f"Supplied Fields: Replacing {key} {value} with {context['supplied_fields'][tokens[1]]}")
+            return context["supplied_fields"][tokens[1]]
 
         if tokens[0] == "trigger_action":
             # Variable length - can be just the trigger action itself, an immediate attribute, or the
             # attribute of an attribute, for example trigger_action.change.role_name.
 
             if len(tokens) == 1:
-                new_value = context.trigger_action
+                new_value = context["trigger_action"]
 
             if len(tokens) == 2:
-                new_value = getattr(context.trigger_action, tokens[1])
+                new_value = getattr(context["trigger_action"], tokens[1])
 
             if len(tokens) == 3:
-                intermediate = getattr(context.trigger_action, tokens[1])
+                intermediate = getattr(context["trigger_action"], tokens[1])
                 new_value = getattr(intermediate, tokens[2])
 
             logging.debug(f"trigger_action: Replacing {key} {value} with {new_value}")
@@ -274,8 +274,8 @@ def replacer(key, value, context):
             # previous.0.action, or previous.position.action_or_result.attribute, for example previous.1.result.pk
 
             position = int(tokens[1])
-            action, result = context.get_action_and_result_for_position(position)
-            source = action if tokens[2] == "action" else result
+            action_and_result_dict = context["actions_and_results"][position]
+            source = action_and_result_dict["action"] if tokens[2] == "action" else action_and_result_dict["result"]
             new_value = getattr(source, tokens[3]) if len(tokens) == 4 else source
 
             logging.debug(f"previous: Replacing {key} {value} with {new_value}")

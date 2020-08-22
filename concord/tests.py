@@ -1522,114 +1522,6 @@ class MockActionTest(DataTestCase):
         self.assertTrue("waiting on condition(s) for governing and specific" in log[1]["log"])
 
 
-class ActionContainerTest(DataTestCase):
-
-    def setUp(self):
-
-        self.client = Client(actor=self.users.pinoe)
-
-        # Create a Community and Clients
-        self.instance = self.client.Community.create_community(name="USWNT")
-        self.client.update_target_on_all(self.instance)
-
-        self.mock_action_list = []
-
-        self.client.Community.mode = "mock"
-
-        # Action 1: Add some members
-        self.mock_action_list.append(self.client.Community.add_members([self.users.rose.pk, self.users.tobin.pk,
-            self.users.christen.pk, self.users.aubrey.pk]))
-
-        # Action 2: Add a role
-        self.mock_action_list.append(self.client.Community.add_role(role_name="forwards"))
-
-        # Action 3: Add another role
-        self.mock_action_list.append(self.client.Community.add_role(role_name="spirit players"))
-
-        # Action 4: Add people to first role
-        self.mock_action_list.append(self.client.Community.add_people_to_role(role_name="forwards", 
-            people_to_add=[self.users.christen.pk, self.users.tobin.pk]))
-
-        # Action 5: Add people to second role
-        self.mock_action_list.append(self.client.Community.add_people_to_role(role_name="spirit players", 
-            people_to_add=[self.users.rose.pk, self.users.aubrey.pk]))
-
-        self.client.Community.mode = "default"
-
-        # create a fake trigger action
-        action, result = self.client.Community.change_name(new_name="USWNT")
-        self.mock_trigger_action = action
-
-    def test_create_and_apply_container(self):
-
-        actions = Action.objects.all()   # before container is created, only one aciton in DB (the fake trigger action)
-        self.assertEquals(len(actions), 1)
-        
-        container, log = self.client.Action.create_action_container(action_list=self.mock_action_list,
-            trigger_action=self.mock_trigger_action)
-
-        actions = Action.objects.all()   # refresh
-        self.assertEquals(len(actions), 6)
-        self.assertEquals(container.status, "implemented")
-        self.assertEquals(actions[1].container, container.pk)
-
-        self.instance.refresh_from_db()
-        self.assertCountEqual(self.instance.roles.get_custom_roles(), {'forwards': [self.users.christen.pk, self.users.tobin.pk], 
-            'spirit players': [self.users.rose.pk, self.users.aubrey.pk]})
-
-    def test_container_rejects_when_an_action_is_rejected(self):
-        
-        # remove pinoe as governor so she no longer has permission to take the mock actions
-        action, result = self.client.Community.remove_governor(governor_pk=self.users.pinoe.pk)
-
-        # container is rejected
-        container, log = self.client.Action.create_action_container(action_list=self.mock_action_list,
-            trigger_action=self.mock_trigger_action)
-        self.assertEquals(container.status, "rejected")
-
-        # changes are not made
-        self.assertEquals(self.instance.roles.get_custom_roles(), {})
-
-    def test_container_creates_conditions_for_actions(self):
-
-        # swap governors so Pinoe doesn't just automatically pass everything
-        self.client.Community.add_members([self.users.crystal.pk])
-        self.client.Community.add_governor(governor_pk=self.users.crystal.pk)
-        action, result = self.client.Community.remove_governor(governor_pk=self.users.pinoe.pk)
-        self.client.PermissionResource.set_actor(actor=self.users.crystal)
-
-        # new governor, Crystal, adds specific permissions for Pinoe to take the five actions
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Communities.AddMembers,
-            permission_actors=[self.users.pinoe.pk])
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Communities.AddRole,
-            permission_actors=[self.users.pinoe.pk])
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Communities.AddPeopleToRole,
-            permission_actors=[self.users.pinoe.pk])
-        # add condition to one of the permissions
-        permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.pinoe.pk] }]
-        action, result = self.client.PermissionResource.add_condition_to_permission(permission_pk=permission.pk, 
-            condition_type="approvalcondition", condition_data={"self_approval_allowed": True}, 
-            permission_data=permission_data)
-        
-        # now apply container/template containing Pinoe's actions
-        container, log = self.client.Action.create_action_container(action_list=self.mock_action_list,
-            trigger_action=self.mock_trigger_action)
-        self.assertEquals(container.status, "waiting")
-
-        # crystal gets conditions from container and approves them
-        crystalClient = Client(actor=self.users.crystal)
-        for condition in container.context.get_conditions():
-            crystalClient.ApprovalCondition.set_target(target=condition)
-            crystalClient.ApprovalCondition.approve()
-
-        # retry Pinoe's actions
-        container, log = self.client.Action.retry_action_container(container_pk=container.pk)
-        self.assertEquals(container.status, "implemented")
-        self.instance.refresh_from_db()
-        self.assertCountEqual(self.instance.roles.get_custom_roles(), {'forwards': [self.users.christen.pk, self.users.tobin.pk], 
-            'spirit players': [self.users.rose.pk, self.users.aubrey.pk]})        
-
-
 class TemplateTest(DataTestCase):
 
     def setUp(self):
@@ -1659,9 +1551,16 @@ class TemplateTest(DataTestCase):
         supplied_fields = { "addmembers_permission_roles": ["forwards"], 
             "addmembers_permission_actors": [] }
         template_model = template_library.create_invite_only_template()
-        action, container = self.client.Template.apply_template(template_model_pk=template_model.pk,
+        action, actions_and_results = self.client.Template.apply_template(template_model_pk=template_model.pk,
             supplied_fields=supplied_fields)
-        self.assertEquals(container.status, "implemented")
+        self.assertEquals(action.status, "implemented")
+        self.assertEquals(actions_and_results[0]["result"].__class__.__name__, "PermissionsItem")
+        self.assertEquals(action.resolution.template_info, 
+            {'actions': ["add permission 'add members to community' to USWNT"], 
+             'supplied_fields': {'has_data': True, 'fields': ["What roles can invite new members? ['forwards']", 
+                                                              'What actors can invite new members? []']},
+             'foundational': 'None of the actions are foundational, so they do not necessarily require owner ' + 
+             'approval to pass.'})
 
         # now Tobin can add members
         action, result = self.client.Community.add_members([self.users.christen.pk])

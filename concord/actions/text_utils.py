@@ -217,6 +217,53 @@ def action_to_text(action, with_target=True):
         return f"{action.actor.username} asked to {action.change.description_present_tense()}" + target_string
 
 
+def supplied_fields_to_text(supplied_field_data, supplied_field_options):
+    """Creates an English description of supplied fields."""
+
+    fields = []
+    for key, value in supplied_field_options.items():
+        prompt = supplied_field_options[key][1]["label"]
+        answer = supplied_field_data[key] if supplied_field_data else ""
+        fields.append(f"{prompt} {answer}")
+
+    return {"has_data": bool(supplied_field_data), "fields": fields}
+
+
+def foundational_actions_to_text(actions):
+    """Creates a string list of foundational actions"""
+    foundational_actions = [action for action in actions if action.change.is_foundational]
+    if foundational_actions:
+        action_string = "Please note that the following actions are foundational, and require owner approval " + \
+                        f"to pass: {', '.join([action.change.description for action in foundational_actions])}"
+    else:
+        action_string = "None of the actions are foundational, so they do not necessarily require owner " + \
+                        "approval to pass."
+    return action_string
+
+
+def mock_action_to_text(action, trigger_action=None):
+    """Creates a text description of a mock action, used primarily by template models to describe what they
+    do.  Also handles trigger_action and supplied_fields being passed in, to fully describe an apply_template
+    action being considered during a condition or reviewed afterwards."""
+
+    if trigger_action:
+        trigger_action_target_str = trigger_action.target.get_name()
+    else:
+        trigger_action_target_str = "the target of the action that triggered the template"
+
+    replace_options = {
+        "{{trigger_action.target}}": trigger_action_target_str
+    }
+
+    if isinstance(action.target, str):
+        new_name = replace_options.get(action.target, None)
+        target_name = new_name if new_name else action.target
+    else:
+        target_name = action.target.get_name()
+
+    return f"{action.change.description_present_tense()} {action.change.get_preposition()} {target_name}"
+
+
 def permission_change_to_text(permission):
     """Gets the text description of the change object on a permission."""
 

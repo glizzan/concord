@@ -8,9 +8,8 @@ import logging
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 
-from concord.actions.models import Action, ActionContainer, TemplateModel
+from concord.actions.models import Action, TemplateModel
 from concord.actions import state_changes as sc
-from concord.actions.customfields import Template
 
 
 logger = logging.getLogger(__name__)
@@ -184,31 +183,6 @@ class ActionClient(BaseClient):
         logging.warning(f"Tried to retrieve Action not in database: pk {pk}")
         return None
 
-    def get_container_given_pk(self, pk):
-        """Takes a pk (int) and returns the ActionContainer associated with it."""
-        containers = ActionContainer.objects.filter(pk=pk)
-        if containers:
-            return containers[0]
-        logging.warning(f"Tried to retrieve ActionContainer not in database: pk {pk}")
-
-    def get_container_given_trigger_action(self, action=None, action_pk=None):
-        """Given the apply_template trigger action that created a container, get the associated container."""
-        if not action and not action_pk:
-            raise ValueError("Must supply action or action_pk parameter")
-        action_pk = action_pk if action_pk else action.pk
-        containers = ActionContainer.objects.filter(trigger_action_pk=action_pk)
-        if containers:
-            return containers[0]
-        logging.warning(f"Unable to find ActionContainer with trigger action pk {action_pk}")
-
-    def get_container_data(self, container_pk=None, container=None):
-        """Gets data associated with actions inside a container. Returns slightly different formats depending
-        on whether container is implemented or not."""
-        if not container_pk and not container:
-            raise ValueError("Must supply container_pk or container to get_container_data")
-        container = container if container else self.get_container_given_pk(pk=container_pk)
-        return container.get_action_data()
-
     def get_action_history_given_target(self, target=None) -> QuerySet:
         """Gets the action history of a target. Accepts a target model passed in or, if no target is passed in,
         uses the target currently set on the client."""
@@ -243,25 +217,6 @@ class ActionClient(BaseClient):
         return [action for action in actions if action.resolution.resolved_through == "foundational"]
 
     # Indirect change of state
-
-    def create_action_container(self, action_list, trigger_action=None):
-        """Takes in a list of Mock Actions generated using mock mode, creates a Template (object, not Model),
-        and uses the Templates apply_container method to generate an ActionContainer.
-
-        Args:
-            action_list: list of Action models
-                The Mock Actions which will the container will use to generate the Action Models. Required.
-            trigger_action: ActionModel
-                The action which triggered the creation of the container. Optional.
-        """
-        container, log = Template(action_list=action_list).apply_template(trigger_action=trigger_action)
-        return container, log
-
-    def retry_action_container(self, container_pk, test=False):
-        """Retries processing the actions of a given container.  If test is True, does not commit the actions."""
-        container = ActionContainer.objects.get(pk=container_pk)
-        status = container.commit_actions(test=test)
-        return container, status
 
     def take_action(self, action=None, pk=None):
         """Helper method to take an action (or, usually, retry taking an action) from the client."""
@@ -305,13 +260,14 @@ class TemplateClient(BaseClient):
     # State changes
 
     def apply_template(self, template_model_pk, supplied_fields=None):
-        """Creates an ActionContainer, copying the template field of the template model specified by template_model_pk.
-        If the Actions in the ActionContainer all successfully pass the permissions pipeline, only then are any of the
-        state changes implemented. For now, we circumvent the permissions pipeline and allow anyone to apply templates
-        so long as they're not rejected by the foundational pipeline."""
+        """Applies a template to the target.  If any of the actions in the template is a foundational change,
+        changes the state change object's attr to foundational so it goes through the foundational pipeline."""
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
+        template_model = TemplateModel.objects.get(pk=template_model_pk)
+        if template_model.has_foundational_actions:
+            change.is_foundational = True
         action, result = self.create_and_take_action(change)
-        if action.resolution.foundational_status == "not tested" and action.status == "rejected":
-            result = action.implement_action()
-            action.resolution.log = "Overrode permissions pipeline"
+        description = template_model.get_template_breakdown(trigger_action=action, supplied_field_data=supplied_fields)
+        action.resolution.template_info = description
+        action.save()
         return action, result

@@ -395,11 +395,7 @@ def retry_action(sender, instance, created, **kwargs):
     if not created:
         client = Client()
         action = client.Action.get_action_given_pk(pk=instance.action)
-        if action.container is not None:
-            container = client.Action.get_container_given_pk(pk=action.container)
-            container.commit_actions()  # retry processing all actions in container
-        else:
-            client.Action.take_action(action=action)
+        client.Action.take_action(action=action)
 
 
 for conditionModel in [ApprovalCondition, VoteCondition]:

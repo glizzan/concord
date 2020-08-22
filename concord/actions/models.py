@@ -3,15 +3,14 @@
 import json
 import logging
 
-from django.db import models, DatabaseError, transaction
+from django.db import models, DatabaseError
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import get_state_changes_settable_on_model_and_parents, replace_fields
+from concord.actions.utils import get_state_changes_settable_on_model_and_parents
 from concord.actions.text_utils import action_to_text
-from concord.actions.customfields import (ResolutionField, Resolution, StateChangeField, TemplateField,
-                                          TemplateContextField, Template, TemplateContext)
+from concord.actions.customfields import ResolutionField, Resolution, StateChangeField, Template, TemplateField
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,6 @@ class Action(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, blank=True, null=True)
     object_id = models.PositiveIntegerField(blank=True, null=True)
     target = GenericForeignKey()
-    container = models.PositiveIntegerField(blank=True, null=True)
 
     # Change field
     change = StateChangeField()
@@ -102,7 +100,7 @@ class Action(models.Model):
                 from concord.actions.utils import Client
                 client = Client()
                 for source_id in self.resolution.uncreated_conditions():
-                    condition, container = client.Conditional.trigger_condition_creation_from_source_id(
+                    condition = client.Conditional.trigger_condition_creation_from_source_id(
                         action=self, source_id=source_id)
                     logger.info(f"Created condition {condition.pk} on action {self.pk} with source_id {source_id}")
                     self.resolution.condition_created(source_id)
@@ -115,223 +113,6 @@ class Action(models.Model):
         self.save()
 
         return self, result if 'result' in locals() else None
-
-
-class ActionContainer(models.Model):
-    """An `ActionContainer` is a tool for helping generate, process, and implement a set of actions
-    as a cohesive group.  This is useful for user-facing templates as well as for system actions
-    that are closely connected to each other and which users might see as a single action. Crucially,
-    ActionContainers allow us to trigger conditions for all of the actions at once, as well as
-    wait on implementing any of the actions until all of them pass.
-
-    ActionContainer stores the template information from the template that triggered it as well as context data
-    specific to this particular application/implementation, for instance the pk of the action which triggered
-    apply_template, and actions/results created by implemented the actions templates, as well as data for any
-    user supplied fields.
-    """
-
-    template_data = TemplateField(default=Template)
-    context = TemplateContextField(default=TemplateContext)
-    trigger_action_pk = models.PositiveIntegerField(blank=True, null=True)
-    status = models.CharField(max_length=500, blank=True, null=True)
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __repr__(self):
-        return f"ActionContainer(template_data={repr(self.template_data)}, context={repr(self.context)}, " + \
-            f"status={self.status})"
-
-    @property
-    def is_open(self):
-        """Property method which returns boolean indicating if Container is still open (True) or if it's been
-        implemented or rejected (false)."""
-        return False if self.status in ["implemented", "rejected"] else True
-
-    # Action processing methods
-
-    def initialize(self, template_object, trigger_action, supplied_fields=None, make_actions_in_db=True):
-        """Saves template object passed in to the template field, and initializes the context field with
-        information passed in via the template."""
-        logger.debug(f"Initializing container {self.pk}: trigger {trigger_action}, suppliedfields: {supplied_fields}")
-        self.template_data = template_object
-        self.context.initialize(template_object, trigger_action, supplied_fields)
-        self.trigger_action_pk = trigger_action.pk
-        if make_actions_in_db:
-            self.context.create_actions_in_db(self.pk, self.template_data)
-
-    def get_db_action(self, item):
-        """Gets action from db and processes it with replace_fields."""
-        action = self.context.get_action_model_given_unique_id(item["unique_id"])
-        mock_action = self.template_data.get_mock_action_given_unique_id(unique_id=item["unique_id"])
-        action = replace_fields(action_to_change=action, mock_action=mock_action, context=self.context)
-        return action
-
-    def validate_action(self, action):
-        """Checks that a given action is still valid."""
-
-        for field in ["actor", "target", "change"]:
-            if not getattr(action, field):
-                logging.debug(f"Action {action} is invalid - field {field} cannot be None")
-                return False
-
-        is_valid = action.change.validate(actor=action.actor, target=action.target)
-        if is_valid:
-            logging.debug(f"Action {action} is valid")
-        else:
-            logging.debug(f"Action {action} is invalid due to: {action.change.validation_error.message}")
-        return is_valid
-
-    def check_action_permission(self, action):
-        """Checks whether a given action passes the permissions pipeline. If an action is waiting on conditions,
-        stores that information in the context field to be used later."""
-
-        logging.debug(f"Checking permission for action {action}")
-
-        action.is_draft = False   # Remove from draft state
-
-        if self.template_data.system:
-            logging.debug("Approved as system action")
-            return "approved"
-
-        from concord.actions.permissions import has_permission
-        action = has_permission(action=action)
-        action.status = action.resolution.generate_status()
-        logging.debug(f"Action {action} has status {action.status}")
-
-        if action.status == "approved":
-            return "approved"
-
-        if action.status == "waiting":
-
-            condition_items = []
-            for source_id in action.resolution.conditions:
-                self.context.add_condition_data(action.unique_id, source_id)
-                condition_items.append(self.context.get_condition(action.unique_id, source_id))
-
-            for item in condition_items:
-                if item is None or item.status == "waiting":
-                    return "waiting"
-                elif item.status == "approved":
-                    return "approved"
-
-        return "rejected"
-
-    def process_actions(self):
-        """The heart of ActionContainer functionality - runs through action data, attempting to create
-        actions and, if necessary, managing their conditions.  Typically called by commit_actions and
-        returns ok_to_commit indicating whether the commit needs to be rolled back or not."""
-
-        ok_to_commit = True
-        actions = []   # not saved to DB, store of actions for later use
-
-        for item in self.context.actions_and_results:
-
-            logging.debug(f"Processing item {item}")
-            action = self.get_db_action(item)
-            actions.append(action)
-
-            # Check if still valid
-            if not self.validate_action(action):
-                ok_to_commit = False
-                continue
-
-            # Check if has permission
-            status = self.check_action_permission(action)
-            logging.debug(f"Action {action} has permission {status}")
-            ok_to_commit = False if status != "approved" else ok_to_commit
-
-            # Implement action
-            result = action.implement_action()
-            self.context.add_result(unique_id=item["unique_id"], result=result)  # add to context
-            if status in ["waiting", "rejected"]:  # roll back status change that comes with implement_action()
-                action.status = status
-
-            action.save()  # save changes to action in DB
-
-        return actions, ok_to_commit
-
-    def determine_overall_status(self, actions):
-        """Given actions generated by a run of process_actions, determines what the status of the
-        whole container should be.
-
-        'created' - used when first created
-        'invalid' - if any of the actions created are invalid - shouldn't happen, but just in case
-        'rejected' - used if any of the actions within the container are unconditionally rejected
-        'waiting' - used if any of the actions within the container are 'waiting' or if any are missing
-        'approved' - used if all actions within the container are approved
-        'implemented' - used if all actions within container are implemented
-        """
-
-        if self.status == "implemented":
-            return "implemented"
-
-        if any([action.status == "rejected" for action in actions]):
-            return "rejected"
-        if any([action.status == "waiting" for action in actions]):
-            return "waiting"
-        if any([action.status == "invalid" for action in actions]):
-            return "invalid"
-        if all([action.status in ["approved", "implemented"] for action in actions]):
-            return "approved"
-
-        raise ValueError("Unexpected state when determining overall status, individual action statuses: " +
-                         f"{','.join([action.status for action in actions])}")
-
-    def commit_actions(self, test=False, generate_conditions=True):
-        """Attempts to implement the actions in the container within an atomic transaction. If any of the actions
-        are not approved, rolls back commit. By default, calls generate_conditions which will create condition
-        instances for any conditions encountered during the pipeline, provided the container is not already
-        implemented or rejected."""
-
-        if self.status == "implemented":
-            logging.warn(f"Attempted to commit actions of implemented container {self.pk}")
-            return "implemented"
-
-        try:
-            with transaction.atomic():
-                actions, ok_to_commit = self.process_actions()
-                self.status = self.determine_overall_status(actions)
-                if not ok_to_commit or test:
-                    logging.info(f"Container {self.pk} not ok to commit, reverting (test = {test})")
-                    raise DatabaseError()
-                self.status = "implemented"
-        except DatabaseError:
-            if generate_conditions and self.is_open:
-                self.context.generate_conditions()
-
-        if self.status != "implemented":
-            logging.debug(f"Reseting actions and results in context data, was {self.context.actions_and_results}")
-            self.context.refresh_from_db()
-
-        self.save()
-
-        logging.debug(f"Saved container {self.pk} with overall status {self.status}")
-        return self.status
-
-    def get_action_data(self):    # NOTE: field_util?
-        """Gets a list of dicts with action, result and condition data for each action."""
-
-        actions = []
-
-        if self.status == "implemented":
-            for index, action_dict in enumerate(self.context.actions_and_results):
-                action, result = self.context.get_action_and_result_for_position(index)
-                conditions = self.context.get_condition_dicts_for_action(action_dict["unique_id"])
-                print(conditions)
-                actions.append({"action": action, "result": result, "conditions": conditions, "mock_action": None})
-                logging.debug(f"Getting implemented actions: {actions}")
-        else:
-            for mock_action in self.template_data.action_list:
-                conditions = self.context.get_condition_dicts_for_action(str(mock_action.unique_id))
-                actions.append({"action": None, "mock_action": mock_action, "result": None, "conditions": conditions})
-                logging.debug(f"Getting un-implemented actions: {actions}")
-
-        return actions
-
-    def get_actions(self):
-        """Gets actions in db associated with container, as saved in self.context."""
-        return [item["action"] for item in self.context.actions_and_results]
 
 
 class PermissionedModel(models.Model):
@@ -505,9 +286,27 @@ class TemplateModel(PermissionedModel):
 
     def set_scopes(self, scopes):
         """Saves a list of scopes to the template model."""
-        if type(scopes) != list:
+        if not isinstance(scopes, list):
             raise TypeError(f"Scopes must be type list/array, not type {type(scopes)}")
         self.scopes = json.dumps(scopes)
+
+    @property
+    def has_foundational_actions(self):
+        """Returns True if any of the actions in the action_list are foundational changes."""
+        for action in self.template_data.action_list:
+            if action.change.is_foundational:
+                return True
+        return False
+
+    def get_template_breakdown(self, trigger_action=None, supplied_field_data=None):
+        """Gets a breakdown of actions contained in the template, including data from trigger action and supplied
+        field data if passed in."""
+        if trigger_action and supplied_field_data:
+            return self.template_data.programmatic_description(
+                trigger_action=trigger_action, supplied_field_data=supplied_field_data,
+                supplied_field_options=self.get_supplied_fields())
+        else:
+            return self.template_data.programmatic_description_uninstantiated(self.get_supplied_fields())
 
     def get_supplied_fields(self):
         """Get supplied fields as dictionary."""

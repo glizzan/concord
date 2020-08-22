@@ -377,10 +377,7 @@ class ApplyTemplateStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, action=None):
-
+        """Implements the given template, relies on logic in apply_template."""
         template_model = TemplateModel.objects.get(pk=self.template_model_pk)
-
-        container, log = template_model.template_data.apply_template(trigger_action=action,
-                                                                     supplied_fields=self.supplied_fields)
-
-        return container
+        return template_model.template_data.apply_template(actor=actor, target=target, trigger_action=action,
+                                                           supplied_fields=self.supplied_fields)

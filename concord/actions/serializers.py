@@ -47,7 +47,8 @@ def serialize_resolution(resolution, dump_to_json=True):
         "log": resolution.log,
         "approved_through": resolution.approved_through,
         "approved_role": resolution.approved_role,
-        "approved_condition": resolution.approved_condition
+        "approved_condition": resolution.approved_condition,
+        "template_info": resolution.template_info
     }
     return json.dumps(obj_dict) if dump_to_json else obj_dict
 
@@ -62,7 +63,8 @@ def deserialize_resolution(resolution_data):
                       conditions=resolution_data["conditions"], log=resolution_data["log"],
                       approved_through=resolution_data["approved_through"],
                       approved_role=resolution_data["approved_role"],
-                      approved_condition=resolution_data["approved_condition"])
+                      approved_condition=resolution_data["approved_condition"],
+                      template_info=resolution_data.get("template_info", None))
 
 
 def serialize_mock_action_target(mock_action_target):
@@ -126,24 +128,3 @@ def deserialize_template(template_data):
         action_list.append(deserialize_mock_action(action))
     from concord.actions.customfields import Template
     return Template(action_list=action_list, system=template_data["system"], description=template_data["description"])
-
-
-def serialize_template_context(template_context, dump_to_json=True):
-    """Serialize template context"""
-    obj_dict = {
-        "trigger_action_pk": template_context.trigger_action_pk,
-        "supplied_fields": template_context.supplied_fields,
-        "actions_and_results": template_context.actions_and_results,
-        "condition_data": template_context.condition_data
-    }
-    return json.dumps(obj_dict) if dump_to_json else obj_dict
-
-
-@load_json_as_needed
-def deserialize_template_context(template_context_data):
-    """Deserialize template context"""
-    from concord.actions.customfields import TemplateContext
-    return TemplateContext(trigger_action_pk=template_context_data["trigger_action_pk"],
-                           supplied_fields=template_context_data["supplied_fields"],
-                           actions_and_results=template_context_data["actions_and_results"],
-                           condition_data=template_context_data["condition_data"])

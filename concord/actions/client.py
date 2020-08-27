@@ -266,6 +266,8 @@ class TemplateClient(BaseClient):
         template_model = TemplateModel.objects.get(pk=template_model_pk)
         if template_model.has_foundational_actions:
             change.is_foundational = True
+        if self.mode == "mock":
+            return self.create_and_take_action(change)
         action, result = self.create_and_take_action(change)
         description = template_model.get_template_breakdown(trigger_action=action, supplied_field_data=supplied_fields)
         action.resolution.template_info = description

@@ -139,6 +139,8 @@ class RemoveMembersStateChange(BaseStateChange):
         return True, None
 
     def validate(self, actor, target):
+        """If any of the members to be removed are an owner or governor (either directly, or through
+        being in an owner or governor role) the action is not valid."""
         governor_list, owner_list = [], []
         for pk in self.member_pk_list:
             is_governor, result = target.roles.is_governor(pk)
@@ -338,10 +340,18 @@ class RemoveOwnerStateChange(BaseStateChange):
         return f"removed {self.owner_pk} as owner"
 
     def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
+        """If removing the owner would leave the group with no owners, the action is invalid."""
+
+        if len(target.roles.get_owners()["actors"]) > 1:
+            return True  # community has at least one more actor who is an owner
+
+        for role in target.roles.get_owners()["roles"]:
+            actors = target.roles.get_users_given_role(role)
+            if len(actors) > 0:
+                return True  # there are actors in owner roles so we don't need this one
+
+        self.set_validation_error(message="Cannot remove owner as doing so would leave the community without an owner")
+        return False
 
     def implement(self, actor, target):
         target.roles.remove_owner(self.owner_pk)
@@ -399,10 +409,24 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         return f"removed role {self.role_name} as owner"
 
     def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
+        """If removing the owner role would leave the group with no owners, the action is invalid."""
+
+        if self.role_name not in target.roles.get_owners()["roles"]:
+            self.set_validation_error(f"{self.role_name} is not an owner role in this community")
+            return False
+
+        if len(target.roles.get_owners()["actors"]) > 0:
+            return True  # community has individual actor owners so it doesn't need roles
+
+        for role in target.roles.get_owners()["roles"]:
+            if role == self.role_name:
+                continue
+            actors = target.roles.get_users_given_role(role)
+            if len(actors) > 0:
+                return True  # there are other owner roles with actors specified
+
+        self.set_validation_error(message="Cannot remove this role as doing so would leave the community " +
+                                  "without an owner")
 
     def implement(self, actor, target):
         target.roles.remove_owner_role(self.role_name)
@@ -460,7 +484,39 @@ class RemoveRoleStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"removed role {self.role_name}"
 
+    def role_in_permissions(self, permission, actor):
+        """Checks for role in permission and returns True if it exists.  Checks in permissions
+        which are nested on this permission as well."""
+        role_references = []
+        if permission.has_role(role=self.role_name):
+            role_references.append(permission)
+        client = Client(actor=actor, target=permission)
+        for permission in client.PermissionResource.get_all_permissions():
+            role_references += self.role_in_permissions(permission, actor)
+        return role_references
+
     def validate(self, actor, target):
+        """A role cannot be deleted without removing it from the permissions it's referenced in, and
+        without removing it from owner and governor roles if it is there."""
+
+        role_references = []
+        client = Client(actor=actor, target=target)
+        for permission in client.PermissionResource.get_all_permissions():
+            role_references += self.role_in_permissions(permission, actor)
+
+        if len(role_references) > 0:
+            permission_string = ", ".join([str(permission.pk) for permission in role_references])
+            self.set_validation_error(
+                f"Role cannot be deleted until it is removed from permissions: {permission_string}")
+            return False
+
+        if self.role_name in target.roles.get_owners()["roles"]:
+            self.set_validation_error("Cannot remove role with ownership privileges")
+            return False
+        if self.role_name in target.roles.get_governors()["roles"]:
+            self.set_validation_error("Cannot remove role with governorship privileges")
+            return False
+
         return True
 
     def implement(self, actor, target):
@@ -477,6 +533,15 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     def __init__(self, role_name, people_to_add):
         self.role_name = role_name
         self.people_to_add = people_to_add
+
+    def is_conditionally_foundational(self, action):
+        """If role_name is owner or governor role, should should be treated as a conditional
+        change."""
+        if self.role_name in action.target.roles.get_owners()["roles"]:
+            return True
+        if self.role_name in action.target.roles.get_governors()["roles"]:
+            return True
+        return False
 
     @classmethod
     def get_settable_classes(cls):
@@ -549,6 +614,15 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         self.role_name = role_name
         self.people_to_remove = people_to_remove
 
+    def is_conditionally_foundational(self, action):
+        """If role_name is owner or governor role, should should be treated as a conditional
+        change."""
+        if self.role_name in action.target.roles.get_owners()["roles"]:
+            return True
+        if self.role_name in action.target.roles.get_governors()["roles"]:
+            return True
+        return False
+
     @classmethod
     def get_settable_classes(cls):
         return cls.get_community_models()
@@ -560,7 +634,29 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return f"removed {list_to_text(self.people_to_remove)} from role {self.role_name}"
 
     def validate(self, actor, target):
-        return True
+        """When removing people from a role, we must check that doing so does not leave us
+        without any owners."""
+
+        if self.role_name not in target.roles.get_owners()["roles"]:
+            return True  # this isn't an owner role
+
+        if len(self.people_to_remove) < len(target.roles.get_users_given_role(self.role_name)):
+            return True  # removing these users will not result in empty role
+
+        if len(target.roles.get_owners()["actors"]) > 0:
+            return True  # community has individual actor owners so it doesn't need roles
+
+        for role in target.roles.get_owners()["roles"]:
+            if role == self.role_name:
+                continue
+            actors = target.roles.get_users_given_role(role)
+            if len(actors) > 0:
+                return True  # there are other owner roles with actors specified
+
+        self.set_validation_error(message="Cannot remove everyone from this role as " +
+                                  "doing so would leave the community without an owner")
+
+        return False
 
     def implement(self, actor, target):
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)

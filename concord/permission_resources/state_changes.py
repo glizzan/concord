@@ -8,9 +8,9 @@ from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
 from concord.actions.text_utils import condition_template_to_text, get_verb_given_permission_type
 from concord.resources.models import Resource, Item
-from concord.actions.utils import get_state_change_object
-from concord.actions.utils import Client
+from concord.actions.utils import get_state_change_object, Client
 from concord.permission_resources.models import Template
+from concord.permission_resources.utils import delete_permissions_on_target
 
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,7 @@ class RemovePermissionStateChange(PermissionResourceBaseStateChange):
     def implement(self, actor, target):
         try:
             item = PermissionsItem.objects.get(pk=self.item_pk)
+            delete_permissions_on_target(item)
             item.delete()
             return True
         except ObjectDoesNotExist as exception:

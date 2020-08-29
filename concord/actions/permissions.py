@@ -175,7 +175,8 @@ def has_permission(action):
     """
 
     # Check for criteria indicating we should use the foundational permission pipeline
-    if action.change.is_foundational or action.target.foundational_permission_enabled:
+    if action.change.is_foundational or action.target.foundational_permission_enabled or \
+            action.change.is_conditionally_foundational(action):
         return foundational_permission_pipeline(action)
 
     # Check that object allows us to use governing permission, if yes, try governing pipeline

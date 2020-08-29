@@ -776,6 +776,220 @@ class BasicCommunityTest(DataTestCase):
         self.assertEquals(community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
 
+    def test_cant_remove_permission_referenced_role(self):
+        """Tests that we can't remove a role if it is referenced by permissions."""
+
+        # create a community with a role on it & person in role
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.update_target_on_all(target=community)
+        action, result = self.client.Community.add_role(role_name="forwards")
+        self.client.Community.add_members([self.users.christen.pk])
+        action, result = self.client.Community.add_people_to_role(role_name="forwards", 
+            people_to_add=[self.users.christen.pk])
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.christen.pk]})
+
+        # add a permission that references that role
+        action, permission = self.client.PermissionResource.add_permission(
+            permission_type=Changes().Communities.ChangeName, permission_roles=["forwards"])
+
+        # can't remove that role
+        action, result = self.client.Community.remove_role(role_name="forwards")
+        self.assertEquals(action.error_message, 
+            "Role cannot be deleted until it is removed from permissions: 1")
+
+        # remove the permission
+        action, result = self.client.PermissionResource.remove_permission(item_pk=permission.pk)
+
+        # now you can remove the role
+        action, result = self.client.Community.remove_role(role_name="forwards")
+        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(community.roles.get_custom_roles(), {})
+
+    def test_cant_remove_role_set_as_owner_role(self):
+        """Tests that we can only remove a role if it's not an owner role."""
+
+        # create a community with a role on it & person in role
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.update_target_on_all(target=community)
+        action, result = self.client.Community.add_role(role_name="forwards")
+        self.client.Community.add_members([self.users.christen.pk])
+        action, result = self.client.Community.add_people_to_role(role_name="forwards", 
+            people_to_add=[self.users.christen.pk])
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.christen.pk]})
+
+        # add it to the owners & remove current owner
+        action, result = self.client.Community.add_owner_role(owner_role="forwards")
+
+        # can't remove that role
+        action, result = self.client.Community.remove_role(role_name="forwards")
+        self.assertEquals(action.error_message, "Cannot remove role with ownership privileges")
+
+        # remove owner role
+        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+
+        # now we can remove the role
+        action, result = self.client.Community.remove_role(role_name="forwards")
+        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(community.roles.get_custom_roles(), {})
+
+    def test_cant_remove_people_from_role_when_they_are_the_only_owner(self):
+        """Tests that people can't be removed from a role if the role is an owner role and
+        removing them from said role would leave the community without an owner."""
+
+        # create a community with a role on it & person in role
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.update_target_on_all(target=community)
+        action, result = self.client.Community.add_role(role_name="forwards")
+        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
+        action, result = self.client.Community.add_people_to_role(role_name="forwards", 
+            people_to_add=[self.users.christen.pk])
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.christen.pk]})
+
+        # add it to the owners & remove current owner
+        action, result = self.client.Community.add_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+
+        # Christen can't remove herself from role
+        self.client.update_actor_on_all(actor=self.users.christen)
+        action, result = self.client.Community.remove_people_from_role(role_name="forwards",
+            people_to_remove=[self.users.christen.pk])
+        self.assertEquals(action.error_message, 
+            "Cannot remove everyone from this role as doing so would leave the community without an owner")
+
+        # add an actor to owners
+        self.client.Community.add_owner(owner_pk=self.users.crystal.pk)
+        self.client.Community.refresh_target()
+
+        # now christen can remove herself from the role
+        action, result = self.client.Community.remove_people_from_role(role_name="forwards",
+            people_to_remove=[self.users.christen.pk])
+        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(community.roles.custom_roles, {'forwards': []})
+
+    def test_cant_remove_owner_role_when_they_are_only_owner(self):
+        """Tests that a role can't be removed as an owner role if doing so would leave the community 
+        without an owner."""
+
+        # create a community with a role on it & person in role
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.update_target_on_all(target=community)
+        action, result = self.client.Community.add_role(role_name="forwards")
+        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
+        action, result = self.client.Community.add_people_to_role(role_name="forwards", 
+            people_to_add=[self.users.pinoe.pk])
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.pinoe.pk]})
+
+        # add it to the owners & remove current owner (though Pinoe is still owner via role)
+        action, result = self.client.Community.add_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+
+        # can't remove that role as owner role
+        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+        self.assertEquals(action.error_message, 
+            "Cannot remove this role as doing so would leave the community without an owner")
+
+        # add an actor to owners
+        self.client.Community.add_owner(owner_pk=self.users.crystal.pk)
+        self.client.Community.refresh_target()
+
+        # now christen can remove the role
+        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(community.roles.get_owners(), {'actors': [self.users.crystal.pk], 'roles': []})
+
+    def test_cant_remove_self_when_you_are_the_only_owner(self):
+        """Tests that people can't be removed as individual owner if doing so would leave the community 
+        without an owner."""
+
+        # create a community with another member
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.update_target_on_all(target=community)
+        self.client.Community.add_members([self.users.christen.pk])
+
+        # can't remove self as owner
+        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+        self.assertEquals(action.error_message, 
+            "Cannot remove owner as doing so would leave the community without an owner")
+
+        # add an actor to owners
+        self.client.Community.add_owner(owner_pk=self.users.christen.pk)
+
+        # now christen can remove the role
+        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(community.roles.get_owners(), {'actors': [self.users.christen.pk], 'roles': []})
+
+    def test_removing_person_from_role_when_role_is_owner_role_requires_foundational_permission(self):
+        """Removing a person from a role is typically not a foundational change, but if the role in
+        question has been set as an owner role and/or a governing role, it should be considered
+        foundational."""
+
+        # create a community & members with role. governor and owner are different
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.update_target_on_all(target=community)
+        action, result = self.client.Community.add_role(role_name="forwards")
+        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
+        action, result = self.client.Community.add_governor(governor_pk=self.users.christen.pk)
+        self.christenClient = Client(actor=self.users.christen, target=community)
+
+        # governor can add and remove people from role
+        action, result = self.client.Community.add_people_to_role(role_name="forwards",
+            people_to_add=[self.users.crystal.pk])
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
+
+        # make role a governing role
+        action, result = self.client.Community.add_governor_role(governor_role="forwards")
+
+        # governor can no longer add and remove people from role
+        action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
+            people_to_remove=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.generate_status(), "rejected")
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
+
+        # make role an owner role instead
+        action, result = self.client.Community.remove_governor_role(governor_role="forwards")
+        action, result = self.client.Community.add_owner_role(owner_role="forwards")
+
+        # governor can still not add and remove people from role
+        action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
+            people_to_remove=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.generate_status(), "rejected")
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
+
+        # remove owner role
+        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+
+        # Gov can finally remove from role
+        action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
+            people_to_remove=[self.users.crystal.pk])
+        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(community.roles.get_custom_roles(), {'forwards': []})
+
+
+class PermissionResourceUtilsTest(DataTestCase):
+
+    def test_delete_permissions_on_target(self):  # HERE
+        from concord.permission_resources.utils import delete_permissions_on_target
+
+        # create target, set permission and nested permission
+        self.client = Client(actor=self.users.pinoe)
+        community = self.client.Community.create_community(name="A New Community")
+        self.client.PermissionResource.set_target(target=community)
+        action, permission = self.client.PermissionResource.add_permission(
+            permission_type=Changes().Communities.ChangeName,
+            permission_actors=[self.users.pinoe.pk]
+        )
+        self.client.PermissionResource.set_target(target=permission)
+        action2, permission2 = self.client.PermissionResource.add_permission(
+            permission_type=Changes().Permissions.AddRoleToPermission,
+            permission_actors=[self.users.pinoe.pk]
+        )
+        self.assertEquals(len(PermissionsItem.objects.all()), 2)
+
+        # call delete_permissions_on_target
+        delete_permissions_on_target(community)
+        self.assertEquals(len(PermissionsItem.objects.all()), 0)
+
 
 class GoverningAuthorityTest(DataTestCase):
 

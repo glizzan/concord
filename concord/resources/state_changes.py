@@ -6,6 +6,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.state_changes import BaseStateChange
 from concord.resources.models import Resource, Item, Comment
+from concord.permission_resources.utils import delete_permissions_on_target
 
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ class DeleteCommentStateChange(BaseStateChange):
 
     def implement(self, actor, target):
         comment = Comment.objects.get(pk=self.pk)
+        delete_permissions_on_target(comment)
         comment.delete()
         return self.pk
 
@@ -209,6 +211,7 @@ class RemoveItemStateChange(BaseStateChange):
     def implement(self, actor, target):
         try:
             item = Item.objects.get(pk=self.item_pk)
+            delete_permissions_on_target(item)
             item.delete()
             return True
         except ObjectDoesNotExist as exception:

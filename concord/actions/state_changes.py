@@ -124,6 +124,9 @@ class BaseStateChange(object):
         """Returns the description of the state change object, in past tense."""
         ...
 
+    def is_conditionally_foundational(self, action):
+        return False
+
 
 class ChangeOwnerStateChange(BaseStateChange):
     """State change for changing which community owns the object. Not to be confused with state changes which

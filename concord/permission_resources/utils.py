@@ -1,9 +1,12 @@
 """Permission Resource utilities."""
 
-import json
+import json, logging
 from collections import OrderedDict
 
 from concord.actions.serializers import deserialize_state_change
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_settable_permissions(*, target):
@@ -43,3 +46,17 @@ def check_configuration(action, permission):
     if result is False and message:
         action.resolution.add_to_log(message)
     return result
+
+
+def delete_permissions_on_target(target):
+    """Given a target PermissionedModel object, find all permissions set on it and delete them."""
+
+    from concord.actions.utils import Client
+    client = Client(target=target)
+
+    permissions = client.PermissionResource.get_permissions_on_object(target_object=target)
+
+    for permission in permissions:
+        delete_permissions_on_target(permission)
+        logging.info(f"Deleting {permission}")
+        permission.delete()

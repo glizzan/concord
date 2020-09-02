@@ -5,7 +5,7 @@ import logging
 from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.state_changes import BaseStateChange
-from concord.resources.models import Resource, Item, Comment
+from concord.resources.models import Resource, Item, Comment, SimpleList
 from concord.permission_resources.utils import delete_permissions_on_target
 
 
@@ -20,28 +20,17 @@ logger = logging.getLogger(__name__)
 class AddCommentStateChange(BaseStateChange):
     """State Change to add a comment."""
     description = "Add comment"
+    input_fields = ["text"]
+    input_target = Comment
 
     def __init__(self, text):
         self.text = text
-
-    @classmethod
-    def get_settable_classes(cls):
-        """Comments may be made on any target - it's up to the front end to decide what comment functionality to
-        expose to the user."""
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "add comment"
 
     def description_past_tense(self):
         return "added comment"
-
-    def validate(self, actor, target):
-        """Checks that text is a string of at least one character long."""
-        if self.text and isinstance(self.text, str) and len(self.text) > 0:
-            return True
-        self.set_validation_error(message="Comment text must be a string at least one character long.")
-        return False
 
     def implement(self, actor, target):
 
@@ -56,10 +45,14 @@ class AddCommentStateChange(BaseStateChange):
 class EditCommentStateChange(BaseStateChange):
     """State Change to edit a comment."""
     description = "Edit comment"
+    input_fields = ["text"]
 
-    def __init__(self, pk, text):
-        self.pk = pk
+    def __init__(self, text):
         self.text = text
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [Comment]
 
     @classmethod
     def get_settable_classes(cls):
@@ -68,31 +61,24 @@ class EditCommentStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return f"edit comment {self.pk}"
+        return "edit comment"
 
     def description_past_tense(self):
-        return f"edited comment {self.pk}"
-
-    def validate(self, actor, target):
-        """Checks that text is a string of at least one character long."""
-        if self.text and isinstance(self.text, str) and len(self.text) > 0:
-            return True
-        self.set_validation_error(message="Comment text must be a string at least one character long.")
-        return False
+        return "edited comment"
 
     def implement(self, actor, target):
-        comment = Comment.objects.get(pk=self.pk)
-        comment.text = self.text
-        comment.save()
-        return comment
+        target.text = self.text
+        target.save()
+        return target
 
 
 class DeleteCommentStateChange(BaseStateChange):
     """State Change to delete a comment."""
     description = "Delete comment"
 
-    def __init__(self, pk):
-        self.pk = pk
+    @classmethod
+    def get_allowable_targets(cls):
+        return [Comment]
 
     @classmethod
     def get_settable_classes(cls):
@@ -101,19 +87,16 @@ class DeleteCommentStateChange(BaseStateChange):
         return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return f"delete comment {self.pk}"
+        return "delete comment"
 
     def description_past_tense(self):
-        return f"deleted comment {self.pk}"
-
-    def validate(self, actor, target):
-        return True
+        return "deleted comment"
 
     def implement(self, actor, target):
-        comment = Comment.objects.get(pk=self.pk)
-        delete_permissions_on_target(comment)
-        comment.delete()
-        return self.pk
+        pk = target.pk
+        delete_permissions_on_target(target)
+        target.delete()
+        return pk
 
 
 #####################################
@@ -124,28 +107,27 @@ class ChangeResourceNameStateChange(BaseStateChange):
     """State Change to change a resource name."""
     description = "Change name of resource"
     preposition = "for"
+    input_fields = ["name"]
 
-    def __init__(self, new_name):
-        self.new_name = new_name
+    def __init__(self, name):
+        self.name = name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [Resource, Item]
 
     @classmethod
     def get_settable_classes(cls):
-        return [Resource, Item]
+        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
-        return f"change name of resource to {self.new_name}"
+        return f"change name of resource to {self.name}"
 
     def description_past_tense(self):
-        return f"changed name of resource to {self.new_name}"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
+        return f"changed name of resource to {self.name}"
 
     def implement(self, actor, target):
-        target.name = self.new_name
+        target.name = self.name
         target.save()
         return target
 
@@ -153,32 +135,30 @@ class ChangeResourceNameStateChange(BaseStateChange):
 class AddItemStateChange(BaseStateChange):
     """State Change to add item to a resource."""
     description = "Add item to resource"
+    input_fields = ["name"]
+    input_target = Item
 
-    def __init__(self, item_name):
-        self.item_name = item_name
+    def __init__(self, name):
+        self.name = name
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [Resource]
 
     @classmethod
     def get_settable_classes(cls):
         """An AddItem permission can be set on an item, a resource, or on the community that owns the
         item or resource."""
-        return [Resource, Item] + cls.get_community_models()
+        return [Resource] + cls.get_community_models()
 
     def description_present_tense(self):
-        return f"add item {self.item_name}"
+        return f"add item {self.name}"
 
     def description_past_tense(self):
-        return f"added item {self.item_name}"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        if actor and target and self.item_name:
-            return True
-        return False
+        return f"added item {self.name}"
 
     def implement(self, actor, target):
-        item = Item.objects.create(name=self.item_name, resource=target, owner=actor.default_community)
+        item = Item.objects.create(name=self.name, resource=target, owner=actor.default_community)
         return item
 
 
@@ -187,33 +167,231 @@ class RemoveItemStateChange(BaseStateChange):
     description = "Remove item from resource"
     preposition = "from"
 
-    def __init__(self, item_pk):
-        self.item_pk = item_pk
+    @classmethod
+    def get_allowable_targets(cls):
+        return [Item]
 
     @classmethod
     def get_settable_classes(cls):
-        return [Resource, Item]
+        return [Resource, Item] + cls.get_community_models()
 
     def description_present_tense(self):
-        return f"remove item with pk {self.item_pk}"
+        return "remove item"
 
     def description_past_tense(self):
-        return f"removed item with pk {self.item_pk}"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        if actor and target and self.item_pk:
-            return True
-        return False
+        return "removed item"
 
     def implement(self, actor, target):
         try:
-            item = Item.objects.get(pk=self.item_pk)
-            delete_permissions_on_target(item)
-            item.delete()
+            delete_permissions_on_target(target)
+            target.delete()
             return True
         except ObjectDoesNotExist as exception:
             logger.warning(exception)
             return False
+
+
+################################
+### SimpleList State Changes ###
+################################
+
+class AddListStateChange(BaseStateChange):
+    """State Change to create a list in a community (or other target)."""
+    description = "Add list"
+    input_fields = ["name", "description"]
+    input_target = SimpleList
+
+    def __init__(self, name, description=None):
+        self.name = name
+        self.description = description if description else ""
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return cls.get_community_models()
+
+    def description_present_tense(self):
+        return f"add list with name {self.name}"
+
+    def description_past_tense(self):
+        return f"added list with name {self.name}"
+
+    def implement(self, actor, target):
+        return SimpleList.objects.create(
+            name=self.name, description=self.description, owner=target.get_owner())
+
+
+class EditListStateChange(BaseStateChange):
+    """State Change to edit an existing list."""
+    description = "Edit list"
+    input_fields = ["name", "description"]
+
+    def __init__(self, name=None, description=None):
+        self.name = name
+        self.description = description if description else ""
+
+    @classmethod
+    def get_allowable_targets(self):
+        return [SimpleList]
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models() + [SimpleList]
+
+    def description_present_tense(self):
+        return f"edit list with new name {self.name} and new description {self.description}"
+
+    def description_past_tense(self):
+        return f"edited list with new name {self.name} and new description {self.description}"
+
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        if not self.name and not self.description:
+            self.set_validation_error(message="Must supply new name or description when editing List.")
+            return False
+        return True
+
+    def implement(self, actor, target):
+        target.name = self.name if self.name else target.name
+        target.description = self.description if self.description else target.description
+        target.save()
+        return target
+
+
+class DeleteListStateChange(BaseStateChange):
+    """State Change to delete an existing list."""
+    description = "Delete list"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [SimpleList]
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models() + [SimpleList]
+
+    def description_present_tense(self):
+        return "delete list"
+
+    def description_past_tense(self):
+        return "deleted list"
+
+    def implement(self, actor, target):
+        pk = target.pk
+        target.delete()
+        return pk
+
+
+class AddRowStateChange(BaseStateChange):
+    """State Change to add a row to a list."""
+    description = "Add row to list"
+
+    def __init__(self, row_content, index=None):
+        self.row_content = row_content
+        self.index = index
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [SimpleList]
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models() + [SimpleList]
+
+    def description_present_tense(self):
+        return f"add row with content {self.row_content}"
+
+    def description_past_tense(self):
+        return f"added row with content {self.row_content}"
+
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        if not isinstance(self.row_content, str):
+            self.set_validation_error(message="Row content must be a string.")
+            return False
+        if self.index and not isinstance(self.index, int):
+            self.set_validation_error(message="Index must be an integer.")
+            return False
+        return True
+
+    def implement(self, actor, target):
+        target.add_row(self.row_content, self.index)
+        target.save()
+        return target
+
+
+class EditRowStateChange(BaseStateChange):
+    """State Change to edit a row in a list."""
+    description = "Edit row in list"
+
+    def __init__(self, row_content, index):
+        self.row_content = row_content
+        self.index = index
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [SimpleList]
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models() + [SimpleList]
+
+    def description_present_tense(self):
+        return f"edit row with index {self.index} to have new content {self.row_content}"
+
+    def description_past_tense(self):
+        return f"edited row with index {self.index} to have new content {self.row_content}"
+
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        if not isinstance(self.row_content, str):
+            self.set_validation_error(message="Row content must be a string.")
+            return False
+        if not isinstance(self.index, int):
+            self.set_validation_error(message="Index must be an integer.")
+            return False
+        if not 0 <= self.index < len(target.get_rows()):
+            self.set_validation_error(message=f"Index must be within 0 and {len(target.get_rows())} not {self.index}")
+            return False
+        return True
+
+    def implement(self, actor, target):
+        target.edit_row(self.row_content, self.index)
+        target.save()
+        return target
+
+
+class DeleteRowStateChange(BaseStateChange):
+    """State Change to delete a row in a list."""
+    description = "Delete row in list"
+
+    def __init__(self, index):
+        self.index = index
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [SimpleList]
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models() + [SimpleList]
+
+    def description_present_tense(self):
+        return f"delete row with index {self.index}"
+
+    def description_past_tense(self):
+        return f"deleted row with index {self.index}"
+
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        if not isinstance(self.index, int):
+            self.set_validation_error(message="Index must be an integer.")
+            return False
+        if not 0 <= self.index < len(target.get_rows()):
+            self.set_validation_error(message=f"Index must be within 0 and {len(target.get_rows())} not {self.index}")
+            return False
+        return True
+
+    def implement(self, actor, target):
+        target.delete_row(int(self.index))
+        target.save()
+        return target

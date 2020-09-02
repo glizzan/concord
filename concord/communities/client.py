@@ -1,5 +1,6 @@
 """Client for Community models."""
 
+import logging
 from typing import Tuple, Any
 
 from django.db.models import Model
@@ -10,6 +11,9 @@ from concord.actions.text_utils import community_basic_info_to_text, community_g
 from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
 from concord.communities import state_changes as sc
+
+
+logger = logging.getLogger(__name__)
 
 
 ######################
@@ -25,7 +29,7 @@ class CommunityClient(BaseClient):
     def set_target(self, target):
         super().set_target(target)
         if not hasattr(target, "is_community"):
-            raise ValueError("Target of CommunityClient must be a Community model")
+            logging.debug("Target of CommunityClient must be a Community model")
         self.community_model = self.target.__class__
 
     # Target-less methods (don't require a target to be set ahead of time)
@@ -200,7 +204,7 @@ class CommunityClient(BaseClient):
 
     def change_name(self, *, new_name: str) -> Tuple[int, Any]:
         """Change name of community."""
-        change = sc.ChangeNameStateChange(new_name=new_name)
+        change = sc.ChangeNameStateChange(name=new_name)
         return self.create_and_take_action(change)
 
     def add_role(self, *, role_name: str) -> Tuple[int, Any]:

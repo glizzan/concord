@@ -9,6 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 
 from concord.actions.models import Action, TemplateModel
+from concord.actions.utils import get_all_permissioned_models
 from concord.actions import state_changes as sc
 
 
@@ -110,8 +111,14 @@ class BaseClient(object):
         else:
             logging.info(f"Invalid action by {self.actor} on target {self.target} with change type {change}: "
                          + f"{change.validation_error.message}")
-            InvalidAction = namedtuple('InvalidAction', ['error_message', 'pk'])
-            return InvalidAction(error_message=change.validation_error.message, pk="Invalid Action"), None
+            InvalidAction = namedtuple('InvalidAction', ['error_message', 'status'])
+            return InvalidAction(error_message=change.validation_error.message, status="invalid"), None
+
+    def get_object_given_model_and_pk(self, model, pk):
+        """Given a model string and a pk, returns the instance. Only works on Permissioned models."""
+        for permissioned_model in get_all_permissioned_models():
+            if permissioned_model.__name__.lower() == model:
+                return permissioned_model.objects.get(pk=pk)
 
     # State Change methods
 

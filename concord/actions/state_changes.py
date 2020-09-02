@@ -1,7 +1,7 @@
 """Defines state changes for concord.actions.models, as well as the BaseStateChange object from which all
 state change objects inherit."""
 
-from typing import List
+from typing import List, Any
 import json, warnings
 
 from django.core.exceptions import ValidationError
@@ -9,16 +9,15 @@ from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.models import TemplateModel
 from concord.actions.utils import get_all_permissioned_models, get_all_community_models
-from concord.actions.models import PermissionedModel
 
 
 class BaseStateChange(object):
     """The BaseStateChange object is the object which all other state change objects inherit from. It has a
     variety of methods which must be implemented by those that inherit it."""
 
-    allowable_targets: List[PermissionedModel] = []
-    settable_classes: List[PermissionedModel] = []
     instantiated_fields: List[str] = []
+    input_fields: List[str] = []
+    input_target: Any = None
     is_foundational = False
 
     @classmethod
@@ -28,16 +27,15 @@ class BaseStateChange(object):
 
     @classmethod
     def get_allowable_targets(cls):
-        """Returns the classes that an action of this type may target.  Most likely called by the validate
-        method in a state change."""
-        return cls.allowable_targets
+        """Returns the classes that an action of this type may target."""
+        return cls.get_all_possible_targets()
 
     @classmethod
     def get_settable_classes(cls):
         """Returns the classes that a permission with this change type may be set on.  This overlaps with
         allowable targets, but also includes classes that allowable targets may be nested on.  Most likely
         called by the validate method in AddPermissionStateChange."""
-        return cls.settable_classes
+        return cls.get_allowable_targets()
 
     @classmethod
     def get_all_possible_targets(cls):
@@ -98,8 +96,29 @@ class BaseStateChange(object):
         self.validation_error = ValidationError(message)
 
     def validate(self, actor, target):
-        """Method to check whether the data provided to a change object in an action is valid for the change object."""
-        ...
+        """Method to check whether the data provided to a change object in an action is valid for the
+        change object. Optional exclude_fields tells us not to validate the given field."""
+
+        if target._meta.model not in self.get_allowable_targets():
+
+            self.set_validation_error(
+                message=f"Object {str(target)} of type {target._meta.model} is not an allowable target")
+            return False
+
+        try:
+            target = self.input_target if self.input_target else target
+            fields = self.input_fields if hasattr(self, "input_fields") else []
+            for field_name in fields:
+                field_value = getattr(self, field_name)
+                target_field = target._meta.get_field(field_name)
+                target_field.clean(field_value, target)
+
+            return True
+
+        except ValidationError:
+
+            self.validation_error = ValidationError
+            return False
 
     def implement(self, actor, target):
         """Method that carries out the change of state."""
@@ -138,21 +157,11 @@ class ChangeOwnerStateChange(BaseStateChange):
         self.new_owner_content_type = new_owner_content_type
         self.new_owner_id = new_owner_id
 
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
     def description_present_tense(self):
         return f"change owner of community to {self.new_owner}"
 
     def description_past_tense(self):
         return "changed owner of community to {self.new_owner}"
-
-    def validate(self, actor, target):
-        """
-        Put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
 
@@ -173,21 +182,11 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
     preposition = "for"
     is_foundational = True
 
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
     def description_present_tense(self):
         return "enable the foundational permission"
 
     def description_past_tense(self):
         return "enabled the foundational permission"
-
-    def validate(self, actor, target):
-        """
-        Put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.foundational_permission_enabled = True
@@ -201,21 +200,11 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
     preposition = "for"
     is_foundational = True
 
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
     def description_present_tense(self):
         return "disable the foundational permission"
 
     def description_past_tense(self):
         return "disabled the foundational permission"
-
-    def validate(self, actor, target):
-        """
-        Put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.foundational_permission_enabled = False
@@ -229,21 +218,11 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
     preposition = "for"
     is_foundational = True
 
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
     def description_present_tense(self):
         return "enable the governing permission"
 
     def description_past_tense(self):
         return "enabled the governing permission"
-
-    def validate(self, actor, target):
-        """
-        Put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.governing_permission_enabled = True
@@ -257,21 +236,11 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
     preposition = "for"
     is_foundational = True
 
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
     def description_present_tense(self):
         return "disable the governing permission"
 
     def description_past_tense(self):
         return "disabled the governing permission"
-
-    def validate(self, actor, target):
-        """
-        Put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.governing_permission_enabled = False
@@ -287,10 +256,6 @@ class ViewStateChange(BaseStateChange):
 
     def __init__(self, fields_to_include=None):
         self.fields_to_include = fields_to_include
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     @classmethod
     def get_configurable_fields(cls):
@@ -362,10 +327,6 @@ class ApplyTemplateStateChange(BaseStateChange):
     def __init__(self, template_model_pk, supplied_fields=None):
         self.template_model_pk = template_model_pk
         self.supplied_fields = supplied_fields if supplied_fields else {}
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return "apply template"

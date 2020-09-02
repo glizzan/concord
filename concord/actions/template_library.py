@@ -72,7 +72,7 @@ def create_anyone_can_request_template():
         "permission_roles": "{{supplied_fields.approve_permission_roles}}"
     }]
     action_2 = client.PermissionResource.add_condition_to_permission(
-        permission_pk="{{previous.0.result.pk}}", condition_type="approvalcondition", permission_data=permission_data
+        condition_type="approvalcondition", permission_data=permission_data
     )
     action_2.target = "{{previous.0.result}}"
 

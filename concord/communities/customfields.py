@@ -320,7 +320,7 @@ class RoleHandler(object):
         if pk not in self.members:
             self.members.append(pk)
         else:
-            logger.warning(f"User {pk} is already a member.")
+            logger.info(f"User {pk} is already a member.")
 
     def add_members(self, pk_list):
         """Adds a list of members given a list of pks."""

@@ -54,12 +54,12 @@ def parse_action_list_into_condition_and_permission_objects(action_list):
     for action in action_list[1:]:
         permission = PermissionsItem()
         permission.set_fields(
-            change_type=action.change.permission_type,
-            actors=action.change.permission_actors,
-            roles=action.change.permission_roles,
+            change_type=action.change.change_type,
+            actors=action.change.actors,
+            roles=action.change.roles,
             inverse=action.change.inverse,
             anyone=action.change.anyone,
-            configuration=action.change.permission_configuration
+            configuration=action.change.configuration
         )
         permission_objects.append(permission)
 

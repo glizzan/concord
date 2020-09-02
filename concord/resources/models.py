@@ -1,6 +1,7 @@
 """Resource models."""
 
 from typing import List
+import json
 
 from django.db import models
 from django.contrib.contenttypes.models import ContentType
@@ -74,3 +75,46 @@ class Item(PermissionedModel):
     def get_name(self):
         """Get name of item."""
         return self.name
+
+
+class SimpleList(PermissionedModel):
+    """Model to store simple lists with arbitrary fields."""
+
+    name = models.CharField(max_length=200)
+    description = models.CharField(max_length=200)
+    rows = models.TextField(list)
+
+    def get_name(self):
+        """Get name of item."""
+        return self.name
+
+    def get_rows(self):
+        """Get the rows in the list."""
+        if self.rows:
+            return json.loads(self.rows)
+        return []
+
+    def add_row(self, row, index=None):
+        """Add a row to the list."""
+        rows = self.get_rows()
+        if index or index == 0:
+            rows.insert(index, row)
+        else:
+            rows.append(row)
+        self.rows = json.dumps(rows)
+
+    def edit_row(self, row, index):
+        """Edit a row in the list."""
+        rows = self.get_rows()
+        rows[index] = row
+        self.rows = json.dumps(rows)
+
+    def delete_row(self, index):
+        """Delete a row from the list."""
+        rows = self.get_rows()
+        rows.pop(index)
+        self.rows = json.dumps(rows)
+
+    def get_nested_objects(self):
+        """Get models that permissions for this model might be set on."""
+        return [self.get_owner()]

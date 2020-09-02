@@ -16,31 +16,23 @@ class ChangeNameStateChange(BaseStateChange):
     """State change to change name of Community."""
     description = "Change name of community"
     preposition = "for"
+    input_fields = ["name"]
 
-    def __init__(self, new_name):
-        self.new_name = new_name
+    def __init__(self, name):
+        self.name = name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
-        return f"change name of community to {self.new_name}"
+        return f"change name of community to {self.name}"
 
     def description_past_tense(self):
-        return f"changed name of community to {self.new_name}"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        if actor and target and self.new_name:
-            return True
-        self.set_validation_error("You must provide provide a new name")
-        return False
+        return f"changed name of community to {self.name}"
 
     def implement(self, actor, target):
-        target.name = self.new_name
+        target.name = self.name
         target.save()
         return target
 
@@ -54,7 +46,7 @@ class AddMembersStateChange(BaseStateChange):
         self.self_only = self_only
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     @classmethod
@@ -85,12 +77,6 @@ class AddMembersStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added {list_to_text(self.member_pk_list)} as members"
 
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
-
     def implement(self, actor, target):
         target.roles.add_members(self.member_pk_list)
         target.save()
@@ -107,7 +93,7 @@ class RemoveMembersStateChange(BaseStateChange):
         self.self_only = self_only
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     @classmethod
@@ -139,6 +125,7 @@ class RemoveMembersStateChange(BaseStateChange):
         return True, None
 
     def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
         """If any of the members to be removed are an owner or governor (either directly, or through
         being in an owner or governor role) the action is not valid."""
         governor_list, owner_list = [], []
@@ -177,7 +164,7 @@ class AddGovernorStateChange(BaseStateChange):
         self.governor_pk = governor_pk
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -185,12 +172,6 @@ class AddGovernorStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"added {self.governor_pk} as governor"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.roles.add_governor(self.governor_pk)
@@ -208,7 +189,7 @@ class RemoveGovernorStateChange(BaseStateChange):
         self.governor_pk = governor_pk
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -216,12 +197,6 @@ class RemoveGovernorStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"removed {self.governor_pk} as governor"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.roles.remove_governor(self.governor_pk)
@@ -238,7 +213,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -246,12 +221,6 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"added role {self.role_name} as governor"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.roles.add_governor_role(self.role_name)
@@ -269,7 +238,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -277,12 +246,6 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"removed role {self.role_name} as governor"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.roles.remove_governor_role(self.role_name)
@@ -299,7 +262,7 @@ class AddOwnerStateChange(BaseStateChange):
         self.owner_pk = owner_pk
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -307,12 +270,6 @@ class AddOwnerStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"added {self.owner_pk} as owner"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.roles.add_owner(self.owner_pk)
@@ -330,7 +287,7 @@ class RemoveOwnerStateChange(BaseStateChange):
         self.owner_pk = owner_pk
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -341,6 +298,8 @@ class RemoveOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """If removing the owner would leave the group with no owners, the action is invalid."""
+
+        super().validate(actor=actor, target=target)
 
         if len(target.roles.get_owners()["actors"]) > 1:
             return True  # community has at least one more actor who is an owner
@@ -368,7 +327,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -376,12 +335,6 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"added role {self.role_name} as owner"
-
-    def validate(self, actor, target):
-        """
-        put real logic here
-        """
-        return True
 
     def implement(self, actor, target):
         target.roles.add_owner_role(self.role_name)
@@ -399,7 +352,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -410,6 +363,8 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """If removing the owner role would leave the group with no owners, the action is invalid."""
+
+        super().validate(actor=actor, target=target)
 
         if self.role_name not in target.roles.get_owners()["roles"]:
             self.set_validation_error(f"{self.role_name} is not an owner role in this community")
@@ -442,7 +397,7 @@ class AddRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -452,6 +407,9 @@ class AddRoleStateChange(BaseStateChange):
         return f"added role {self.role_name}"
 
     def validate(self, actor, target):
+
+        super().validate(actor=actor, target=target)
+
         if self.role_name in ["members", "governors", "owners"]:
             self.set_validation_error("Role name cannot be one of protected names: members, governors, owners.")
             return False
@@ -475,7 +433,7 @@ class RemoveRoleStateChange(BaseStateChange):
         self.role_name = role_name
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -498,6 +456,8 @@ class RemoveRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         """A role cannot be deleted without removing it from the permissions it's referenced in, and
         without removing it from owner and governor roles if it is there."""
+
+        super().validate(actor=actor, target=target)
 
         role_references = []
         client = Client(actor=actor, target=target)
@@ -544,7 +504,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return False
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     @classmethod
@@ -583,6 +543,9 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return True, None
 
     def validate(self, actor, target):
+
+        super().validate(actor=actor, target=target)
+
         if not isinstance(self.role_name, str):
             self.set_validation_error(f"Role must be type str, not {str(type(self.role_name))}")
             return False
@@ -624,7 +587,7 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return False
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -636,6 +599,8 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         """When removing people from a role, we must check that doing so does not leave us
         without any owners."""
+
+        super().validate(actor=actor, target=target)
 
         if self.role_name not in target.roles.get_owners()["roles"]:
             return True  # this isn't an owner role
@@ -676,7 +641,7 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         self.leadership_type = leadership_type
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -723,6 +688,8 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
+        super().validate(actor=actor, target=target)
+
         if not self.condition_type:
             self.set_validation_error(message="condition_type cannont be None")
 
@@ -752,7 +719,7 @@ class RemoveLeadershipConditionStateChange(BaseStateChange):
         self.leadership_type = leadership_type
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return cls.get_community_models()
 
     def description_present_tense(self):
@@ -760,9 +727,6 @@ class RemoveLeadershipConditionStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"removed {self.leadership_type} condition"
-
-    def validate(self, actor, target):
-        return True
 
     def implement(self, actor, target):
 

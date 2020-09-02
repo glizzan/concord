@@ -6,7 +6,7 @@ from django.db.models import QuerySet
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.client import BaseClient
-from concord.resources.models import Resource, Comment, CommentCatcher
+from concord.resources.models import Resource, Comment, CommentCatcher, SimpleList
 from concord.resources import state_changes as sc
 
 
@@ -34,6 +34,10 @@ class CommentClient(BaseClient):
                     )
                     self.target = catcher
 
+    def get_comment(self, pk):
+        """Gets specific comment given pk."""
+        return Comment.objects.get(pk=pk)
+
     def get_all_comments_on_target(self):
         """Gets all comment son the current target."""
         self.swap_target_if_needed()
@@ -48,16 +52,14 @@ class CommentClient(BaseClient):
         change = sc.AddCommentStateChange(text=text)
         return self.create_and_take_action(change)
 
-    def edit_comment(self, pk, text):
+    def edit_comment(self, text):
         """Edit a comment on the target."""
-        self.swap_target_if_needed(create=True)
-        change = sc.EditCommentStateChange(pk=pk, text=text)
+        change = sc.EditCommentStateChange(text=text)
         return self.create_and_take_action(change)
 
-    def delete_comment(self, pk):
+    def delete_comment(self):
         """Delete a comment from the target."""
-        self.swap_target_if_needed(create=True)
-        change = sc.DeleteCommentStateChange(pk=pk)
+        change = sc.DeleteCommentStateChange()
         return self.create_and_take_action(change)
 
 
@@ -101,15 +103,63 @@ class ResourceClient(BaseClient):
 
     def change_name(self, *, new_name: str) -> Tuple[int, Any]:
         """Change name of resource."""
-        change = sc.ChangeResourceNameStateChange(new_name=new_name)
+        change = sc.ChangeResourceNameStateChange(name=new_name)
         return self.create_and_take_action(change)
 
     def add_item(self, *, item_name: str) -> Tuple[int, Any]:
         """Add item to resource."""
-        change = sc.AddItemStateChange(item_name=item_name)
+        change = sc.AddItemStateChange(name=item_name)
         return self.create_and_take_action(change)
 
-    def remove_item(self, *, item_pk: int) -> Tuple[int, Any]:
+    def remove_item(self) -> Tuple[int, Any]:
         """Remove item from resource."""
-        change = sc.RemoveItemStateChange(item_pk=item_pk)
+        change = sc.RemoveItemStateChange()
+        return self.create_and_take_action(change)
+
+
+##################
+### ListClient ###
+##################
+
+
+class ListClient(BaseClient):
+    """Client for interacting with Lists."""
+
+    # Read methods
+
+    def get_list(self, pk):
+        return SimpleList.objects.get(pk=pk)
+
+    def get_all_lists(self):
+        return SimpleList.objects.all()
+
+    def get_all_lists_given_owner(self, owner):
+        content_type = ContentType.objects.get_for_model(owner)
+        return SimpleList.objects.filter(
+            owner_content_type=content_type, owner_object_id=owner.id)
+
+    # State changes
+
+    def add_list(self, name, description=None):
+        change = sc.AddListStateChange(name=name, description=description)
+        return self.create_and_take_action(change)
+
+    def edit_list(self, name=None, description=None):
+        change = sc.EditListStateChange(name=name, description=description)
+        return self.create_and_take_action(change)
+
+    def delete_list(self):
+        change = sc.DeleteListStateChange()
+        return self.create_and_take_action(change)
+
+    def add_row(self, row_content, index=None):
+        change = sc.AddRowStateChange(row_content=row_content, index=index)
+        return self.create_and_take_action(change)
+
+    def edit_row(self, row_content, index):
+        change = sc.EditRowStateChange(row_content=row_content, index=index)
+        return self.create_and_take_action(change)
+
+    def delete_row(self, index):
+        change = sc.DeleteRowStateChange(index=index)
         return self.create_and_take_action(change)

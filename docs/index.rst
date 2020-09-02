@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 About Concord
-=============
+*************
 
 Concord is a Python (Django) library that can be used by developers to build sites with comprehensive, 
 customizable, dynamic, and most importantly *user-determined* community governance.  It can be added to existing
@@ -111,6 +111,7 @@ Concord currently relies heavily on two languages and two frameworks.  Concord's
 
    example_implementation
    deep_dives
+   how_to_add_resource
 
 .. toctree::
    :hidden:

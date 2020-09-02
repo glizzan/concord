@@ -27,6 +27,12 @@ class SetConditionOnActionStateChange(BaseStateChange):
         self.community_pk = community_pk
         self.leadership_type = leadership_type
 
+    @classmethod
+    def get_allowable_targets(cls):
+        """Returns the classes that an action of this type may target."""
+        from concord.actions.models import Action
+        return [Action]
+
     def get_condition_class(self):
         """Gets the condition class object given the condition type."""
         return Client().Conditional.get_condition_class(condition_type=self.condition_type)
@@ -56,6 +62,8 @@ class SetConditionOnActionStateChange(BaseStateChange):
         return source_type + "_" + str(source_pk)
 
     def validate(self, actor, target):
+
+        super().validate(actor=actor, target=target)
 
         if not self.permission_pk and not self.community_pk:
             self.set_validation_error(message="Must supply either permission_pk or community_pk when setting condition")
@@ -108,7 +116,7 @@ class AddVoteStateChange(BaseStateChange):
         self.vote = vote
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return [VoteCondition]
 
     def description_present_tense(self):
@@ -123,6 +131,9 @@ class AddVoteStateChange(BaseStateChange):
         a) the voter hasn't voted before
         b) if the vote is abstain, abstentions are allowed
         """
+
+        super().validate(actor=actor, target=target)
+
         if self.vote not in ["yea", "nay", "abstain"]:
             self.set_validation_error(f"Vote type must be 'yea', 'nay' or 'abstain', not {self.vote}")
             return False
@@ -154,7 +165,7 @@ class ApproveStateChange(BaseStateChange):
     action_helps_pass_condition = True
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return [ApprovalCondition]
 
     def description_present_tense(self):
@@ -164,6 +175,8 @@ class ApproveStateChange(BaseStateChange):
         return "approved"
 
     def validate(self, actor, target):
+
+        super().validate(actor=actor, target=target)
 
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:
@@ -190,7 +203,7 @@ class RejectStateChange(BaseStateChange):
     action_helps_pass_condition = False
 
     @classmethod
-    def get_settable_classes(cls):
+    def get_allowable_targets(cls):
         return [ApprovalCondition]
 
     def description_present_tense(self):
@@ -202,6 +215,8 @@ class RejectStateChange(BaseStateChange):
     def validate(self, actor, target):
         """Checks if actor is the same user who sent the action that triggered the condition
         and, unless self approval is allowed, rejects them as invalid."""
+
+        super().validate(actor=actor, target=target)
 
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:

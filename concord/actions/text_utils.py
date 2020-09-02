@@ -125,10 +125,10 @@ def condition_template_to_text(condition_action, permissions_actions):
     phrases = []
     for perm_action in permissions_actions:
 
-        roles_and_actors_string = roles_and_actors({"roles": perm_action.change.permission_roles,
-                                                    "actors": perm_action.change.permission_actors})
+        roles_and_actors_string = roles_and_actors({"roles": perm_action.change.roles,
+                                                    "actors": perm_action.change.actors})
 
-        change_type = get_state_change_object(perm_action.change.permission_type)
+        change_type = get_state_change_object(perm_action.change.change_type)
 
         if change_type.action_helps_pass_condition:
             phrases.append(roles_and_actors_string + " " + change_type.verb_name)
@@ -209,7 +209,12 @@ def action_status_to_text(resolution):
 def action_to_text(action, with_target=True):
     """Gets a text description of an action."""
 
-    target_string = f" {action.change.get_preposition()} {action.target.get_name()}" if with_target else ""
+    if not with_target:
+        target_string = ""
+    elif not action.target:
+        target_string = f" {action.change.get_preposition()} deleted target"
+    else:
+        target_string = f" {action.change.get_preposition()} {action.target.get_name()}"
 
     if action.status == "implemented":
         return f"{action.actor.username} {action.change.description_past_tense()}" + target_string

@@ -46,7 +46,8 @@ class Action(models.Model):
     # Basics
 
     def __str__(self):
-        return f"Action {self.pk} '{self.change.description}' by {self.actor} on {self.target} ({self.status})"
+        target = self.target if self.target else "deleted target"
+        return f"Action {self.pk} '{self.change.description}' by {self.actor} on {target} ({self.status})"
 
     def get_status(self):
         """Get status of Action."""
@@ -54,7 +55,7 @@ class Action(models.Model):
 
     def save(self, *args, **kwargs):
         """If action is live (is_draft is False) check that target and actor are set."""
-        if not self.is_draft:
+        if not self.is_draft and self.status != "implemented":
             if self.target is None or self.actor is None:
                 raise DatabaseError("Must set target and actor before sending or implementing an Action")
         return super().save(*args, **kwargs)  # Call the "real" save() method.

@@ -18,9 +18,8 @@ from concord.actions.utils import get_state_changes_settable_on_model_and_parent
 
 
 class PermissionResourceClient(BaseClient):
-    """The "target" of a PermissionResourceClient is always the resource or community on which
-    the permission resource we're manipulating is set.  As with all Concord clients, a
-    target must be set for all methods not  explicitly grouped as target-less methods."""
+    """Client for interacting with Permission resources.  Target is usually the PermissionedModel
+    that we're setting permissions on, but is occasionally the PermissionedModel itself."""
 
     # Target-less methods (don't require a target to be set ahead of time)
 
@@ -131,71 +130,66 @@ class PermissionResourceClient(BaseClient):
         if not permission_actors and not permission_roles and anyone is not True:
             raise Exception("Either actor or roles must be supplied when creating a permission")
         change = sc.AddPermissionStateChange(
-            permission_type=permission_type, permission_actors=permission_actors, permission_roles=permission_roles,
-            permission_configuration=permission_configuration, anyone=anyone
-        )
+            change_type=permission_type, actors=permission_actors, roles=permission_roles,
+            configuration=permission_configuration, anyone=anyone)
         return self.create_and_take_action(change)
 
-    def remove_permission(self, *, item_pk: int) -> Tuple[int, Any]:
+    def remove_permission(self) -> Tuple[int, Any]:
         """Remove permission from target."""
-        change = sc.RemovePermissionStateChange(item_pk=item_pk)
+        change = sc.RemovePermissionStateChange()
         return self.create_and_take_action(change)
 
-    def add_actor_to_permission(self, *, actor: str, permission_pk: int) -> Tuple[int, Any]:
+    def add_actor_to_permission(self, *, actor: str) -> Tuple[int, Any]:
         """Add actor to permission."""
-        change = sc.AddActorToPermissionStateChange(actor_to_add=actor, permission_pk=permission_pk)
+        change = sc.AddActorToPermissionStateChange(actor_to_add=actor)
         return self.create_and_take_action(change)
 
-    def remove_actor_from_permission(self, *, actor: str, permission_pk: int) -> Tuple[int, Any]:
+    def remove_actor_from_permission(self, *, actor: str) -> Tuple[int, Any]:
         """Remove actor from permission."""
-        change = sc.RemoveActorFromPermissionStateChange(actor_to_remove=actor, permission_pk=permission_pk)
+        change = sc.RemoveActorFromPermissionStateChange(actor_to_remove=actor)
         return self.create_and_take_action(change)
 
-    def add_role_to_permission(self, *, role_name: str, permission_pk: int) -> Tuple[int, Any]:
+    def add_role_to_permission(self, *, role_name: str) -> Tuple[int, Any]:
         """Add role to permission."""
-        change = sc.AddRoleToPermissionStateChange(role_name=role_name, permission_pk=permission_pk)
+        change = sc.AddRoleToPermissionStateChange(role_name=role_name)
         return self.create_and_take_action(change)
 
-    def remove_role_from_permission(self, *, role_name: str, permission_pk: int) -> Tuple[int, Any]:
+    def remove_role_from_permission(self, *, role_name: str) -> Tuple[int, Any]:
         """Remove role from permission."""
-        change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name, permission_pk=permission_pk)
+        change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name)
         return self.create_and_take_action(change)
 
-    def change_configuration_of_permission(self, *, configurable_field_name: str, configurable_field_value: str,
-                                           permission_pk: int) -> Tuple[int, Any]:
+    def change_configuration_of_permission(
+            self, *, configurable_field_name: str, configurable_field_value: str) -> Tuple[int, Any]:
         """Change the configuration of the permission."""
         change = sc.ChangePermissionConfigurationStateChange(
-            configurable_field_name=configurable_field_name, configurable_field_value=configurable_field_value,
-            permission_pk=permission_pk
-        )
+            configurable_field_name=configurable_field_name, configurable_field_value=configurable_field_value)
         return self.create_and_take_action(change)
 
-    def change_inverse_field_of_permission(self, *, change_to: bool, permission_pk=int) -> Tuple[int, Any]:
+    def change_inverse_field_of_permission(self, *, change_to: bool) -> Tuple[int, Any]:
         """Toggle the inverse field on the permission."""
-        change = sc.ChangeInverseStateChange(change_to=change_to, permission_pk=permission_pk)
+        change = sc.ChangeInverseStateChange(change_to=change_to)
         return self.create_and_take_action(change)
 
-    def give_anyone_permission(self, permission_pk):
+    def give_anyone_permission(self):
         """Make it so everyone has the permission."""
-        change = sc.EnableAnyoneStateChange(permission_pk=permission_pk)
+        change = sc.EnableAnyoneStateChange()
         return self.create_and_take_action(change)
 
-    def remove_anyone_from_permission(self, permission_pk):
+    def remove_anyone_from_permission(self):
         """Remove the ability for everyone to have the permission."""
-        change = sc.DisableAnyoneStateChange(permission_pk=permission_pk)
+        change = sc.DisableAnyoneStateChange()
         return self.create_and_take_action(change)
 
-    def add_condition_to_permission(self, *, permission_pk, condition_type, condition_data=None, permission_data=None):
+    def add_condition_to_permission(self, *, condition_type, condition_data=None, permission_data=None):
         """Add a condition to the permission."""
         change = sc.AddPermissionConditionStateChange(
-            permission_pk=permission_pk, condition_type=condition_type, condition_data=condition_data,
-            permission_data=permission_data
-        )
+            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data)
         return self.create_and_take_action(change)
 
-    def remove_condition_from_permission(self, permission_pk):
+    def remove_condition_from_permission(self):
         """Remove a condition from the permission."""
-        change = sc.RemovePermissionConditionStateChange(permission_pk=permission_pk)
+        change = sc.RemovePermissionConditionStateChange()
         return self.create_and_take_action(change)
 
     # Complex/multiple state changes
@@ -204,6 +198,7 @@ class PermissionResourceClient(BaseClient):
         """Given a dict with the new configuration for a permission, change individual fields
         as needed."""
 
+        self.target = permission
         actions = []
         old_configuration = permission.get_configuration()
 
@@ -211,10 +206,9 @@ class PermissionResourceClient(BaseClient):
 
             if (field_name in old_configuration and old_configuration[field_name] != field_value) or \
                     (field_name not in old_configuration and field_value not in [None, '', []]):
+
                 action, result = self.change_configuration_of_permission(
-                    configurable_field_name=field_name, configurable_field_value=field_value,
-                    permission_pk=permission.pk
-                )
+                    configurable_field_name=field_name, configurable_field_value=field_value)
                 actions.append(action)
 
         return actions
@@ -222,6 +216,7 @@ class PermissionResourceClient(BaseClient):
     def update_roles_on_permission(self, *, role_data, permission):
         """Given a list of roles, updates the given permission to match those roles."""
 
+        self.target = permission
         action_list = []
 
         old_roles = set(permission.get_role_names())
@@ -230,15 +225,17 @@ class PermissionResourceClient(BaseClient):
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            action_list.append(self.add_role_to_permission(role_name=role, permission_pk=permission.pk))
+            action_list.append(self.add_role_to_permission(role_name=role))
 
         for role in roles_to_remove:
-            action_list.append(self.remove_role_from_permission(role_name=role, permission_pk=permission.pk))
+            action_list.append(self.remove_role_from_permission(role_name=role))
 
         return action_list
 
     def update_actors_on_permission(self, *, actor_data, permission):
         """Given a list of actors, updates the given permission to match those actors."""
+
+        self.target = permission
 
         action_list = []
 
@@ -248,9 +245,9 @@ class PermissionResourceClient(BaseClient):
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            action_list.append(self.add_actor_to_permission(actor=actor, permission_pk=permission.pk))
+            action_list.append(self.add_actor_to_permission(actor=actor))
 
         for actor in actors_to_remove:
-            action_list.append(self.remove_actor_from_permission(actor=actor, permission_pk=permission.pk))
+            action_list.append(self.remove_actor_from_permission(actor=actor))
 
         return action_list

@@ -140,12 +140,12 @@ class ListClient(BaseClient):
 
     # State changes
 
-    def add_list(self, name, description=None):
-        change = sc.AddListStateChange(name=name, description=description)
+    def add_list(self, name, configuration, description=None):
+        change = sc.AddListStateChange(name=name, configuration=configuration, description=description)
         return self.create_and_take_action(change)
 
-    def edit_list(self, name=None, description=None):
-        change = sc.EditListStateChange(name=name, description=description)
+    def edit_list(self, name=None, configuration=None, description=None):
+        change = sc.EditListStateChange(name=name, configuration=configuration, description=description)
         return self.create_and_take_action(change)
 
     def delete_list(self):

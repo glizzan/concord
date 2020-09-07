@@ -1974,7 +1974,9 @@ class SimpleListTest(DataTestCase):
 
         # add a list
         self.assertEquals(len(self.client.List.get_all_lists_given_owner(self.instance)), 0)
-        action, list_instance = self.client.List.add_list(name="Awesome Players", description="Our fave players")
+        action, list_instance = self.client.List.add_list(name="Awesome Players", 
+            configuration={"player name": {"required": True}, "team": {"required": False}}, 
+            description="Our fave players")
         self.assertEquals(len(self.client.List.get_all_lists_given_owner(self.instance)), 1)
         self.assertEquals(list_instance.name, "Awesome Players")
 
@@ -1985,27 +1987,95 @@ class SimpleListTest(DataTestCase):
         self.assertEquals(list_instance.name, "Awesome Players!")
 
         # add a few rows
-        action, list_instance = self.client.List.add_row(row_content="Sam Staab")
-        action, list_instance = self.client.List.add_row(row_content="Tziarra King", index=0)
-        action, list_instance = self.client.List.add_row(row_content="Bethany Balcer", index=1)
-        action, list_instance = self.client.List.add_row(row_content="Ifeoma Onumonu")
+        action, list_instance = self.client.List.add_row(row_content={"player name": "Sam Staab"})
+        action, list_instance = self.client.List.add_row(row_content={"player name": "Tziarra King"}, index=0)
+        action, list_instance = self.client.List.add_row(row_content={"player name": "Bethany Balcer"}, index=1)
+        action, list_instance = self.client.List.add_row(row_content={"player name": "Ifeoma Onumonu"})
         self.assertEquals(list_instance.get_rows(), 
-            ["Tziarra King", "Bethany Balcer", "Sam Staab", "Ifeoma Onumonu"])
+            [{'player name': 'Tziarra King', 'team': ''}, 
+            {'player name': 'Bethany Balcer', 'team': ''},
+            {'player name': 'Sam Staab', 'team': ''},
+            {'player name': 'Ifeoma Onumonu', 'team': ''}])
 
         # edit a row
-        action, list_instance = self.client.List.edit_row(row_content="Tziarra King, Utah Royals", index=0)
-        action, list_instance = self.client.List.edit_row(row_content="Bethany Balcer, OL Reign", index=1)
-        action, list_instance = self.client.List.edit_row(row_content="Sam Staab, Washington Spirit", index=2)
-        action, list_instance = self.client.List.edit_row(row_content="Ifeoma Onumonu, Sky Blue FC", index=3)
+        action, list_instance = self.client.List.edit_row(
+            row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, index=0)
+        action, list_instance = self.client.List.edit_row(
+            row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, index=1)
+        action, list_instance = self.client.List.edit_row(
+            row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, index=2)
+        action, list_instance = self.client.List.edit_row(
+            row_content={'player name': 'Ifeoma Onumonu', "team": "Sky Blue FC"}, index=3)
         self.assertEquals(list_instance.get_rows(), 
-            ["Tziarra King, Utah Royals", "Bethany Balcer, OL Reign", "Sam Staab, Washington Spirit", 
-             "Ifeoma Onumonu, Sky Blue FC"])
+            [{'player name': 'Tziarra King', 'team': 'Utah Royals'}, 
+            {'player name': 'Bethany Balcer', 'team': 'OL Reign'},
+            {'player name': 'Sam Staab', 'team': 'Washington Spirit'},
+            {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
 
         # delete a row
         action, list_instance = self.client.List.delete_row(index=1)
         self.assertEquals(list_instance.get_rows(), 
-            ["Tziarra King, Utah Royals", "Sam Staab, Washington Spirit", "Ifeoma Onumonu, Sky Blue FC"])
+            [{'player name': 'Tziarra King', 'team': 'Utah Royals'},
+            {'player name': 'Sam Staab', 'team': 'Washington Spirit'},
+            {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
 
         # delete list
         action, deleted_list_pk = self.client.List.delete_list()
         self.assertEquals(len(self.client.List.get_all_lists_given_owner(self.instance)), 0)
+
+    def test_edit_configuration_of_list(self):
+
+        # add a list & rows
+        action, list_instance = self.client.List.add_list(name="Awesome Players", 
+            configuration={"player name": {"required": True}, "team": {"required": False}}, 
+            description="Our fave players")
+        self.client.List.set_target(list_instance)
+        action, list_instance = self.client.List.add_row(
+            row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, index=0)
+        action, list_instance = self.client.List.add_row(
+            row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, index=1)
+        action, list_instance = self.client.List.add_row(
+            row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, index=2)
+        action, list_instance = self.client.List.add_row(
+            row_content={'player name': 'Ifeoma Onumonu'}, index=3)
+
+        # can't make team required since Ify is missing a team and there's no default value
+        action, list_instance = self.client.List.edit_list(
+            configuration={"player name": {"required": True}, "team": {"required": True}})
+        self.assertEquals(action.error_message, 'Need default value for required field team')
+
+        # add default value for Ify, and now we can make team required
+        action, list_instance = self.client.List.edit_row(
+            row_content={'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}, index=3)
+        action, list_instance = self.client.List.edit_list(
+            configuration={"player name": {"required": True}, "team": {"required": True}})
+        self.assertEquals(action.status, "implemented")
+        
+        # now when we try to add a new player without a team it's rejected
+        action, list_instance = self.client.List.add_row(
+            row_content={'player name': 'Paige Nielson'}, index=3)
+        self.assertEquals(action.error_message, 
+            'Field team is required with no default_value, so must be supplied')
+
+        # add position field with default value
+        action, list_instance = self.client.List.edit_list(
+            configuration={"player name": {"required": True}, "team": {"required": True},
+                "position": {"required": True, "default_value": "forward"} })
+        action, list_instance = self.client.List.add_row(
+            row_content={'player name': 'Paige Nielson', 'team': 'Washington Spirit'}, index=3)
+        self.assertEquals(list_instance.get_rows(), 
+            [{'player name': 'Tziarra King', 'team': 'Utah Royals', 'position': 'forward'}, 
+            {'player name': 'Bethany Balcer', 'team': 'OL Reign', 'position': 'forward'}, 
+            {'player name': 'Sam Staab', 'team': 'Washington Spirit', 'position': 'forward'}, 
+            {'player name': 'Paige Nielson', 'team': 'Washington Spirit', 'position': 'forward'}, 
+            {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC', 'position': 'forward'}])
+
+        # remove position from config and it's gone 
+        action, list_instance = self.client.List.edit_list(
+            configuration={"player name": {"required": True}, "team": {"required": True}})
+        self.assertEquals(list_instance.get_rows(), 
+            [{'player name': 'Tziarra King', 'team': 'Utah Royals'}, 
+            {'player name': 'Bethany Balcer', 'team': 'OL Reign'}, 
+            {'player name': 'Sam Staab', 'team': 'Washington Spirit'}, 
+            {'player name': 'Paige Nielson', 'team': 'Washington Spirit'}, 
+            {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])

@@ -745,9 +745,11 @@ Let's start with the list of lists:
 
             <router-link v-for="{ pk, name, description } in lists" v-bind:key=pk
                     :to="{ name: 'list-detail', params: { list_id: pk } }">
-                <b-card :title=name v-bind:key=pk class="bg-light text-info border-secondary mb-3">
-                    <p class="mb-1 text-secondary list-description">  [[ description ]]  </p>
-                </b-card>
+            <b-card v-bind:key=pk class="bg-light text-info border-secondary mb-3">
+                <b-card-title>[[ name ]]<span class="text-dark ml-2"><small>
+                    [[ rows.length ]] items</small></span></b-card-title>
+                <p class="mb-1 text-secondary list-description"> [[ description ]] </p>
+            </b-card>
             </router-link>
 
             <span v-if="Object.keys(lists).length === 0">You do not have any lists yet.</span>
@@ -838,11 +840,7 @@ Let's take a look at our add/edit list component:
                 }
             },
             created () {
-                if (this.list_id) {
-                    list = this.getListData(this.list_id)
-                    this.name = list.name
-                    this.description = list.description
-                }
+                if (this.list_id && !this.lists_loaded) { this.getLists() }
             },
             computed: {
                 ...Vuex.mapState({ lists: state => state.simplelists.lists }),
@@ -850,10 +848,21 @@ Let's take a look at our add/edit list component:
                 title_string: function() {
                     if (this.list_id) {  return "Edit list '" + this.name + "'" }
                     else { return "Add a new list" }
+                },
+                lists_loaded: function() { 
+                    if (this.lists.length == 0) { return false } 
+                    else { this.populate_list_data(); return true }
                 }
             },
             methods: {
-                ...Vuex.mapActions(['addList', 'editList']),
+                ...Vuex.mapActions(['getLists', 'addList', 'editList']),
+                populate_list_data() {
+                    if (this.list_id) {
+                        list = this.getListData(this.list_id)
+                        this.name = list.name
+                        this.description = list.description
+                    }
+                },
                 add_list() { 
                     this.addList({ name: this.name, description: this.description })
                     .catch(error => {  console.log(error), this.error_message = error })
@@ -869,7 +878,7 @@ Let's take a look at our add/edit list component:
 
 You can see how similar it is in overall structure. The add/edit form is the component that uses our Addlist and EditList actions/mutations.  Also note how, when the modal is hidden, we go back one route.  This brings us back to the 'list of lists' page, if we've called it from there, or from the 'list detail' page, if we've called it from there.
 
-Note that this component gets a prop, ``list_id``.  Ths is passed in via the router.
+Note that this component gets a prop, ``list_id``.  Ths is passed in via the router.  If ``list_id`` is passed in, it checks whether or not the lists have been fetched from the backend and, if they have not, fetches them so we can supply the data for an existing list.  This is helpful when someone is coming to this view directly via the URL, as opposed to having clicked the edit list button.  When someone is coming from the edit list button the lists will already be loaded, so we don't have to fetch them again.
 
 Next let's look at the list detail component, which is the most complex component we'll make.  I'll show this in two parts, first the html section and then the javascript section (to get the appropriate highlighting):
 
@@ -1221,5 +1230,542 @@ At the end of this process, your front end should look something like this:
 
 Enhancements
 ************
-- add item_count field on model and display it in front-end
-- add columns to rows (simple, always string, can indicate if required or not)
+
+Let's go back and add a little more functionality to our SimpleLists.  Instead of having lists with only one column named "content", we're going to give our users the ability to specify an arbitrary number of columns with whatever names they like. 
+
+To keep things manageable for us, we'll specify that the column names and contents will always be strings. We'll let users specify whether a column is required or not, though, and supply a default when they're adding a new required field to an existing list.  When users create or edit a list, they can change the configuration of the table, and when they go to add or edit rows they'll be prompted to fill out the column fields.
+
+Step 1: Models
+--------------
+
+We'll start by updating our models. First we'll add a new field and two methods to get and set data on it.
+
+.. code-block:: python
+
+    class SimpleList(PermissionedModel):
+        """Model to store simple lists with arbitrary fields."""
+
+        name = models.CharField(max_length=200)
+        description = models.CharField(max_length=200)
+        rows = models.TextField(list)
+        row_configuration = models.TextField(list)
+
+        def get_row_configuration(self):
+            """Gets row configuation json and loads to Python dict."""
+            if self.row_configuration:
+                return json.loads(self.row_configuration)
+            return {}
+
+        def set_row_configuration(self, row_configuration):
+            """Given a row configuration with format, saves to DB."""
+            self.row_configuration = json.dumps(row_configuration)
+
+When setting our configuration, we should check that the row configuration supplied is a valid configuration. We'll create a helper method to do this. This method checks for a variety of ways that the configuration might be invalid, and hopefully covers most cases.
+
+.. code-block:: python
+
+    def validate_configuration(self, row_configuration):
+        """Checks that a given configuration is valid.  Should have format:
+        { field_name : { 'required': True, 'default_value': 'default'}}
+        If required is not supplied, defaults to False.  If default_value is not supplied, defaults to None."""
+        
+        if not isinstance(row_configuration, dict):
+            raise ValidationError(f"List configuration must be a dict, not {type(row_configuration)}")
+        if len(row_configuration.items()) < 1:
+            raise ValidationError("Must supply at least one column to configuration.")
+        field_name_list = []
+        for field_name, params in row_configuration.items():
+            if field_name in field_name_list:
+                raise ValidationError(f"Field names must be unique. Multiple instances of field {field_name}")
+            field_name_list.append(field_name)
+            params["required"] = params["required"] if "required" in params else False
+            params["default_value"] = params["default_value"] if "default_value" in params else None
+            if not isinstance(params["required"], bool):
+                raise ValidationError(f"Required parameter for {field_name} must be True or False, " +
+                                      f"not {type(params['required'])}")
+            if params["default_value"] and not isinstance(params["default_value"], str):
+                raise ValidationError(f"default_value parameter for {field_name} must be str, not " +
+                                      f"{type(params['default_value'])}")
+            if set(params.keys()) - set(["required", "default_value"]):
+                unexpected_keys = list(set(params.keys()) - set(["required", "default_value"]))
+                raise ValidationError(f"unexpected keys {unexpected_keys} in row configuration")
+
+Now we can update our ``set_row_configuration`` method to use the helper:
+
+.. code-block:: python
+
+    def set_row_configuration(self, row_configuration):
+        """Given a row configuration with format, validated and saves to DB."""
+        self.validate_configuration(row_configuration)
+        self.row_configuration = json.dumps(row_configuration)
+
+We also need a way to check that new row data matches our configuration.  Let's start by creating a helper method which checks a given row against the current configuration:
+
+.. code-block:: python
+
+    def check_row_against_configuration(self, row):
+        """Given a row, check that it's valid for the row configuration."""
+        config = self.get_row_configuration()
+        for field_name, params in config.items():
+            if params["required"]:
+                if field_name not in row or row[field_name] in ["", None]:
+                    if not params["default_value"]:
+                        raise ValidationError(f"Field {field_name} is required with no default_value, " +
+                                              "so must be supplied")
+        for field_name, params in row.items():
+            if field_name not in config:
+                field_names = ", ".join([field_name for field_name, params in config.items()])
+                raise ValidationError(f"Field {field_name} is not a valid field, must be one of {field_names}")
+
+For now, we just check that all the fields in the row exist in the configuration, and that all required fields are there (or that there's a default value for them).
+
+We also want to create a method that supplies any rows with missing values in a required field with default values:
+
+.. code-block:: python
+
+    def handle_missing_fields_and_values(self, row):
+        """Given a row, check that it's valid for the row configuration."""
+        config = self.get_row_configuration()
+        for field_name, params in config.items():
+            if field_name not in row:
+                row[field_name] = ""
+            if params["required"] and not row[field_name]:
+                row[field_name] = params["default_value"]
+        return row
+
+Now that we've made these two methods, we can add them to add_row and edit_row, for example:
+
+.. code-block:: python
+
+    def edit_row(self, row, index):
+        """Edit a row in the list."""
+        self.check_row_against_configuration(row)
+        row = self.handle_missing_fields_and_values(row)
+        rows = self.get_rows()
+        rows[index] = row
+        self.rows = json.dumps(rows)
+
+We also need to handle when a user wants to change the list configuration and there are already rows in the database. We'll create a method which can be called by edit_list:
+
+.. code-block:: python
+
+    def adjust_rows_to_new_configuration(self, configuration):
+        """Given a new row configuration, goes through existing rows and adjusts them them."""
+        required_fields = [field_name for field_name, params in configuration.items() if params["required"] is True]
+        adjusted_rows = []
+        for row in self.get_rows():
+            new_row = {}
+            for row_field_name, row_field_value in row.items():
+                if row_field_name in configuration:  # leaves behind fields not in new config
+                    new_row.update({row_field_name: row_field_value})
+            for field in required_fields:
+                if field not in row:
+                    new_row[field] = None
+                if field in row and row[field]:
+                    new_row[field] = row[field]
+                else:
+                    default_value = configuration[field].get("default_value", None)
+                    if default_value:
+                        new_row[field] = default_value
+                    else:
+                        raise ValidationError(f"Need default value for required field {field}")
+            adjusted_rows.append(new_row)
+        self.rows = json.dumps(adjusted_rows)
+
+Let's add a reference to this too when setting a new configuration:
+
+.. code-block:: python
+
+    def set_row_configuration(self, row_configuration):
+        """Given a row configuration with format, validated and saves to DB."""
+        self.validate_configuration(row_configuration)
+        self.adjust_rows_to_new_configuration(row_configuration)
+        self.row_configuration = json.dumps(row_configuration)
+
+Step 2: State Changes
+---------------------
+
+This should be all we need to change on our model. Let's go update our state changes. We'll need to update AddList, EditList, AddRow and EditRow.
+
+We'll start with AddList.  We'll need to add it as an input parameter to our ``__init__``.  We won't need to add it as an input_field since we'll be manually calling our ``validate_configuration`` method. We'll also add it when we're creating our SimpleList object in ``implement``.  The most important change we'll make is overridding the parent ``validate`` method to add our call to ``validate_configuration``.
+
+.. code-block:: python
+
+    class AddListStateChange(BaseStateChange):
+        """State Change to create a list in a community (or other target)."""
+        description = "Add list"
+        input_fields = ["name", "description"]
+        input_target = SimpleList
+
+        def __init__(self, name, configuration, description=None):
+            self.name = name
+            self.configuration = configuration
+            self.description = description if description else ""
+
+        @classmethod
+        def get_allowable_targets(cls):
+            return cls.get_community_models()
+
+        def description_present_tense(self):
+            return f"add list with name {self.name}"
+
+        def description_past_tense(self):
+            return f"added list with name {self.name}"
+
+        def validate(self, actor, target):
+            super().validate(actor=actor, target=target)
+            try:
+                SimpleList().validate_configuration(self.configuration)
+                return True
+            except ValidationError as error:
+                self.set_validation_error(message=error.message)
+                return False
+
+        def implement(self, actor, target):
+            simple_list = SimpleList(name=self.name, description=self.description, owner=target.get_owner())
+            simple_list.set_row_configuration(self.configuration)
+            simple_list.save()
+            return simple_list
+
+The Edit List state change is similar - we add the new configuation parameter to ``__init__`` and call our ``validate_configuration`` method in ``validate``.  In addition to checking that the configuration is valid, we'll also need to check that the existing rows can be updated to the new configuration withour raising an error.  Our Edit List state change's validate method now looks like this:
+
+.. code-block:: python
+
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        if not self.name and not self.description and not self.configuration:
+            self.set_validation_error(message="Must supply new name, description, or configuration when editing List.")
+            return False
+        if self.configuration:
+            try:
+                target.validate_configuration(self.configuration)
+                target.adjust_rows_to_new_configuration(self.configuration)
+                return True
+            except ValidationError as error:
+                self.set_validation_error(message=error.message)
+                return False
+        return True
+
+In the implement method, we can call ``set_row_configuration``, knowing it will validate the configuration and the adjusted rows again, as there is a chance the target may have changed since the action was first validated:
+
+.. code-block:: python
+
+    def implement(self, actor, target):
+        target.name = self.name if self.name else target.name
+        target.description = self.description if self.description else target.description
+        if self.configuration:
+            target.set_row_configuration(self.configuration)
+        target.save()
+        return target
+
+There's no changes to the Delete List state change (or the Delete Row state change, for that matter) so lets move on to the Add Row state change.  We can keep the ``row_content`` variable but instead of assuming it's a simple string, we're going to assume it's a dictionary of fields and values.  When we validate the state change, we'll call our ``check_row_against_configuration`` to make sure the row_content is formatted acceptably:
+
+.. code-block:: python
+
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        try:
+            target.check_row_against_configuration(self.row_content)
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
+            return False
+        if self.index and not isinstance(self.index, int):
+            self.set_validation_error(message="Index must be an integer.")
+            return False
+        return True
+
+We'll make the same update to the validate method of the edit row state change as well.  And that's it!  We shouldn't need to make any more adjustments to our state changes.
+
+Step 3: Client
+--------------
+
+The next step is to update our client, which should be very straightforward.  The only methods we need to adjust are ``add_list`` and ``edit_list``:
+
+.. code-block:: python
+
+    def add_list(self, name, configuration, description=None):
+        change = sc.AddListStateChange(name=name, configuration=configuration, description=description)
+        return self.create_and_take_action(change)
+
+    def edit_list(self, name=None, configuration=None, description=None):
+        change = sc.EditListStateChange(name=name, configuration=configuration, description=description)
+        return self.create_and_take_action(change)
+
+Before we move on to adding our views, you should migrate your database. Because you're changing an existing model, you'll need to provide a default.  The following JSON string should be a good default but feel free to adjust to your needs: ``'{"content": {"required": true}}'`` The rows will also be out of format, you'll want to run a command like the following in your shell:
+
+.. code-block:: python
+
+    for simple_list in SimpleList.objects.all():
+        new_rows = [{'content': row_content } for row_content in simple_list.get_rows()]
+        simple_list.rows = json.dumps(new_rows)
+        simple_list.save(override_check=True)
+
+Step 4: Views
+-------------
+
+Now, on to our views! We'll need to accept the configuration parameter parameter from the front end in our ``add_list`` and ``edit_list`` views, for example:
+
+.. code-block:: python
+
+    @login_required
+    @reformat_input_data
+    def add_list(request, target, name, configuration, description=None):
+
+        client = Client(actor=request.user)
+        target = client.Community.get_community(community_pk=target)
+        client.List.set_target(target=target)
+
+        action, result = client.List.add_list(name=name, configuration=configuration, 
+            description=description)
+
+        action_dict = get_action_dict(action)
+        if action.status == "implemented":
+            action_dict["list_data"] = serialize_list_for_vue(result)
+        return JsonResponse(action_dict)
+
+We'll also want to include configuration data when serializing our lists:
+
+.. code-block:: python
+
+    def serialize_list_for_vue(simple_list):
+        return {'pk': simple_list.pk, 'name': simple_list.name, 'description': simple_list.description,
+                'configuration': simple_list.get_row_configuration(), 'rows': simple_list.get_rows()}
+
+Step 5: Vue
+-----------
+
+The last thing we need to do is update our components.  We'll need to update our list detail view so it displays our columns correctly, our form field so that we can specify the configuration there, and the row form so that it provides the user with our configured fields as fields to fill out.
+
+List Detail Component
+^^^^^^^^^^^^^^^^^^^^^
+
+First let's update our detail view.  We'll start by making a quick access method for the configuration:
+
+.. code-block:: javascript
+
+    configuration: function() {
+        if (this.lists_loaded) { return this.getListData(this.list_id).configuration } else { return {} }},
+
+We'll also turn our list_fields (aka columns used by our table) into a computed variable:
+
+.. code-block:: javascript
+
+        list_fields: function() {
+            list_fields = [{ key: 'index', sortable: true }]
+            if (this.lists_loaded) {
+                for (field in this.configuration) {
+                    list_fields.push({key: field, sortable: true})
+                }
+            }
+            list_fields.push('change')
+            return list_fields
+        },
+
+Finally, we'll reformat the row data to match the new system as well:
+
+.. code-block:: javascript
+
+        list_data: function() {
+            list_data = []
+            index = 0
+            for (row in this.rows) {
+                row_dict = {}
+                for (field in this.rows[row]) {
+                    row_dict[field] = this.rows[row][field]
+                }
+                row_dict["index"] = index
+                list_data.push(row_dict)
+                index++
+            }
+            return list_data
+        }
+
+Add/Edit List Component
+^^^^^^^^^^^^^^^^^^^^^^^
+
+This should handle our display, and your table should like it did before, as we haven't actually added any new columns.  Let's add the ability to do that now, in the list form.  
+
+We'll start by creating the html which will display our columns. This has two sections - a simple table which displays the current list of columns, including whether they're required or have a default value, and a short form which allows us to add new columns.  We'll have two buttons, one which adds a new column and one which deletes an existing column.
+
+.. code-block:: html
+
+    <span id="list_columns" class="my-4">
+
+        <b-table-lite striped :items="columns" caption-top>
+            <template v-slot:table-caption>Existing columns</template>
+            <template v-slot:cell(delete)="data"><b-button @click='delete_column(data.item)'>
+                delete</b-button></template>
+        </b-table-lite>
+
+        <error-component :message=column_error_message :dismissable=true></error-component>
+
+        <p class="my-2">Add a new column:</p>
+
+        <b-form inline>
+            <b-form-input id="column_name" v-model="column_name" placeholder="column name" required
+                class="mr-2"></b-form-input>
+            <b-form-input id="column_default" v-model="column_default" placeholder="default value"
+                class="mr-2"></b-form-input>
+            <b-form-checkbox id="column_required" v-model="column_required" class="mr-2">
+                required</b-form-checkbox>
+            <b-button variant="info" class="btn-sm" id="add_new_col_button" 
+                @click="add_column()">add</b-button>
+        </b-form>
+
+    </span>
+
+The format in which our configuration is stored is not quite right to display on the table, so let's create two helper methods to reformat back and forth, which we'll add to the methods section of our component:
+
+.. code-block:: javascript
+
+    reformat_columns(input) {
+        columns = []
+        for (column in input) {
+            required = input[column].required ? input[column].required : false
+            default_value = input[column].default_value ? input[column].default_value : ""
+            columns.push({name: column, required: required, default_value: default_value, delete: null})
+        }
+        return columns
+    },
+    reformat_columns_for_backend(columns) {
+        configuration = {}
+        for (index in columns) {
+            column = columns[index]
+            configuration[column.name]= { required: column.required, default_value: column.default_value }
+        }
+        console.log(configuration)
+        return configuration
+    },
+
+We'll add calls to these reformatters when loading up the form.  Note our default column structure for a new list:
+
+.. code-block:: javascript
+
+    populate_columns() {
+        if (this.list_id) {
+            if (this.lists_loaded) {
+                list = this.getListData(this.list_id)
+                this.name = list.name
+                this.description = list.description
+                this.columns = this.reformat_columns(list.configuration)
+            }
+        } else {
+            this.columns = this.reformat_columns({"content": {}})
+        }
+    },
+
+Next, let's fill out those add_column and delete_column methods, adding some basic validation:
+
+.. code-block:: javascript
+
+    add_column() {
+        if (!this.column_name) {
+            this.column_error_message = "New column must have a name"
+            return
+        }
+        existing_column = this.columns.find(column => column.name == this.column_name)
+        if (existing_column) { 
+            this.column_error_message = "Columns must have unique names"
+            return
+        }
+        if (this.list_id && this.column_required && this.column_default == "") {
+            this.column_error_message = "If column is required, must supply default value"
+            return
+        }
+        this.columns.push({name: this.column_name, required: this.column_required, 
+            default_value: this.column_default, delete: null})
+    },
+    delete_column(column_to_delete) {
+        if (this.columns.length == 1) {
+            this.column_error_message = "Must have at least one column"
+        } else {
+            index = 0
+            for (column in this.columns) {
+                if (this.columns[column].name == column_to_delete.name) {
+                    this.columns.splice(index, 1)
+                }
+                index++
+            }
+        }
+    }
+
+And, lastly, we insert the new configuration into our ``add_list`` and ``edit_list`` actions, making sure to reformat as we do so:
+
+.. code-block:: javascript
+
+    add_list() { 
+        this.addList({ name: this.name, description: this.description, 
+            configuration: this.reformat_columns_for_backend(this.columns)})
+        .catch(error => {  console.log(error), this.error_message = error })
+    }, 
+    edit_list() {
+        this.editList({ list_pk: parseInt(this.list_id), name: this.name, description: this.description,
+            configuration: this.reformat_columns_for_backend(this.columns) })
+        .catch(error => {  this.error_message = error })
+    },
+
+Add/Edit Row Component
+^^^^^^^^^^^^^^^^^^^^^^
+
+The final change we need to make is in the row form.  When we're adding and editing rows now, we should be given the new columns as options. When a column is required, the form should indicate that, and when a default value is provided, it should let the user know that, if they don't provide a value, that's what will be used.
+
+We add the following html to our row form template:
+
+.. code-block:: html
+
+    <span class="my-3">
+        <b-form-group v-for="column in columns" :label=column.name :label-for=column.name v-bind:key=column.name>
+            <b-form-input :id=column.name v-model=column.current_value></b-form-input>
+            <b-form-text>
+                <span v-if=is_column_required(column)>You must fill out a value for this column</span>
+                <span v-if=column.default_value>The default value for this column is 
+                    [[ column.default_value ]].</span>
+            </b-form-text>
+        </b-form-group>
+    </span>
+
+This is fairly straightforward. For each column, we create an input field with the column name as the label, the current value of that field, and some helper text regarding whether the field's required and what, if any, default value it has.  Here's the Javascript to go along with it, in our component:
+
+.. code-block:: javascript
+
+    get_initial_data() {
+        list = this.getListData(this.list_id)
+        this.row_length = list.rows.length 
+        if (this.mode == 'edit') { this.index = this.row_index } else { this.index = 0 }
+        row_data = (this.mode == 'edit') ? list.rows[this.index] : null
+        this.columns = this.initialize_columns(list.configuration, row_data)
+    },
+    initialize_columns(configuration, row_data){
+        columns = []
+        for (col_name in configuration){
+            params = configuration[col_name]
+            current_value = row_data ? row_data[col_name] : ""
+            columns.push({name: col_name, required: params.required, 
+                default_value: params.default_value, current_value: current_value })
+        }
+        return columns
+    },
+
+Here, we restructure the configuration fields to be a list of maps, with name, required, default_value and current_value as the keys.  If we're in editing mode, row_data is passed in to the method and can be used to populate the current value.
+
+We make two more changes to our component's methods:
+
+.. code-block:: javascript
+
+    format_row_content() {
+        column_data = {}
+        for (index in this.columns) {
+            column = this.columns[index]
+            column_data[column.name] = document.getElementById(column.name).value
+        }
+        return column_data
+    },
+    is_column_required(column){
+        if (column.required && column.default_value == "") { return true } else { return false }
+    } 
+
+``format_row_content()`` is called in the ``add_row`` and ``edit_row`` method to get the final version of the row content parameter which will be passed back all the way to our models.  Finally, ``is_column_required`` is a simple helper method to help remind the user that a field is required.
+
+When you're all done, the interface should now look something like this:
+
+.. image:: images/enhanced_simple_list.gif

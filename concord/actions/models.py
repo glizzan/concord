@@ -139,6 +139,10 @@ class PermissionedModel(models.Model):
     class Meta:
         abstract = True
 
+    def get_name(self):
+        """Gets name of Model. By default, gets string representation."""
+        return self.__str__
+
     def get_owner(self):
         """Gets owner of the permissioned model.
 

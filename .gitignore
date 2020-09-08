@@ -3,3 +3,5 @@ venv
 dist
 
 docs/_build/*
+.vscode
+.vscode/*

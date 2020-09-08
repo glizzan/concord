@@ -63,8 +63,6 @@ class AddMembersStateChange(BaseStateChange):
         return True, ""
 
     def check_configuration(self, action, permission):
-        '''All configurations must pass for the configuration check to pass.'''
-
         configuration = permission.get_configuration()
         if "self_only" in configuration and configuration['self_only']:
             if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
@@ -76,6 +74,18 @@ class AddMembersStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return f"added {list_to_text(self.member_pk_list)} as members"
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if not isinstance(self.member_pk_list, list):
+            self.set_validation_error(message=f"member_pk_list must be list, not {type(self.member_pk_list)}")
+            return False
+        if not all([isinstance(member_pk, int) for member_pk in self.member_pk_list]):
+            self.set_validation_error(message="member_pk_list must contain only integers")
+            return False
+        return True
 
     def implement(self, actor, target):
         target.roles.add_members(self.member_pk_list)
@@ -116,8 +126,6 @@ class RemoveMembersStateChange(BaseStateChange):
         return True, ""
 
     def check_configuration(self, action, permission):
-        '''All configurations must pass for the configuration check to pass.'''
-
         configuration = permission.get_configuration()
         if "self_only" in configuration and configuration['self_only']:
             if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
@@ -125,9 +133,12 @@ class RemoveMembersStateChange(BaseStateChange):
         return True, None
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
         """If any of the members to be removed are an owner or governor (either directly, or through
         being in an owner or governor role) the action is not valid."""
+
+        if not super().validate(actor=actor, target=target):
+            return False
+
         governor_list, owner_list = [], []
         for pk in self.member_pk_list:
             is_governor, result = target.roles.is_governor(pk)
@@ -222,6 +233,16 @@ class AddGovernorRoleStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added role {self.role_name} as governor"
 
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if not target.roles.is_role(self.role_name):
+            self.set_validation_error(message=f"Role {self.role_name} must be role in community to be " +
+                                      "made a governing role")
+            return False
+        return True
+
     def implement(self, actor, target):
         target.roles.add_governor_role(self.role_name)
         target.save()
@@ -298,8 +319,8 @@ class RemoveOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """If removing the owner would leave the group with no owners, the action is invalid."""
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if len(target.roles.get_owners()["actors"]) > 1:
             return True  # community has at least one more actor who is an owner
@@ -336,6 +357,16 @@ class AddOwnerRoleStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added role {self.role_name} as owner"
 
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if not target.roles.is_role(self.role_name):
+            self.set_validation_error(message=f"Role {self.role_name} must be role in community to be " +
+                                      "made an owning role")
+            return False
+        return True
+
     def implement(self, actor, target):
         target.roles.add_owner_role(self.role_name)
         target.save()
@@ -363,8 +394,8 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """If removing the owner role would leave the group with no owners, the action is invalid."""
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if self.role_name not in target.roles.get_owners()["roles"]:
             self.set_validation_error(f"{self.role_name} is not an owner role in this community")
@@ -407,8 +438,8 @@ class AddRoleStateChange(BaseStateChange):
         return f"added role {self.role_name}"
 
     def validate(self, actor, target):
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if self.role_name in ["members", "governors", "owners"]:
             self.set_validation_error("Role name cannot be one of protected names: members, governors, owners.")
@@ -456,8 +487,8 @@ class RemoveRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         """A role cannot be deleted without removing it from the permissions it's referenced in, and
         without removing it from owner and governor roles if it is there."""
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         role_references = []
         client = Client(actor=actor, target=target)
@@ -543,8 +574,8 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return True, None
 
     def validate(self, actor, target):
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if not isinstance(self.role_name, str):
             self.set_validation_error(f"Role must be type str, not {str(type(self.role_name))}")
@@ -600,7 +631,8 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         """When removing people from a role, we must check that doing so does not leave us
         without any owners."""
 
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if self.role_name not in target.roles.get_owners()["roles"]:
             return True  # this isn't an owner role
@@ -688,7 +720,8 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if not self.condition_type:
             self.set_validation_error(message="condition_type cannont be None")

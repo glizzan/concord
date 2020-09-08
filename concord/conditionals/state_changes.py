@@ -62,8 +62,8 @@ class SetConditionOnActionStateChange(BaseStateChange):
         return source_type + "_" + str(source_pk)
 
     def validate(self, actor, target):
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if not self.permission_pk and not self.community_pk:
             self.set_validation_error(message="Must supply either permission_pk or community_pk when setting condition")
@@ -132,7 +132,8 @@ class AddVoteStateChange(BaseStateChange):
         b) if the vote is abstain, abstentions are allowed
         """
 
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if self.vote not in ["yea", "nay", "abstain"]:
             self.set_validation_error(f"Vote type must be 'yea', 'nay' or 'abstain', not {self.vote}")
@@ -175,8 +176,8 @@ class ApproveStateChange(BaseStateChange):
         return "approved"
 
     def validate(self, actor, target):
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:
@@ -215,8 +216,8 @@ class RejectStateChange(BaseStateChange):
     def validate(self, actor, target):
         """Checks if actor is the same user who sent the action that triggered the condition
         and, unless self approval is allowed, rejects them as invalid."""
-
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:

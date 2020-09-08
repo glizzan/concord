@@ -4,7 +4,7 @@ state change objects inherit."""
 from typing import List, Any
 import json, warnings
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.models import TemplateModel
@@ -17,6 +17,7 @@ class BaseStateChange(object):
 
     instantiated_fields: List[str] = []
     input_fields: List[str] = []
+    optional_input_fields: List[str] = []
     input_target: Any = None
     is_foundational = False
 
@@ -41,6 +42,21 @@ class BaseStateChange(object):
     def get_all_possible_targets(cls):
         """Gets all permissioned models in system that are not abstract."""
         return get_all_permissioned_models()
+
+    @classmethod
+    def get_optional_input_fields(cls):
+        """Gets optional input fields if specified by state change. Otherwise, assumes all input fields
+        are required."""
+        if hasattr(cls, "optional_input_fields") and cls.optional_input_fields:
+            return cls.optional_input_fields
+        return []
+
+    @classmethod
+    def get_input_fields(cls):
+        """Gets required input fields if specified by state change, otherwise returns []."""
+        if hasattr(cls, "input_fields"):
+            return cls.input_fields
+        return []
 
     @classmethod
     def get_configurable_fields(cls):
@@ -100,24 +116,22 @@ class BaseStateChange(object):
         change object. Optional exclude_fields tells us not to validate the given field."""
 
         if target._meta.model not in self.get_allowable_targets():
-
             self.set_validation_error(
                 message=f"Object {str(target)} of type {target._meta.model} is not an allowable target")
             return False
 
         try:
             target = self.input_target if self.input_target else target
-            fields = self.input_fields if hasattr(self, "input_fields") else []
-            for field_name in fields:
+            for field_name in self.get_input_fields():
                 field_value = getattr(self, field_name)
+                if not field_value and field_name in self.get_optional_input_fields():
+                    continue
                 target_field = target._meta.get_field(field_name)
                 target_field.clean(field_value, target)
-
             return True
-
-        except ValidationError:
-
-            self.validation_error = ValidationError
+        except ValidationError as error:
+            message = f"Error validating value {field_value} for field {field_name}: " + str(error)
+            self.set_validation_error(message=message)
             return False
 
     def implement(self, actor, target):
@@ -161,18 +175,34 @@ class ChangeOwnerStateChange(BaseStateChange):
         return f"change owner of community to {self.new_owner}"
 
     def description_past_tense(self):
-        return "changed owner of community to {self.new_owner}"
+        return f"changed owner of community to {self.new_owner}"
 
-    def implement(self, actor, target):
-
-        # Given the content type and ID, instantiate owner
+    def get_new_owner(self):
+        """Helper method to get model instance of new owner from params."""
         content_type = ContentType.objects.get_for_id(self.new_owner_content_type)
         model_class = content_type.model_class()
-        new_owner = model_class.objects.get(id=self.new_owner_id)
+        return model_class.objects.get(id=self.new_owner_id)
 
-        target.owner = new_owner
+    def validate(self, actor, target):
+
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        try:
+            new_owner = self.get_new_owner()
+        except ObjectDoesNotExist:
+            message = f"Couldn't find instance of content type {self.new_owner_content_type} & id {self.new_owner_id}"
+            self.set_validation_error(message=message)
+            return False
+        if not hasattr(new_owner, "is_community") or not new_owner.is_community:
+            message = f"New owner must be a descendant of community model, not {self.new_owner_content_type}"
+            self.set_validation_error(message=message)
+            return False
+        return True
+
+    def implement(self, actor, target):
+        target.owner = self.get_new_owner()
         target.save()
-
         return target
 
 
@@ -293,6 +323,9 @@ class ViewStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """Checks if any specified fields are not on the target and, if there are any, returns False."""
+        if not super().validate(actor=actor, target=target):
+            return False
+
         missing_fields = []
         if self.fields_to_include:
             for field in self.fields_to_include:
@@ -335,9 +368,21 @@ class ApplyTemplateStateChange(BaseStateChange):
         return "applied template"
 
     def validate(self, actor, target):
-        """
-        Put real logic here
-        """
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        # check template_model_pk is valid
+        template = TemplateModel.objects.filter(pk=self.template_model_pk)
+        if not template:
+            self.set_validation_error(message=f"No template in database with ID {self.template_model_pk}")
+            return False
+        # check that supplied fields match template's siupplied fields
+        needed_field_keys = set([key for key, value in template[0].get_supplied_fields().items()])
+        supplied_field_keys = set([key for key, value in self.supplied_fields.items()])
+        if needed_field_keys - supplied_field_keys:
+            missing_fields = ', '.join(list(needed_field_keys - supplied_field_keys))
+            self.set_validation_error(f"Template needs values for fields {missing_fields}")
+            return False
         return True
 
     def implement(self, actor, target, action=None):

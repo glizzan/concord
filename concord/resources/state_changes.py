@@ -218,7 +218,8 @@ class AddListStateChange(BaseStateChange):
         return f"added list with name {self.name}"
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         try:
             SimpleList().validate_configuration(self.configuration)
             return True
@@ -237,6 +238,7 @@ class EditListStateChange(BaseStateChange):
     """State Change to edit an existing list."""
     description = "Edit list"
     input_fields = ["name", "description"]
+    optional_input_fields = ["name", "description"]
 
     def __init__(self, name=None, configuration=None, description=None):
         self.name = name
@@ -258,7 +260,8 @@ class EditListStateChange(BaseStateChange):
         return f"edited list with new name {self.name} and new description {self.description}"
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         if not self.name and not self.description and not self.configuration:
             self.set_validation_error(message="Must supply new name, description, or configuration when editing List.")
             return False
@@ -328,7 +331,8 @@ class AddRowStateChange(BaseStateChange):
         return f"added row with content {self.row_content}"
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         try:
             target.check_row_against_configuration(self.row_content)
         except ValidationError as error:
@@ -368,7 +372,8 @@ class EditRowStateChange(BaseStateChange):
         return f"edited row with index {self.index} to have new content {self.row_content}"
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         try:
             target.check_row_against_configuration(self.row_content)
         except ValidationError as error:
@@ -410,7 +415,8 @@ class DeleteRowStateChange(BaseStateChange):
         return f"deleted row with index {self.index}"
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         if not isinstance(self.index, int):
             self.set_validation_error(message="Index must be an integer.")
             return False

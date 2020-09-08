@@ -24,6 +24,7 @@ class AddPermissionStateChange(BaseStateChange):
     """State change to add a permission to something."""
     description = "Add permission"
     input_fields = ["change_type", "actors", "roles", "configuration", "anyone", "inverse"]
+    optional_input_fields = ["configuration"]
     input_target = PermissionsItem
 
     def __init__(self, change_type, actors, roles, configuration, anyone=False, inverse=False):
@@ -48,7 +49,8 @@ class AddPermissionStateChange(BaseStateChange):
         """We need to check configuration of permission is valid. Also need to check that the given
         permission can be set on the target."""
 
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         permission = get_state_change_object(self.change_type)
 
@@ -127,13 +129,17 @@ class AddActorToPermissionStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return f"add actor {self.actor_to_add} to permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"add actor {self.actor_to_add} to permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
         return f"added actor {self.actor_to_add} to permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"added actor {self.actor_to_add} to permission {self.permission_pk}" + permission_str
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+        if not isinstance(self.actor_to_add, str):
+            self.set_validation_error(message=f"Actor must be passed as string not {type(self.actor_to_add)}")
+            return False
+        return True
 
     def implement(self, actor, target):
         target.actors.add_actors(actors=[self.actor_to_add])
@@ -150,7 +156,7 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
         self.actor_to_remove = actor_to_remove
 
     @classmethod
-    def get_allowable_target(cls):
+    def get_allowable_targets(cls):
         return [PermissionsItem]
 
     @classmethod
@@ -159,13 +165,18 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return f"remove actor {self.actor_to_remove} from permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"remove actor {self.actor_to_remove} from permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
         return f"removed actor {self.actor_to_remove} from permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"removed actor {self.actor_to_remove} from permission {self.permission_pk}" + permission_str
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+        if target.actors.actor_in_list(int(self.actor_to_remove)):
+            self.set_validation_error(message=f"Actor {self.actor_to_remove} is not set as an actor on this " +
+                                      "permission so they cannot be removed.")
+            return False
+        return True
 
     def implement(self, actor, target):
         target.actors.remove_actors(actors=[self.actor_to_remove])
@@ -192,13 +203,18 @@ class AddRoleToPermissionStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return f"add role {self.role_name} to permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"add role {self.role_name} to permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
         return f"added role {self.role_name} to permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"added role {self.role_name} to permission {self.permission_pk}" + permission_str
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+        community_owner = target.get_owner()
+        if not community_owner.roles.is_role(self.role_name):
+            self.set_validation_error(message=f"{self.role_name} is not a role and so can't be set on permission")
+            return False
+        return True
 
     def implement(self, actor, target):
         target.add_role_to_permission(role=self.role_name)
@@ -236,13 +252,9 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return f"remove role {self.role_name} from permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"remove role {self.role_name} from permission {self.permission_pk}" + permission_str
 
     def description_past_tense(self):
         return f"removed role {self.role_name} from permission"
-        # permission_str = f" ({self.permission.get_change_type()})" if hasattr(self, "permission") else ""
-        # return f"removed role {self.role_name} from permission {self.permission_pk}" + permission_str
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -261,6 +273,14 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
                 return False, f"Can't remove role {self.role_name} from permission, allowable fields are: " + \
                               f"{', '.join(configuration['role_name'])}"
         return True, None
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+        if not target.roles.role_name_in_list(self.role_name):
+            self.set_validation_error(message=f"{self.role_name} isn't a role on this permission so can't be removed")
+            return False
+        return True
 
     def implement(self, actor, target):
         target.remove_role_from_permission(role=self.role_name)
@@ -324,13 +344,17 @@ class ChangeInverseStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return f"change inverse field to value {self.change_to} on permission"
-        # return f"change inverse field to value {self.change_to} on permission {self.permission_pk} " + \
-        #        f"({self.permission.get_change_type})"
 
     def description_past_tense(self):
         return f"changed inverse field to value {self.change_to} on permission"
-        # return f"changed inverse field to value {self.change_to} on permission {self.permission_pk} " + \
-        #        f"({self.permission.get_change_type})"
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+        if not isinstance(self.change_to, bool):
+            self.set_validation_error(message=f"'change_to' must be True or False, not {type(self.change_to)}")
+            return False
+        return True
 
     def implement(self, actor, target):
         target.inverse = self.change_to
@@ -354,11 +378,9 @@ class EnableAnyoneStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return "give anyone permission"
-        # return f"give anyone permission {self.permission_pk}"
 
     def description_past_tense(self):
         return "gave anyone permission"
-        # return f"gave anyone permission {self.permission_pk}"
 
     def implement(self, actor, target):
         target.anyone = True
@@ -383,11 +405,9 @@ class DisableAnyoneStateChange(BaseStateChange):
 
     def description_present_tense(self):
         return "remove anyone from permission"
-        # return f"remove anyone from permission {self.permission_pk}"
 
     def description_past_tense(self):
         return "removed anyone from permission"
-        # return f"removed anyone from permission {self.permission_pk}"
 
     def implement(self, actor, target):
         target.anyone = False
@@ -443,10 +463,12 @@ class AddPermissionConditionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         if not self.condition_type:
             self.set_validation_error(message="condition_type cannot be None")
+            return False
 
         try:
             self.generate_mock_actions(actor, target)
@@ -521,7 +543,8 @@ class EditTemplateStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
 
         result = target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
         if result.__class__.__name__ == "ValidationError":

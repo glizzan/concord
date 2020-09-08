@@ -315,7 +315,9 @@ class TemplateModel(PermissionedModel):
 
     def get_supplied_fields(self):
         """Get supplied fields as dictionary."""
-        return json.loads(self.supplied_fields)
+        if self.supplied_fields:
+            return json.loads(self.supplied_fields)
+        return {}
 
     def get_supplied_form_fields(self):  # NOTE: field_util?
         """Loads template supplied fields and gets their forms, using field_helper.  Supplied

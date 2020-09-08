@@ -161,7 +161,8 @@ Basic validation is taken care of automatically in the validation method defined
 .. code-block:: python
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         # Additional validation goes here
 
 Because we don't need to do any extra validation, we can ommit the implementation of ``validate`` entirely and just use the parent class's method. However we do want to make sure that validate method has the data it needs. So we need to add two additional things - one class method (``get_allowable_targets``) one attribute (``input_fields``).
@@ -261,7 +262,8 @@ Let's take a look at another state change, Edit List:
             return f"edited list with new name {self.name} and new description {self.description}"
 
         def validate(self, actor, target):
-            super().validate(actor=actor, target=target)
+            if not super().validate(actor=actor, target=target):
+                return False
             if not self.name and not self.description:
                 self.set_validation_error(message="Must supply new name or description when editing List.")
                 return False
@@ -305,7 +307,8 @@ Let's do one more state change, Add Row.
             return f"added row with content {self.row_content}"
 
         def validate(self, actor, target):
-            super().validate(actor=actor, target=target)
+            if not super().validate(actor=actor, target=target):
+                return False
             if not isinstance(self.row_content, str):
                 self.set_validation_error(message="Row content must be a string.")
                 return False
@@ -1413,7 +1416,8 @@ We'll start with AddList.  We'll need to add it as an input parameter to our ``_
             return f"added list with name {self.name}"
 
         def validate(self, actor, target):
-            super().validate(actor=actor, target=target)
+            if not super().validate(actor=actor, target=target):
+                return False
             try:
                 SimpleList().validate_configuration(self.configuration)
                 return True
@@ -1432,7 +1436,8 @@ The Edit List state change is similar - we add the new configuation parameter to
 .. code-block:: python
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         if not self.name and not self.description and not self.configuration:
             self.set_validation_error(message="Must supply new name, description, or configuration when editing List.")
             return False
@@ -1463,7 +1468,8 @@ There's no changes to the Delete List state change (or the Delete Row state chan
 .. code-block:: python
 
     def validate(self, actor, target):
-        super().validate(actor=actor, target=target)
+        if not super().validate(actor=actor, target=target):
+            return False
         try:
             target.check_row_against_configuration(self.row_content)
         except ValidationError as error:

@@ -2,7 +2,7 @@
 
 import logging
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 from concord.actions.state_changes import BaseStateChange
 from concord.resources.models import Resource, Item, Comment, SimpleList
@@ -195,14 +195,16 @@ class RemoveItemStateChange(BaseStateChange):
 ### SimpleList State Changes ###
 ################################
 
+
 class AddListStateChange(BaseStateChange):
     """State Change to create a list in a community (or other target)."""
     description = "Add list"
     input_fields = ["name", "description"]
     input_target = SimpleList
 
-    def __init__(self, name, description=None):
+    def __init__(self, name, configuration, description=None):
         self.name = name
+        self.configuration = configuration
         self.description = description if description else ""
 
     @classmethod
@@ -215,9 +217,20 @@ class AddListStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added list with name {self.name}"
 
+    def validate(self, actor, target):
+        super().validate(actor=actor, target=target)
+        try:
+            SimpleList().validate_configuration(self.configuration)
+            return True
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
+            return False
+
     def implement(self, actor, target):
-        return SimpleList.objects.create(
-            name=self.name, description=self.description, owner=target.get_owner())
+        simple_list = SimpleList(name=self.name, description=self.description, owner=target.get_owner())
+        simple_list.set_row_configuration(self.configuration)
+        simple_list.save()
+        return simple_list
 
 
 class EditListStateChange(BaseStateChange):
@@ -225,9 +238,10 @@ class EditListStateChange(BaseStateChange):
     description = "Edit list"
     input_fields = ["name", "description"]
 
-    def __init__(self, name=None, description=None):
+    def __init__(self, name=None, configuration=None, description=None):
         self.name = name
-        self.description = description if description else ""
+        self.configuration = configuration
+        self.description = description
 
     @classmethod
     def get_allowable_targets(self):
@@ -245,14 +259,24 @@ class EditListStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         super().validate(actor=actor, target=target)
-        if not self.name and not self.description:
-            self.set_validation_error(message="Must supply new name or description when editing List.")
+        if not self.name and not self.description and not self.configuration:
+            self.set_validation_error(message="Must supply new name, description, or configuration when editing List.")
             return False
+        if self.configuration:
+            try:
+                target.validate_configuration(self.configuration)
+                target.adjust_rows_to_new_configuration(self.configuration)
+                return True
+            except ValidationError as error:
+                self.set_validation_error(message=error.message)
+                return False
         return True
 
     def implement(self, actor, target):
         target.name = self.name if self.name else target.name
         target.description = self.description if self.description else target.description
+        if self.configuration:
+            target.set_row_configuration(self.configuration)
         target.save()
         return target
 
@@ -305,8 +329,10 @@ class AddRowStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         super().validate(actor=actor, target=target)
-        if not isinstance(self.row_content, str):
-            self.set_validation_error(message="Row content must be a string.")
+        try:
+            target.check_row_against_configuration(self.row_content)
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
             return False
         if self.index and not isinstance(self.index, int):
             self.set_validation_error(message="Index must be an integer.")
@@ -343,8 +369,10 @@ class EditRowStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         super().validate(actor=actor, target=target)
-        if not isinstance(self.row_content, str):
-            self.set_validation_error(message="Row content must be a string.")
+        try:
+            target.check_row_against_configuration(self.row_content)
+        except ValidationError as error:
+            self.set_validation_error(message=error.message)
             return False
         if not isinstance(self.index, int):
             self.set_validation_error(message="Index must be an integer.")

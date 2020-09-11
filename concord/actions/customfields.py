@@ -21,15 +21,27 @@ logger = logging.getLogger(__name__)
 
 
 class Resolution:
-    """The Resolution object stores information about the Action's passage through the permissions
-    pipeline. It has status information for each of the three pipelines (foundational, governing
-    and specific) along with log information, condition information, and details
-    about how the action was approved (if it was approved)."""
+    """The Resolution object stores information about the Action's status as well as its passage
+    through the permissions pipeline.
 
-    def __init__(self, *, foundational_status="not tested", specific_status="not tested",
+    The meta_status attribute tracks what 'stage' of the process the Action is in - created, proposed,
+    taken, waiting, or resolved.  'Taken' and 'waiting' statuses can be passed through the permissions
+    pipeline, while 'created' and 'proposed' are not yet passed through the permissions pipeline, and
+    'resolved' cannot be passed through the pipeline again.
+
+    We also store the most recent runs through the pipeline in the three pipeline statuses:
+    'foundational_status', 'governing_status', and 'specific_status'.  Pipeline statuses and meta statuses
+    are used by generate_status to determine the overall status of the action, which is referenced from
+    the action itself via its status property.
+
+    Finally, westore a log, as well as information about how an action was approved (if it was approved) and
+    information about the template involved (if the action is applying a template)."""
+
+    def __init__(self, *, meta_status="created", foundational_status="not tested", specific_status="not tested",
                  governing_status="not tested", conditions=None, log=None, approved_through=None,
                  approved_role=None, approved_condition=None, template_info=None):
 
+        self.meta_status = meta_status
         self.foundational_status = foundational_status
         self.specific_status = specific_status
         self.governing_status = governing_status
@@ -44,10 +56,10 @@ class Resolution:
         return f"Action status {self.generate_status()} - {self.get_status_string()}"
 
     def __repr__(self):
-        return f"Action Resolution(foundational_status={self.foundational_status}, " + \
-               f"specific_status={self.specific_status}, governing_status={self.governing_status}, " + \
-               f"conditions={self.conditions}, log={self.log}, approved_through={self.approved_through}, " + \
-               f"approved_role={self.approved_role}, approved_condition={self.approved_condition})"
+        return f"""Action Resolution(meta_status={self.meta_status}, foundational_status={self.foundational_status},
+                specific_status={self.specific_status}, governing_status={self.governing_status},
+                conditions={self.conditions}, log={self.log}, approved_through={self.approved_through},
+                approved_role={self.approved_role}, approved_condition={self.approved_condition})"""
 
     @property
     def is_resolved(self):
@@ -67,11 +79,11 @@ class Resolution:
             return "role" if self.approved_role else "individual"
         return None
 
-    def refresh_status(self):
+    def refresh_pipeline_status(self):
         """When re-running an action, we need to refresh the pipeline-specific statuses."""
         self.foundational_status, self.governing_status, self.specific_status = "not tested", "not tested", "not tested"
 
-    def generate_status(self):
+    def generate_pipeline_status(self):
         """Determines an overall status given the three sub-statuses."""
 
         # Action only needs to be approved by one pipeline to be approved
@@ -86,8 +98,19 @@ class Resolution:
         if "rejected" in [self.foundational_status, self.governing_status, self.specific_status]:
             return "rejected"
 
-        # We haven't actually run the permissions pipeline yet
-        return "created"
+        # we haven't actually run the pipeline yet, so return none
+
+    def generate_status(self):
+        """Gets overall status"""
+
+        if self.meta_status in ["created", "proposed", "implemented"]:
+            return self.meta_status
+
+        pipeline_status = self.generate_pipeline_status()
+        if pipeline_status:
+            return pipeline_status
+
+        return self.meta_status  # will be 'taken' or 'waiting'
 
     def get_status_string(self):
         """Helper method which returns a 'plain English' description of the action status."""

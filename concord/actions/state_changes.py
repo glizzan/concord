@@ -166,6 +166,7 @@ class ChangeOwnerStateChange(BaseStateChange):
     change who the owners are within a community."""
     description = "Change owner"
     preposition = "for"
+    is_foundational = True
 
     def __init__(self, new_owner_content_type, new_owner_id):
         self.new_owner_content_type = new_owner_content_type

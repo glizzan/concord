@@ -201,6 +201,8 @@ def action_status_to_text(resolution):
         return "waiting on condition(s) for " + list_to_text(list(pipelines))
     if resolution.generate_status() == "created":
         return "action has not been put through pipeline yet"
+    if resolution.generate_status() == "proposed":
+        return "action is still in proposal state"
     if resolution.foundational_status == "rejected":
         return "actor does not have foundational authority"
     return "action did not meet any permission criteria"

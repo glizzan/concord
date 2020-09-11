@@ -89,13 +89,12 @@ class BaseClient(object):
         if not hasattr(self.actor, "is_authenticated") or not self.actor.is_authenticated:
             raise BaseException(f"Actor {self.actor} must be an authenticated User.")
 
-    def create_and_take_action(self, change):
+    def create_action(self, change):
         """Create an Action object using the change object passed in as well as the actor and target already
         set on the Client. Called by clients when making changes to state.
 
         If the mode set on the client is "Mock", creates a mock action intead and returns it. Mocks are mostly
-        used by Templates.
-        """
+        used by Templates."""
 
         if self.mode == "mock":
             from concord.actions.utils import MockAction
@@ -105,14 +104,30 @@ class BaseClient(object):
         self.validate_actor()
 
         if self.change_is_valid(change):
-            action = Action.objects.create(actor=self.actor, target=self.target,
-                                           change=change)
-            return action.take_action()
+            return Action.objects.create(actor=self.actor, target=self.target,
+                                         change=change)
         else:
             logging.info(f"Invalid action by {self.actor} on target {self.target} with change type {change}: "
                          + f"{change.validation_error.message}")
             InvalidAction = namedtuple('InvalidAction', ['error_message', 'status'])
-            return InvalidAction(error_message=change.validation_error.message, status="invalid"), None
+            return InvalidAction(error_message=change.validation_error.message, status="invalid")
+
+    def create_and_take_action(self, change, proposed=False):
+        """Creates an action and takes it (if it is not a Mock, invalid, or proposed action)."""
+        action = self.create_action(change)
+
+        if self.mode == "mock":
+            return action
+
+        if action.status == "invalid":
+            return action, None
+
+        if proposed:
+            action.resolution.meta_status = "proposed"
+            return action, None
+
+        action.resolution.meta_status = "taken"
+        return action.take_action()
 
     def get_object_given_model_and_pk(self, model, pk):
         """Given a model string and a pk, returns the instance. Only works on Permissioned models."""
@@ -230,6 +245,8 @@ class ActionClient(BaseClient):
         if not action and not pk:
             logger.warn("Take_action called with neither action nor pk")
         action = action if action else self.get_action_given_pk(pk=pk)
+        if action.status in ["created", "proposed"]:
+            action.resolution.meta_status = "taken"
         action.take_action()
 
 

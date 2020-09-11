@@ -40,7 +40,6 @@ class Action(models.Model):
     # Regular old attributes
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    status = models.CharField(max_length=15, default="created")
     is_draft = models.BooleanField(default=False)
 
     # Basics
@@ -49,9 +48,10 @@ class Action(models.Model):
         target = self.target if self.target else "deleted target"
         return f"Action {self.pk} '{self.change.description}' by {self.actor} on {target} ({self.status})"
 
-    def get_status(self):
-        """Get status of Action."""
-        return "draft" if self.is_draft else self.status
+    @property
+    def status(self):
+        """Gets status of Action from Resolution field."""
+        return self.resolution.generate_status()
 
     def save(self, *args, **kwargs):
         """If action is live (is_draft is False) check that target and actor are set."""
@@ -77,7 +77,7 @@ class Action(models.Model):
             result = self.change.implement(actor=self.actor, target=self.target, action=self)
         else:
             result = self.change.implement(actor=self.actor, target=self.target)
-        self.status = "implemented"
+        self.resolution.meta_status = "implemented"
         logger.debug(f"{self} implemented")
         return result
 
@@ -89,12 +89,11 @@ class Action(models.Model):
 
         logger.info(f"Taking action {self.pk}: ({self.actor} {self.change.description} on {self.target})")
 
-        if self.status in ["created", "waiting"]:
+        if self.status in ["taken", "waiting"]:
 
             from concord.actions.permissions import has_permission
-            self.resolution.refresh_status()
+            self.resolution.refresh_pipeline_status()
             has_permission(action=self)
-            self.status = self.resolution.generate_status()
 
             if self.status == "waiting" and len(self.resolution.uncreated_conditions()) > 0:
 

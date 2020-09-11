@@ -40,6 +40,7 @@ def deserialize_state_change(state_change_dict):
 def serialize_resolution(resolution, dump_to_json=True):
     """Serialize resolution"""
     obj_dict = {
+        "meta_status": resolution.meta_status,
         "foundational_status": resolution.foundational_status,
         "specific_status": resolution.specific_status,
         "governing_status": resolution.governing_status,
@@ -57,7 +58,8 @@ def serialize_resolution(resolution, dump_to_json=True):
 def deserialize_resolution(resolution_data):
     """Deserialize resolution"""
     from concord.actions.customfields import Resolution
-    return Resolution(foundational_status=resolution_data["foundational_status"],
+    return Resolution(meta_status=resolution_data["meta_status"],
+                      foundational_status=resolution_data["foundational_status"],
                       specific_status=resolution_data["specific_status"],
                       governing_status=resolution_data["governing_status"],
                       conditions=resolution_data["conditions"], log=resolution_data["log"],

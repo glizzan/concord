@@ -815,7 +815,7 @@ class BasicCommunityTest(DataTestCase):
 
         # now you can remove the role
         action, result = self.client.Community.remove_role(role_name="forwards")
-        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_custom_roles(), {})
 
     def test_cant_remove_role_set_as_owner_role(self):
@@ -842,7 +842,7 @@ class BasicCommunityTest(DataTestCase):
 
         # now we can remove the role
         action, result = self.client.Community.remove_role(role_name="forwards")
-        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_custom_roles(), {})
 
     def test_cant_remove_people_from_role_when_they_are_the_only_owner(self):
@@ -876,7 +876,7 @@ class BasicCommunityTest(DataTestCase):
         # now christen can remove herself from the role
         action, result = self.client.Community.remove_people_from_role(role_name="forwards",
             people_to_remove=[self.users.christen.pk])
-        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.custom_roles, {'forwards': []})
 
     def test_cant_remove_owner_role_when_they_are_only_owner(self):
@@ -907,7 +907,7 @@ class BasicCommunityTest(DataTestCase):
 
         # now christen can remove the role
         action, result = self.client.Community.remove_owner_role(owner_role="forwards")
-        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_owners(), {'actors': [self.users.crystal.pk], 'roles': []})
 
     def test_cant_remove_self_when_you_are_the_only_owner(self):
@@ -929,7 +929,7 @@ class BasicCommunityTest(DataTestCase):
 
         # now christen can remove the role
         action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
-        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_owners(), {'actors': [self.users.christen.pk], 'roles': []})
 
     def test_removing_person_from_role_when_role_is_owner_role_requires_foundational_permission(self):
@@ -956,7 +956,7 @@ class BasicCommunityTest(DataTestCase):
         # governor can no longer add and remove people from role
         action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
             people_to_remove=[self.users.crystal.pk])
-        self.assertEquals(action.resolution.generate_status(), "rejected")
+        self.assertEquals(action.status, "rejected")
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
 
         # make role an owner role instead
@@ -966,7 +966,7 @@ class BasicCommunityTest(DataTestCase):
         # governor can still not add and remove people from role
         action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
             people_to_remove=[self.users.crystal.pk])
-        self.assertEquals(action.resolution.generate_status(), "rejected")
+        self.assertEquals(action.status, "rejected")
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
 
         # remove owner role
@@ -975,7 +975,7 @@ class BasicCommunityTest(DataTestCase):
         # Gov can finally remove from role
         action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
             people_to_remove=[self.users.crystal.pk])
-        self.assertEquals(action.resolution.generate_status(), "approved")
+        self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': []})
 
 

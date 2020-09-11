@@ -350,7 +350,6 @@ class MockAction(object):
         self.change = change
         self.target = target
         self.actor = actor
-        self.status = "created"
         self.pk = 0  # Note that this is an invalid PK
 
         if not resolution:
@@ -367,6 +366,11 @@ class MockAction(object):
 
     def __str__(self):
         return self.__repr__()
+
+    @property
+    def status(self):
+        """Gets status of Action from Resolution field."""
+        return self.resolution.generate_status()
 
     def create_action_object(self, container_pk, save=True):
         """Creates an action object given the data set on MockAction plus the container_pk passed in."""
@@ -388,12 +392,11 @@ def check_permissions_for_action_group(list_of_actions):
     for index, action in enumerate(list_of_actions):
 
         is_valid = action.change.validate(actor=action.actor, target=action.target)
-        action.status = "created"
+        action.resolution.meta_status = "taken"
 
         if is_valid:
             from concord.actions.permissions import has_permission
             processed_action = has_permission(action=action)
-            processed_action.status = processed_action.resolution.generate_status()
             status, status_log = processed_action.status, processed_action.resolution.get_status_string()
         else:
             status, status_log = "invalid", action.change.validation_error.message

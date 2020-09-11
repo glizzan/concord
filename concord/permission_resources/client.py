@@ -55,8 +55,8 @@ class PermissionResourceClient(BaseClient):
         says nothing about whether the given action is valid, as the validate step is called separately."""
         client.mode = "mock"
         mock_action = getattr(client, method_name)(**parameters)
+        mock_action.resolution.meta_status = "taken"
         mock_action = has_permission(mock_action)
-        mock_action.status = mock_action.resolution.generate_status()
         if mock_action.status == "approved":
             return True
         if not exclude_conditional and mock_action.status == "waiting":

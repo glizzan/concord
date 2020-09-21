@@ -82,6 +82,64 @@ def get_all_foundational_state_changes():
     return [change for change in get_all_state_changes() if change.is_foundational]
 
 
+def get_all_templates():
+    """Get all classes with TemplateLibraryObject as parent defined in template_library files, either in Concord
+    or app using Concord."""
+
+    template_classes = []
+
+    from django.conf import settings
+    for app_with_template_library in ['actions'] + settings.TEMPLATE_LIBARIES:
+        app_config = apps.get_app_config(app_with_template_library)
+        library_module = app_config.get_concord_module("template_library")
+        module_classes = inspect.getmembers(library_module)
+        for (module_class_name, module_class) in module_classes:
+            if hasattr(module_class, "is_template_object") and module_class.is_template_object and \
+                    not inspect.isabstract(module_class):
+                template_classes.append(module_class)
+
+    return template_classes
+
+
+def process_field_type(field):
+    """Helper method to inspect field and return appropriate type."""
+    if field.name in ["actor", "commentor", "author"]:
+        return "ActorField"
+    if field.name in ["foundational_permission_enabled", "governing_permission_enabled"]:
+        return
+    field_type_map = {
+        "PositiveIntegerField": "IntegerField",
+        "BooleanField": "BooleanField",
+        "CharField": "CharField",
+        "RoleListField": "RoleListField",
+        "ActorListField": "ActorListField",
+        "GenericForeignKey": "ObjectField",
+        "ForeignKey": "ObjectField"
+    }
+    return field_type_map.get(field.__class__.__name__)
+
+
+def get_all_dependent_fields():
+    """Goes through all PermissionedModels, plus Action, and gets a list of fields.
+    TODO: also get their type, for use on front-end validation?"""
+
+    dependent_field_dict = {}
+    from concord.actions.models import Action
+    models = [Action] + get_all_permissioned_models()
+
+    for model in models:
+        field_list = []
+        for field in model._meta.get_fields():
+            if "content_type" in field.name or "object_id" in field.name:
+                continue
+            field_type = process_field_type(field)
+            if field_type:
+                field_list.append({"value": field.name, "text": field.name, "type": field_type})
+        dependent_field_dict.update({model.__name__.lower(): field_list})
+
+    return dependent_field_dict
+
+
 def get_state_changes_for_app(app_name):
     """Given an app name, gets state_changes as list of state change objects."""
     app_config = apps.get_app_config(app_name)
@@ -107,37 +165,18 @@ def get_state_change_object(state_change_name):
             return state_change_object
 
 
-def get_state_changes_settable_on_model(model_name, state_changes=None):
+def get_state_changes_settable_on_model(model_class):
     """Gets all state changes a given model can be set on.  If state_changes is not passed in, checks against
     all possible state_changes."""
-    state_changes = state_changes if state_changes else get_all_state_changes()
+    state_changes = get_all_state_changes()
     matching_state_changes = []
+
     for change in state_changes:
-        if hasattr(change, "can_set_on_model") and change.can_set_on_model(model_name) \
+        if hasattr(change, "can_set_on_model") and change.can_set_on_model(model_class.__name__) \
                 and change.__name__ != "BaseStateChange":
             matching_state_changes.append(change)
+
     return matching_state_changes
-
-
-def get_parent_state_changes(model_class):
-    """Gets state changes for parents of the given model class and, recurisvely, for all ancestors."""
-    state_changes = []
-    for parent in model_class.__bases__:
-        if hasattr(parent, "get_settable_state_changes"):   # only checks parents which are PermissionedModels
-            state_changes += get_state_changes_for_app(parent._meta.app_label)
-        state_changes += get_parent_state_changes(parent)
-    return state_changes
-
-
-def get_state_changes_settable_on_model_and_parents(model_class):
-    """When given a model, returns all state changes that apply to the model, include state changes belonging to
-    parent models."""
-
-    state_changes = get_state_changes_for_app(model_class._meta.app_label)
-    state_changes += get_parent_state_changes(model_class)
-    state_changes = list(set(state_changes))
-
-    return get_state_changes_settable_on_model(model_class.__name__, state_changes=state_changes)
 
 
 class Attributes(object):
@@ -209,6 +248,10 @@ class Client(object):
         for client in self.get_clients():
             client.set_target(target=target)
 
+    def set_mode_for_all(self, mode):
+        for client in self.get_clients():
+            client.mode = mode
+
     @property
     def Community(self):
         """Projects that use Concord may create a new model and client, descending from the Community model and
@@ -234,9 +277,23 @@ class Client(object):
 ############################
 
 
+def transform_value(value, transformation):
+    if not transformation:
+        return value
+    if transformation == "to_list":
+        return [value]
+    if transformation == "from_list":
+        return value[0]
+    if transformation == "to_pk":
+        return value.pk
+    if transformation == "to_pk_in_list":
+        return [value.pk]
+    return
+
+
 def replacer(key, value, context):
     """Given the value provided by mock_action, looks for fields that need replacing by finding strings with the right
-    format, those that begin and end with {{ }}.  Uses information in context object to replace those fields. In
+    format, those that begin and end with {{ }}. Uses information in context object to replace those fields. In
     the special case of finding something referencing nested_trigger_action (always(?) in the context of a
     condition being set) it replaces nested_trigger_action with trigger_action."""
 
@@ -245,29 +302,61 @@ def replacer(key, value, context):
     if isinstance(value, str) and value[0:2] == "{{" and value[-2:] == "}}":
 
         command = value.replace("{{", "").replace("}}", "").strip()
+
+        if command[0:7] == "nested:":
+            # In some cases (usually when included a condition in a template) we need to protect the 'inner' template
+            command = command[7:]
+            new_value = "{{" + command + "}}"
+            logging.debug(f"nested replacer string: Replacing {key} {value} with {new_value}")
+            return new_value
+
+        if "||" in command:
+            command, transformation = command.split("||")
+        else:
+            transformation = None
+
         tokens = command.split(".")
 
         if tokens[0] == "supplied_fields":
             # Always two tokens long, with format supplied_fields.field_name.
             logging.debug(f"Supplied Fields: Replacing {key} {value} with {context['supplied_fields'][tokens[1]]}")
-            return context["supplied_fields"][tokens[1]]
+            return transform_value(context["supplied_fields"][tokens[1]], transformation)
 
-        if tokens[0] == "trigger_action":
-            # Variable length - can be just the trigger action itself, an immediate attribute, or the
-            # attribute of an attribute, for example trigger_action.change.role_name.
+        if tokens[0] == "context":
 
-            if len(tokens) == 1:
-                new_value = context["trigger_action"]
+            if tokens[1] == "action":
 
-            if len(tokens) == 2:
-                new_value = getattr(context["trigger_action"], tokens[1])
+                # Variable length - can be just the trigger action itself, an immediate attribute, or the
+                # attribute of an attribute, for example trigger_action.change.role_name.
 
-            if len(tokens) == 3:
-                intermediate = getattr(context["trigger_action"], tokens[1])
-                new_value = getattr(intermediate, tokens[2])
+                action = context["context"]["action"]
 
-            logging.debug(f"trigger_action: Replacing {key} {value} with {new_value}")
-            return new_value
+                if len(tokens) == 2:
+                    new_value = action
+
+                if len(tokens) == 3:
+                    new_value = getattr(action, tokens[2])
+
+                if len(tokens) == 4:
+                    intermediate = getattr(action, tokens[2])
+                    new_value = getattr(intermediate, tokens[3])
+
+                logging.debug(f"context action: Replacing {key} {value} with {new_value}")
+                return transform_value(new_value, transformation)
+
+            else:
+
+                model_instance = context["context"][tokens[1]]
+
+                # For all other instances we might get, we only allow the object itself or a single level of nesting
+                if len(tokens) == 2:
+                    new_value = model_instance
+
+                if len(tokens) == 3:
+                    new_value = getattr(model_instance, tokens[2])
+
+                logging.debug(f"context {model_instance.__class__.__name__}: Replacing {key} {value} with {new_value}")
+                return transform_value(new_value, transformation)
 
         if tokens[0] == "previous":
             # Always three or four tokens long, with format previous.position.action_or_result, for example
@@ -279,13 +368,7 @@ def replacer(key, value, context):
             new_value = getattr(source, tokens[3]) if len(tokens) == 4 else source
 
             logging.debug(f"previous: Replacing {key} {value} with {new_value}")
-            return new_value
-
-        if tokens[0] == "nested_trigger_action":
-            # In this special case, we merely replace nested_trigger_action with trigger_action so when this
-            # object is passed through replace_fields again, later, it will *then* replace with *that* trigger_action.
-            logging.debug(f"nested_trigger_action: Replacing {key} {value} with 'trigger_action'")
-            return value.replace("nested_trigger_action", "trigger_action")
+            return transform_value(new_value, transformation)
 
     return ...
 
@@ -301,6 +384,7 @@ def replace_fields(*, action_to_change, mock_action, context):
 
         # for all attributes on the mock_action, check if they need to be replaced
         new_value = replacer(key, value, context)
+
         if new_value is not ...:
             setattr(action_to_change, key, new_value)
             logger.debug(f"Replaced {key} on {action_to_change} with {new_value}")

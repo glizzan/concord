@@ -124,17 +124,28 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+TEMPLATE_LIBARIES = [] # template libraries must be stored as a template_library.py file in the top level of an app
+
+DEFAULT_COMMUNITY_MODEL = "community"  # the main community/group model used
+
+### Logging
+import logging
+
+# set default log level
+DEFAULT_LOG_LEVEL_FOR_TESTS = "WARN"
+DEFAULT_LOG_LEVEL = "WARN"
 import sys
 TESTING = sys.argv[1:2] == ['test']
-TEST_LOG_LEVEL = "WARN"
-LOG_LEVEL = TEST_LOG_LEVEL if TESTING else "DEBUG"
+LOG_LEVEL = DEFAULT_LOG_LEVEL_FOR_TESTS if TESTING else DEFAULT_LOG_LEVEL
 
 # Generate loggers
 loggers = {}
 for app in INSTALLED_APPS:
     if "concord" in app:
         loggers.update({app: {'handlers': ['console', 'file'], 'level': LOG_LEVEL}})
-loggers[''] = {'handlers': ['console', 'file'], 'level': "WARN"}
+loggers[''] = {'handlers': ['console', 'file'], 'level': LOG_LEVEL}
+
+# Override for specific apps using format loggers['app_name'] = {'handlers': ['console', 'file'], 'level': "DEBUG"}
 
 LOGGING = {
     'version': 1,

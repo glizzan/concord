@@ -4,7 +4,7 @@ import logging
 
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 
-from concord.actions.state_changes import BaseStateChange
+from concord.actions.state_changes import BaseStateChange, InputField
 from concord.permission_resources.models import PermissionsItem
 from concord.actions.text_utils import condition_template_to_text, get_verb_given_permission_type
 from concord.actions.utils import get_state_change_object, Client
@@ -23,17 +23,21 @@ logger = logging.getLogger(__name__)
 class AddPermissionStateChange(BaseStateChange):
     """State change to add a permission to something."""
     description = "Add permission"
-    input_fields = ["change_type", "actors", "roles", "configuration", "anyone", "inverse"]
-    optional_input_fields = ["configuration"]
+    input_fields = [InputField(name="change_type", type="CharField", required=True, validate=True),
+                    InputField(name="actors", type="ActorListField", required=True, validate=True),
+                    InputField(name="roles", type="RoleListField", required=True, validate=True),
+                    InputField(name="configuration", type="DictField", required=False, validate=True),
+                    InputField(name="anyone", type="BooleanField", required=False, validate=True),
+                    InputField(name="inverse", type="BooleanField", required=False, validate=True)]
     input_target = PermissionsItem
 
-    def __init__(self, change_type, actors, roles, configuration, anyone=False, inverse=False):
+    def __init__(self, change_type, actors, roles, configuration=None, anyone=False, inverse=False):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
         self.change_type = change_type
         self.actors = actors if actors else []
         self.roles = roles if roles else []
-        self.configuration = configuration
+        self.configuration = configuration if configuration else {}
         self.inverse = inverse
         self.anyone = anyone
 
@@ -62,7 +66,7 @@ class AddPermissionStateChange(BaseStateChange):
             return False
 
         # check configuration
-        if hasattr(permission, "check_configuration") and self.configuration is not None:
+        if hasattr(permission, "check_configuration") and self.configuration:
             is_valid, error_message = permission.check_configuration_is_valid(self.configuration)
             if not is_valid:
                 self.set_validation_error(error_message)
@@ -115,6 +119,7 @@ class AddActorToPermissionStateChange(BaseStateChange):
 
     description = "Add actor to permission"
     preposition = "for"
+    input_fields = [InputField(name="actor_to_add", type="ActorPKField", required=True, validate=False)]
 
     def __init__(self, *, actor_to_add: str):
         self.actor_to_add = actor_to_add
@@ -151,6 +156,7 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
     """State change to remove an actor from a permission."""
     description = "Remove actor from permission"
     preposition = "for"
+    input_fields = [InputField(name="actor_to_remove", type="ActorPKField", required=True, validate=False)]
 
     def __init__(self, *, actor_to_remove: str):
         self.actor_to_remove = actor_to_remove
@@ -189,6 +195,7 @@ class AddRoleToPermissionStateChange(BaseStateChange):
 
     description = "Add role to permission"
     preposition = "for"
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, *, role_name: str):
         self.role_name = role_name
@@ -227,6 +234,7 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
 
     description = "Remove role from permission"
     preposition = "for"
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, *, role_name: str):
         self.role_name = role_name
@@ -242,7 +250,7 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
     @classmethod
     def get_configurable_fields(cls):
         return {"role_name": {
-            "display": "Role that can be removed from the permission", "type": "PermissionRoleField"}}
+            "display": "Role that can be removed from the permission", "type": "RoleField"}}
 
     @classmethod
     def get_uninstantiated_description(cls, **configuration_kwargs):
@@ -293,6 +301,8 @@ class ChangePermissionConfigurationStateChange(BaseStateChange):
 
     description = "Change configuration of permission"
     preposition = "for"
+    input_fields = [InputField(name="configurable_field_name", type="CharField", required=True, validate=False),
+                    InputField(name="configurable_field_value", type="CharField", required=True, validate=False)]
 
     def __init__(self, *, configurable_field_name: str, configurable_field_value: str):
         self.configurable_field_name = configurable_field_name
@@ -330,6 +340,7 @@ class ChangeInverseStateChange(BaseStateChange):
 
     description = "Toggle permission's inverse field"
     preposition = "for"
+    input_fields = [InputField(name="change_to", type="BooleanField", required=True, validate=False)]
 
     def __init__(self, *, change_to: bool):
         self.change_to = change_to
@@ -418,6 +429,9 @@ class DisableAnyoneStateChange(BaseStateChange):
 class AddPermissionConditionStateChange(BaseStateChange):
     """State change to add a condition to a permission."""
     description = "Add condition to permission"
+    input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
+                    InputField(name="condition_data", type="DictField", required=True, validate=False),
+                    InputField(name="permission_data", type="DictField", required=True, validate=False)]
 
     def __init__(self, *, condition_type, condition_data, permission_data):
         self.condition_type = condition_type
@@ -450,7 +464,7 @@ class AddPermissionConditionStateChange(BaseStateChange):
         mock_action_list = []
         action_1 = client.Conditional.set_condition_on_action(
             condition_type=self.condition_type, condition_data=self.condition_data, permission_pk=permission.pk)
-        action_1.target = "{{trigger_action}}"
+        action_1.target = "{{context.action}}"
         mock_action_list.append(action_1)
 
         client.PermissionResource.target = action_1
@@ -521,6 +535,9 @@ class RemovePermissionConditionStateChange(BaseStateChange):
 class EditTemplateStateChange(BaseStateChange):
     """State change to edit a template."""
     description = "Edit Template"
+    input_fields = [InputField(name="template_object_id", type="ObjectIDField", required=True, validate=False),
+                    InputField(name="field_name", type="CharField", required=True, validate=False),
+                    InputField(name="new_field_data", type="DictField", required=True, validate=False)]
 
     def __init__(self, template_object_id, field_name, new_field_data):
         self.template_object_id = template_object_id

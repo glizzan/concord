@@ -2,7 +2,7 @@
 
 from django.core.exceptions import ValidationError
 
-from concord.actions.state_changes import BaseStateChange
+from concord.actions.state_changes import BaseStateChange, InputField
 from concord.actions.text_utils import list_to_text, condition_template_to_text
 from concord.actions.utils import Client
 
@@ -16,7 +16,7 @@ class ChangeNameStateChange(BaseStateChange):
     """State change to change name of Community."""
     description = "Change name of community"
     preposition = "for"
-    input_fields = ["name"]
+    input_fields = [InputField(name="name", type="CharField", required=True, validate=True)]
 
     def __init__(self, name):
         self.name = name
@@ -40,6 +40,8 @@ class ChangeNameStateChange(BaseStateChange):
 class AddMembersStateChange(BaseStateChange):
     """State change to add members to Community."""
     description = "Add members to community"
+    input_fields = [InputField(name="member_pk_list", type="ActorListField", required=True, validate=False),
+                    InputField(name="self_only", type="BooleanField", required=False, validate=False)]
 
     def __init__(self, member_pk_list, self_only=False):
         self.member_pk_list = member_pk_list
@@ -52,6 +54,12 @@ class AddMembersStateChange(BaseStateChange):
     @classmethod
     def get_configurable_fields(cls):
         return {"self_only": {"display": "Only allow actors to add themselves", "type": "BooleanField"}}
+
+    @classmethod
+    def get_configured_field_text(cls, configuration):
+        if "self_only" in configuration and configuration['self_only']:
+            return ", but a user can only add themselves"
+        return ""
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -97,6 +105,8 @@ class RemoveMembersStateChange(BaseStateChange):
     """State change to remove members from Community."""
     description = "Remove members from community"
     preposition = "from"
+    input_fields = [InputField(name="member_pk_list", type="ActorListField", required=True, validate=False),
+                    InputField(name="self_only", type="BooleanField", required=False, validate=False)]
 
     def __init__(self, member_pk_list, self_only=False):
         self.member_pk_list = member_pk_list
@@ -170,6 +180,7 @@ class AddGovernorStateChange(BaseStateChange):
     """State change to add governor to Community."""
     description = "Add governor of community"
     is_foundational = True
+    input_fields = [InputField(name="governor_pk", type="ActorPKField", required=True, validate=False)]
 
     def __init__(self, governor_pk):
         self.governor_pk = governor_pk
@@ -195,6 +206,7 @@ class RemoveGovernorStateChange(BaseStateChange):
     description = "Remove governor from community"
     preposition = "from"
     is_foundational = True
+    input_fields = [InputField(name="governor_pk", type="ActorPKField", required=True, validate=False)]
 
     def __init__(self, governor_pk):
         self.governor_pk = governor_pk
@@ -219,6 +231,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
     """State change to add governor role to Community."""
     description = "Add role of governor to community"
     is_foundational = True
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -254,6 +267,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
     description = "Remove role of governor from community"
     preposition = "from"
     is_foundational = True
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -278,6 +292,7 @@ class AddOwnerStateChange(BaseStateChange):
     """State change to add owner to Community."""
     description = "Add owner to community"
     is_foundational = True
+    input_fields = [InputField(name="owner_pk", type="ActorPKField", required=True, validate=False)]
 
     def __init__(self, owner_pk):
         self.owner_pk = owner_pk
@@ -303,6 +318,7 @@ class RemoveOwnerStateChange(BaseStateChange):
     description = "Remove owner from community"
     preposition = "from"
     is_foundational = True
+    input_fields = [InputField(name="owner_pk", type="ActorPKField", required=True, validate=False)]
 
     def __init__(self, owner_pk):
         self.owner_pk = owner_pk
@@ -343,6 +359,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
     """State change to add owner role to Community."""
     description = "Add role of owner to community"
     is_foundational = True
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -378,6 +395,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
     description = "Remove role from owners of community"
     preposition = "from"
     is_foundational = True
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -423,6 +441,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 class AddRoleStateChange(BaseStateChange):
     """State change to add role to Community."""
     description = "Add role to community"
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -459,6 +478,7 @@ class RemoveRoleStateChange(BaseStateChange):
     """State change to remove role from Community."""
     description = "Remove role from community"
     preposition = "from"
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
 
     def __init__(self, role_name):
         self.role_name = role_name
@@ -520,6 +540,8 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     """State change to add people to role in Community."""
     description = "Add people to role in community"
     preposition = "in"
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False),
+                    InputField(name="people_to_add", type="ActorListField", required=True, validate=False)]
 
     def __init__(self, role_name, people_to_add):
         self.role_name = role_name
@@ -540,7 +562,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
     @classmethod
     def get_configurable_fields(cls):
-        return {"role_name": {"display": "Role people can be added to", "type": "PermissionRoleField",
+        return {"role_name": {"display": "Role people can be added to", "type": "RoleField",
                               "other_data": {"multiple": False}}}
 
     @classmethod
@@ -603,6 +625,8 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
     """State change to remove people from role in Community."""
     description = "Remove people from role in community"
     preposition = "in"
+    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False),
+                    InputField(name="people_to_remove", type="ActorListField", required=True, validate=False)]
 
     def __init__(self, role_name, people_to_remove):
         self.role_name = role_name
@@ -665,6 +689,10 @@ class AddLeadershipConditionStateChange(BaseStateChange):
     """State change to add leadership condition to Community."""
     description = "Add leadership condition"
     is_foundational = True
+    input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
+                    InputField(name="condition_data", type="DictField", required=True, validate=False),
+                    InputField(name="permission_data", type="DictField", required=True, validate=False),
+                    InputField(name="leadership_type", type="CharField", required=True, validate=False)]
 
     def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
         self.condition_type = condition_type
@@ -693,7 +721,7 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         action_1 = client.Conditional.set_condition_on_action(
             condition_type=self.condition_type, condition_data=self.condition_data,
             community_pk=target.pk, leadership_type=self.leadership_type)
-        action_1.target = "{{trigger_action}}"
+        action_1.target = "{{context.action}}"
         mock_action_list.append(action_1)
 
         client.PermissionResource.target = action_1
@@ -725,9 +753,15 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
         if not self.condition_type:
             self.set_validation_error(message="condition_type cannont be None")
+            return False
 
         if not self.leadership_type:
             self.set_validation_error(message="leadership_type cannot be None")
+            return False
+
+        if self.leadership_type not in ["owner", "governor"]:
+            self.set_validation_error(message="leadership_type must be 'owner' or 'governor'")
+            return False
 
         try:
             self.generate_mock_actions(actor, target)
@@ -747,6 +781,7 @@ class RemoveLeadershipConditionStateChange(BaseStateChange):
     """State change to remove leadership condition from Community."""
     description = "Remove leadership condition"
     is_foundational = True
+    input_fields = [InputField(name="leadership_type", type="CharField", required=True, validate=False)]
 
     def __init__(self, *, leadership_type):
         self.leadership_type = leadership_type

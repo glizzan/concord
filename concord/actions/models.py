@@ -8,7 +8,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import get_state_changes_settable_on_model_and_parents
+from concord.actions.utils import get_state_changes_settable_on_model
 from concord.actions.text_utils import action_to_text
 from concord.actions.customfields import ResolutionField, Resolution, StateChangeField, Template, TemplateField
 
@@ -133,6 +133,9 @@ class PermissionedModel(models.Model):
     foundational_permission_enabled = models.BooleanField(default=False)
     governing_permission_enabled = models.BooleanField(default=True)
 
+    # Creator (by default, all permissioned models have a creator field)
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, related_name='%(class)s_models')
+
     is_permissioned_model = True
 
     class Meta:
@@ -217,7 +220,7 @@ class PermissionedModel(models.Model):
         if this object owns another object, we may have set permissions for actions targeting
         the owned object.
         """
-        return get_state_changes_settable_on_model_and_parents(cls)
+        return get_state_changes_settable_on_model(cls)
 
     def save(self, *args, override_check=False, **kwargs):
         """Save permissions.
@@ -273,7 +276,7 @@ class TemplateModel(PermissionedModel):
     scopes = models.CharField(max_length=200)
     name = models.CharField(max_length=90, unique=True)
     user_description = models.CharField(max_length=500)
-    supplied_fields = models.CharField(max_length=500)
+    supplied_fields = models.CharField(max_length=5000)
 
     def __str__(self):
         return self.name

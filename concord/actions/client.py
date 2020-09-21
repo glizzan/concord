@@ -31,6 +31,7 @@ class BaseClient(object):
 
     is_client = True
     mode = "default"
+    raise_error_if_failed = False
 
     def __init__(self, actor=None, target=None):
         self.actor = actor
@@ -112,14 +113,15 @@ class BaseClient(object):
             InvalidAction = namedtuple('InvalidAction', ['error_message', 'status'])
             return InvalidAction(error_message=change.validation_error.message, status="invalid")
 
-    def create_and_take_action(self, change, proposed=False):
-        """Creates an action and takes it (if it is not a Mock, invalid, or proposed action)."""
-        action = self.create_action(change)
-
+    def take_action(self, action, proposed=False):
+        """If the action is a mock, invalid, or proposed, return without taking it, otherwise take the
+        action."""
         if self.mode == "mock":
             return action
 
         if action.status == "invalid":
+            if self.raise_error_if_failed:
+                raise ValueError(message=action.error_message)
             return action, None
 
         if proposed:
@@ -127,7 +129,15 @@ class BaseClient(object):
             return action, None
 
         action.resolution.meta_status = "taken"
-        return action.take_action()
+        action, result = action.take_action()
+        if action.status == "rejected" and self.raise_error_if_failed:
+            raise ValueError(message=action.resolution.log)
+        return action, result
+
+    def create_and_take_action(self, change, proposed=False):
+        """Creates an action and takes it."""
+        action = self.create_action(change)
+        return self.take_action(action, proposed)
 
     def get_object_given_model_and_pk(self, model, pk):
         """Given a model string and a pk, returns the instance. Only works on Permissioned models."""
@@ -240,7 +250,7 @@ class ActionClient(BaseClient):
 
     # Indirect change of state
 
-    def take_action(self, action=None, pk=None):
+    def retake_action(self, action=None, pk=None):
         """Helper method to take an action (or, usually, retry taking an action) from the client."""
         if not action and not pk:
             logger.warn("Take_action called with neither action nor pk")
@@ -286,13 +296,18 @@ class TemplateClient(BaseClient):
     def apply_template(self, template_model_pk, supplied_fields=None):
         """Applies a template to the target.  If any of the actions in the template is a foundational change,
         changes the state change object's attr to foundational so it goes through the foundational pipeline."""
-        change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields)
+
         template_model = TemplateModel.objects.get(pk=template_model_pk)
-        if template_model.has_foundational_actions:
-            change.is_foundational = True
+        change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields,
+                                             is_foundational=template_model.has_foundational_actions)
+
         if self.mode == "mock":
             return self.create_and_take_action(change)
+
         action, result = self.create_and_take_action(change)
+        if action.status == "invalid":
+            return action, None
+
         description = template_model.get_template_breakdown(trigger_action=action, supplied_field_data=supplied_fields)
         action.resolution.template_info = description
         action.save()

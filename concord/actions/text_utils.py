@@ -1,9 +1,12 @@
 """This module contains functions which take in various Concord objects and return human-readable English
 descriptions."""
 
-import copy
+import copy, logging
 
 from concord.actions.utils import get_state_change_object
+
+
+logger = logging.getLogger(__name__)
 
 
 ########################
@@ -63,18 +66,53 @@ def actors_to_text(actor_info):
 
 
 def replaceable_field_check(value):
-    """Checks for replaceable fields and parses & returns their content if found.
-
-    Note that is is pretty brittle (the remove change has member_pk_list as a param too,
-    what if we're removing people with this action?), and should be replaced by some kind
-    of text_utils function."""
+    """Checks for replaceable fields and parses & returns their content if found."""
 
     if isinstance(value, str) and value[0:2] == "{{" and value[-2:] == "}}":
         command = value.replace("{{", "").replace("}}", "").strip()
+        command = command[7:] if command[0:7] == "nested:" else command
+        command = command.split("||")[0]
         tokens = command.split(".")
 
-        if tokens[0] == "trigger_action" and tokens[1] == "change" and tokens[2] == "member_pk_list":
-            return True, "users added by the action"
+        if tokens[0] == "context":
+
+            if tokens[1] == "action":
+
+                if len(tokens) == 2:
+
+                    replace_str = "the action"
+
+                if len(tokens) == 3:
+
+                    replace_str = "the action's " + tokens[2]
+
+                if len(tokens) == 4:
+
+                    replace_str = tokens[3] + " specified by the action"
+
+            else:
+
+                if len(tokens) == 2:
+
+                    replace_str = "the " + tokens[1]
+
+                if len(tokens) == 3:
+
+                    replace_str = "the " + tokens[1] + "'s " + tokens[2]
+
+            return True, replace_str
+
+        if tokens[0] == "previous":
+
+            if tokens[2] == "action":
+
+                return True, f"action number {int(tokens[1])+1} in this template"
+
+            else:
+
+                return True, f"the result of action number {int(tokens[1])+1} in this template"
+
+        # TODO: handle supplied_fields
 
     return False, value
 
@@ -89,6 +127,7 @@ def roles_and_actors(role_and_actor_dict):
     if len(role_and_actor_dict["roles"]) > 0:
         replaced, response = replaceable_field_check(role_and_actor_dict["roles"])
         if replaced:
+            logger.debug(f"Replaced {role_and_actor_dict['actors']} with {response}")
             text += response
         else:
             text += roles_to_text(role_and_actor_dict["roles"])
@@ -99,6 +138,7 @@ def roles_and_actors(role_and_actor_dict):
     if len(role_and_actor_dict["actors"]) > 0:
         replaced, response = replaceable_field_check(role_and_actor_dict["actors"])
         if replaced:
+            logger.debug(f"Replaced {role_and_actor_dict['actors']} with {response}")
             text += response
         else:
             text += actors_to_text(role_and_actor_dict["actors"])
@@ -253,22 +293,24 @@ def mock_action_to_text(action, trigger_action=None):
     do.  Also handles trigger_action and supplied_fields being passed in, to fully describe an apply_template
     action being considered during a condition or reviewed afterwards."""
 
-    if trigger_action:
-        trigger_action_target_str = trigger_action.target.get_name()
-    else:
-        trigger_action_target_str = "the target of the action that triggered the template"
-
-    replace_options = {
-        "{{trigger_action.target}}": trigger_action_target_str
-    }
-
     if isinstance(action.target, str):
-        new_name = replace_options.get(action.target, None)
-        target_name = new_name if new_name else action.target
+        if action.target == "{{context.action.target}}":
+            if trigger_action:
+                target_name = trigger_action.target.get_name()
+            else:
+                target_name = "the target of the action that triggered the template"
+        else:
+            changed, new_name = replaceable_field_check(action.target)
+            target_name = new_name if changed else action.target
     else:
         target_name = action.target.get_name()
 
-    return f"{action.change.description_present_tense()} {action.change.get_preposition()} {target_name}"
+    try:
+        description = action.change.description_present_tense()
+    except:  # noqa: E722
+        description = action.change.description.lower()
+
+    return f"{description} {action.change.get_preposition()} {target_name}"
 
 
 def permission_change_to_text(permission):
@@ -283,7 +325,8 @@ def permission_change_to_text(permission):
 def permission_to_text(permission):
     """Gets the text description of a permission item."""
 
-    action_str = permission.get_state_change_object().description.lower()
+    change_obj = permission.get_state_change_object()
+    action_str = change_obj.description.lower() + change_obj.get_configured_field_text(permission.get_configuration())
 
     if permission.anyone:
         return f"anyone has permission to {action_str}"

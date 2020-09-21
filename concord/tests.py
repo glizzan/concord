@@ -4,6 +4,7 @@ import time
 from collections import namedtuple
 from unittest import skip
 from datetime import timedelta
+import inspect
 
 from django.utils import timezone
 from django.test import TestCase
@@ -11,12 +12,11 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
-from concord.actions.models import Action
-from concord.actions.utils import Changes, Client
+from concord.actions.models import Action, TemplateModel
+from concord.actions.utils import Changes, Client, get_all_state_changes
 from concord.permission_resources.models import PermissionsItem
 from concord.conditionals.models import ApprovalCondition
 from concord.resources.models import Resource, Item
-from concord.actions import template_library
 from concord.actions.text_utils import condition_template_to_text
 from concord.communities.state_changes import AddLeadershipConditionStateChange
 from concord.permission_resources.state_changes import AddPermissionConditionStateChange
@@ -381,6 +381,7 @@ class PermissionSystemTest(DataTestCase):
         self.assertEquals(self.instance.name, "USWNT????")
 
     def test_condition_form_generation(self):
+        self.maxDiff = None
 
          # Pinoe creates a resource and adds a permission to the resource and a condition to the permission.
         resource = self.client.Resource.create_resource(name="Go USWNT!")
@@ -394,26 +395,27 @@ class PermissionSystemTest(DataTestCase):
         action, condition = self.client.PermissionResource.add_condition_to_permission(
             condition_type="approvalcondition", condition_data=None, permission_data=permission_data)
 
-        permission = PermissionsItem.objects.get(pk=permission.pk) #refresh
+        permission = PermissionsItem.objects.get(pk=permission.pk)  #refresh
         self.assertEquals(permission.get_condition_data(info="basic"),
             {'type': 'ApprovalCondition', 'display_name': 'Approval Condition', 
             'how_to_pass': 'one person needs to approve this action'})
         self.assertEquals(permission.get_condition_data(info="fields"), 
             {'self_approval_allowed': 
                 {'display': 'Can individuals approve their own actions?', 'field_name': 'self_approval_allowed', 
-                'type': 'BooleanField', 'required': '', 'value': False}, 
+                'type': 'BooleanField', 'required': '', 'value': False, 'can_depend': False}, 
             'approve_roles': 
-                {'display': 'Roles who can approve', 'type': 'PermissionRoleField', 'required': False, 
+                {'display': 'Roles who can approve', 'type': 'RoleListField', 'required': False, 'can_depend': True, 
                 'value': None, 'field_name': 'approve_roles', 'full_name': 'concord.conditionals.state_changes.ApproveStateChange'}, 
             'approve_actors': 
-                {'display': 'People who can approve', 'type': 'PermissionActorField', 'required': False, 'value': [1], 
+                {'display': 'People who can approve', 'type': 'ActorListField', 'required': False, 'value': [1], 'can_depend': True,
                 'field_name': 'approve_actors', 'full_name': 'concord.conditionals.state_changes.ApproveStateChange'}, 
             'reject_roles': 
-                {'display': 'Roles who can reject', 'type': 'PermissionRoleField', 'required': False, 'value': None, 
+                {'display': 'Roles who can reject', 'type': 'RoleListField', 'required': False, 'value': None, 'can_depend': True,
                 'field_name': 'reject_roles', 'full_name': 'concord.conditionals.state_changes.RejectStateChange'}, 
             'reject_actors': 
-                {'display': 'People who can reject', 'type': 'PermissionActorField', 'required': False, 'value': None, 
+                {'display': 'People who can reject', 'type': 'ActorListField', 'required': False, 'value': None, 'can_depend': True,
                 'field_name': 'reject_actors', 'full_name': 'concord.conditionals.state_changes.RejectStateChange'}})
+
 
 
 class ConditionSystemTest(DataTestCase):
@@ -428,7 +430,7 @@ class ConditionSystemTest(DataTestCase):
         self.assertEquals(len(mock_actions), 2)
         self.assertEquals(mock_actions[0].change.get_change_type(), Changes().Conditionals.SetConditionOnAction)
         self.assertEquals(mock_actions[1].change.get_change_type(), Changes().Permissions.AddPermission)     
-        self.assertEquals(mock_actions[0].target, "{{trigger_action}}")  
+        self.assertEquals(mock_actions[0].target, "{{context.action}}")  
         self.assertEquals(mock_actions[1].change.actors, [self.users.crystal.pk, self.users.jmac.pk])
 
     def test_add_leadership_condition_state_change(self):
@@ -441,7 +443,7 @@ class ConditionSystemTest(DataTestCase):
         self.assertEquals(len(mock_actions), 2)
         self.assertEquals(mock_actions[0].change.get_change_type(), Changes().Conditionals.SetConditionOnAction)
         self.assertEquals(mock_actions[1].change.get_change_type(), Changes().Permissions.AddPermission)        
-        self.assertEquals(mock_actions[0].target, "{{trigger_action}}")  
+        self.assertEquals(mock_actions[0].target, "{{context.action}}")  
         self.assertEquals(mock_actions[1].change.roles, ["members"])
 
     def test_condition_template_text_util_with_vote_condition(self):
@@ -1764,8 +1766,12 @@ class TemplateTest(DataTestCase):
         self.client.Community.add_members([self.users.tobin.pk])
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
+        # Create templates (note that this servces as a test that all templates can be instantiated)
+        from django.core.management import call_command
+        call_command('update_templates', recreate=True, verbosity=0)
+
     def test_create_invite_only_template_creates_template(self):
-        template_model = template_library.create_invite_only_template()
+        template_model = TemplateModel.objects.filter(name="Invite Only")[0]
         self.assertEquals(template_model.name, "Invite Only")
 
     def test_apply_invite_only_template_to_community(self):
@@ -1779,22 +1785,33 @@ class TemplateTest(DataTestCase):
         # Pinoe applies template model to community
         supplied_fields = { "addmembers_permission_roles": ["forwards"], 
             "addmembers_permission_actors": [] }
-        template_model = template_library.create_invite_only_template()
+        template_model = TemplateModel.objects.filter(name="Invite Only")[0]
         action, actions_and_results = self.client.Template.apply_template(template_model_pk=template_model.pk,
             supplied_fields=supplied_fields)
         self.assertEquals(action.status, "implemented")
         self.assertEquals(actions_and_results[0]["result"].__class__.__name__, "PermissionsItem")
         self.assertEquals(action.resolution.template_info, 
-            {'actions': ["add permission 'add members to community' to USWNT"], 
+            {'actions': ["add permission 'add members to community' to USWNT",
+                         "add condition approvalcondition to permission to the result of action number 1 in this template"], 
              'supplied_fields': {'has_data': True, 'fields': ["What roles can invite new members? ['forwards']", 
                                                               'What actors can invite new members? []']},
              'foundational': 'None of the actions are foundational, so they do not necessarily require owner ' + 
              'approval to pass.'})
 
-        # now Tobin can add members
+        # now Tobin can add members but conditionally
         action, result = self.client.Community.add_members([self.users.christen.pk])
+        self.assertEquals(action.status, "waiting")
+
+        # the added member approves and is added to community
+        condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=action.pk)[0]
+        self.client.ApprovalCondition.set_actor(actor=self.users.christen)
+        self.client.ApprovalCondition.set_target(target=condition_item)
+        action, result = self.client.ApprovalCondition.approve()
         self.assertEquals(action.status, "implemented")
-        
+        self.client.Community.target.refresh_from_db()
+        self.assertEquals(self.client.Community.get_members(), 
+                          [self.users.pinoe, self.users.tobin, self.users.christen])
+
 
 class PermissionedReadTest(DataTestCase):
 
@@ -1832,6 +1849,7 @@ class PermissionedReadTest(DataTestCase):
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, 
             { 'id': 1,
+            'creator': None,
             "item": [],
             'foundational_permission_enabled': False, 
             'governing_permission_enabled': True, 
@@ -2079,3 +2097,25 @@ class SimpleListTest(DataTestCase):
             {'player name': 'Sam Staab', 'team': 'Washington Spirit'}, 
             {'player name': 'Paige Nielson', 'team': 'Washington Spirit'}, 
             {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
+
+
+class StateChangeTest(DataTestCase):
+
+    def test_state_changes_have_valid_construction(self):
+
+        for state_change in get_all_state_changes():
+
+            sig = inspect.signature(state_change)
+
+            # check input_fields has the same number & names of fields as the __init__ method
+            self.assertEquals(len(sig.parameters), len(state_change.input_fields))
+            self.assertEquals(set([name for name in sig.parameters]),
+                              set([input_field.name for input_field in state_change.input_fields]))
+
+            for name, parameter in sig.parameters.items():
+
+                input_field = [field for field in state_change.input_fields if field.name == parameter.name][0]
+
+                # check they have same value for required
+                parameter_required = True if parameter.default == inspect._empty else False
+                self.assertEquals(parameter_required, input_field.required, msg=f"check {state_change.__name__} {parameter}")

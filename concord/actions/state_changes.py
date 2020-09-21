@@ -3,12 +3,17 @@ state change objects inherit."""
 
 from typing import List, Any
 import json, warnings
+from collections import namedtuple
 
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
 
 from concord.actions.models import TemplateModel
-from concord.actions.utils import get_all_permissioned_models, get_all_community_models
+from concord.actions.utils import get_all_permissioned_models, get_all_community_models, MockAction
+
+
+InputField = namedtuple("InputField", ['name', 'type', 'required', 'validate'])
 
 
 class BaseStateChange(object):
@@ -16,15 +21,37 @@ class BaseStateChange(object):
     variety of methods which must be implemented by those that inherit it."""
 
     instantiated_fields: List[str] = []
-    input_fields: List[str] = []
-    optional_input_fields: List[str] = []
+    input_fields: List[InputField] = []
     input_target: Any = None
+    context_keys: List[str] = []
     is_foundational = False
 
     @classmethod
     def get_change_type(cls):
         """Gets the full type of the change object in format 'concord.package.state_changes.SpecificStateChange'"""
         return cls.__module__ + "." + cls.__name__
+
+    def get_change_data(self):
+        """Given the python Change object, generates a json list of field names and values.  Does not include
+        instantiated fields."""
+        new_vars = vars(self)
+        for field in self.instantiated_fields:
+            if field in new_vars:
+                del(new_vars)[field]
+        if "validation_error" in new_vars:
+            del(new_vars)["validation_error"]
+        return json.dumps(new_vars)
+
+    def is_conditionally_foundational(self, action):
+        """Some state changes are only foundational in certain conditions. Those state changes override this
+        method to apply logic and determine whether a specific instance is foundational or not."""
+        return False
+
+    @classmethod
+    def can_set_on_model(cls, model_name):
+        """Tests whether a given model, passed in as a string, is in allowable target."""
+        target_names = [model.__name__ for model in cls.get_settable_classes()]
+        return True if model_name in target_names else False
 
     @classmethod
     def get_allowable_targets(cls):
@@ -40,23 +67,15 @@ class BaseStateChange(object):
 
     @classmethod
     def get_all_possible_targets(cls):
-        """Gets all permissioned models in system that are not abstract."""
+        """Helper method, gets all permissioned models in system that are not abstract."""
         return get_all_permissioned_models()
 
     @classmethod
-    def get_optional_input_fields(cls):
-        """Gets optional input fields if specified by state change. Otherwise, assumes all input fields
-        are required."""
-        if hasattr(cls, "optional_input_fields") and cls.optional_input_fields:
-            return cls.optional_input_fields
-        return []
+    def get_community_models(cls):
+        """Helper method which lets us use alternative community models as targets for community actions."""
+        return get_all_community_models()
 
-    @classmethod
-    def get_input_fields(cls):
-        """Gets required input fields if specified by state change, otherwise returns []."""
-        if hasattr(cls, "input_fields"):
-            return cls.input_fields
-        return []
+    # Field methods
 
     @classmethod
     def get_configurable_fields(cls):
@@ -84,28 +103,13 @@ class BaseStateChange(object):
         return fields
 
     @classmethod
-    def can_set_on_model(cls, model_name):
-        """Tests whether a given model, passed in as a string, is in allowable target."""
-        target_names = [model.__name__ for model in cls.get_settable_classes()]
-        return True if model_name in target_names else False
+    def get_change_field_options(cls):
+        """Gets a list of required parameters passed in to init, used by templates. Does not include optional
+        parameters, as this may break the template referencing them if they're not there."""
+        return [{"value": field.name, "text": field.name, "type": field.type}
+                for field in cls.input_fields if field.required]
 
-    @classmethod
-    def get_community_models(cls):
-        """Helper method which lets us use alternative community models as targets for community actions."""
-        return get_all_community_models()
-
-    @classmethod
-    def get_preposition(cls):
-        """By default, we make changes "to" things but change types can override this default preposition with
-        "for", "with", etc."""
-        if hasattr(cls, "preposition"):
-            return cls.preposition
-        return "to"
-
-    def instantiate_fields(self):
-        """Helper method used by state change subclasses that have fields which require database
-        lookups.  Not called by default, to prevent unnecessary db queries."""
-        return False
+    # validation & implementation methods
 
     def set_validation_error(self, message):
         """Helper method so all state changes don't have to import ValidationError"""
@@ -122,15 +126,16 @@ class BaseStateChange(object):
 
         try:
             target = self.input_target if self.input_target else target
-            for field_name in self.get_input_fields():
-                field_value = getattr(self, field_name)
-                if not field_value and field_name in self.get_optional_input_fields():
-                    continue
-                target_field = target._meta.get_field(field_name)
-                target_field.clean(field_value, target)
+            for field in self.input_fields:
+                if field.validate:
+                    field_value = getattr(self, field.name)
+                    if not field_value and not field.required:
+                        continue
+                    target_field = target._meta.get_field(field.name)
+                    target_field.clean(field_value, target)
             return True
         except ValidationError as error:
-            message = f"Error validating value {field_value} for field {field_name}: " + str(error)
+            message = f"Error validating value {field_value} for field {field.name}: " + str(error)
             self.set_validation_error(message=message)
             return False
 
@@ -138,16 +143,20 @@ class BaseStateChange(object):
         """Method that carries out the change of state."""
         ...
 
-    def get_change_data(self):
-        """Given the python Change object, generates a json list of field names and values.  Does not include
-        instantiated fields."""
-        new_vars = vars(self)
-        for field in self.instantiated_fields:
-            if field in new_vars:
-                del(new_vars)[field]
-        if "validation_error" in new_vars:
-            del(new_vars)["validation_error"]
-        return json.dumps(new_vars)
+    # Text / description methods
+
+    @classmethod
+    def get_preposition(cls):
+        """By default, we make changes "to" things but change types can override this default preposition with
+        "for", "with", etc."""
+        if hasattr(cls, "preposition"):
+            return cls.preposition
+        return "to"
+
+    @classmethod
+    def get_configured_field_text(cls, configuration):
+        """Gets additional text for permissions item instance descriptions from configured fields."""
+        return ""
 
     def description_present_tense(self):
         """Returns the description of the state change object, in present tense."""
@@ -157,8 +166,37 @@ class BaseStateChange(object):
         """Returns the description of the state change object, in past tense."""
         ...
 
-    def is_conditionally_foundational(self, action):
-        return False
+    # Context methods
+
+    @classmethod
+    def get_context_keys(cls):
+        """Gets action as key by default, plus any context keys specified. If no context keys are specified and
+        allowable_targets incldues only one model, grabs that model name as a valid context key."""
+
+        defaults = ["action", settings.DEFAULT_COMMUNITY_MODEL]
+        if not cls.context_keys and len(cls.get_allowable_targets()) == 1:
+            return defaults + [cls.get_allowable_targets()[0].__name__.lower()]
+        return defaults + cls.context_keys
+
+    def all_context_instances(self, action):
+        """Given the specific action that contains this change object, returns a dictionary
+        with relevant model_instances. Used primarily by templates.
+
+        We always return the action, the owning group by its model name, and the action target by its model name,
+        with the state change able to specify additional objects."""
+
+        context_dict = {
+            "action": action,
+            settings.DEFAULT_COMMUNITY_MODEL: action.target.get_owner(),
+            action.target.__class__.__name__.lower(): action.target
+        }
+
+        context_dict = {**context_dict, **self.get_context_instances(action)}
+        return context_dict
+
+    def get_context_instances(self, action):
+        """Method to be optionally overridden by State Changes, adding context instances."""
+        return {}
 
 
 class ChangeOwnerStateChange(BaseStateChange):
@@ -167,16 +205,18 @@ class ChangeOwnerStateChange(BaseStateChange):
     description = "Change owner"
     preposition = "for"
     is_foundational = True
+    input_fields = [InputField(name="new_owner_content_type", type="ContentTypeField", required=True, validate=False),
+                    InputField(name="new_owner_id", type="ObjectIDField", required=True, validate=False)]
 
     def __init__(self, new_owner_content_type, new_owner_id):
         self.new_owner_content_type = new_owner_content_type
         self.new_owner_id = new_owner_id
 
     def description_present_tense(self):
-        return f"change owner of community to {self.new_owner}"
+        return f"change owner of community to {self.new_owner_id}"
 
     def description_past_tense(self):
-        return f"changed owner of community to {self.new_owner}"
+        return f"changed owner of community to {self.new_owner_id}"
 
     def get_new_owner(self):
         """Helper method to get model instance of new owner from params."""
@@ -284,6 +324,7 @@ class ViewStateChange(BaseStateChange):
     fields. It exists so we can wrap view permissions in the same model as all the other permissions."""
     description = "View"
     preposition = "for"
+    input_fields = [InputField(name="fields_to_include", type="ListField", required=False, validate=False)]
 
     def __init__(self, fields_to_include=None):
         self.fields_to_include = fields_to_include
@@ -357,10 +398,14 @@ class ApplyTemplateStateChange(BaseStateChange):
     description = "Apply template"
     preposition = "to"
     pass_action = True
+    input_fields = [InputField(name="template_model_pk", type="ObjectIDField", required=True, validate=False),
+                    InputField(name="supplied_fields", type="DictField", required=False, validate=False),
+                    InputField(name="is_foundational", type="BooleanField", required=False, validate=False)]
 
-    def __init__(self, template_model_pk, supplied_fields=None):
+    def __init__(self, template_model_pk, supplied_fields=None, is_foundational=False):
         self.template_model_pk = template_model_pk
         self.supplied_fields = supplied_fields if supplied_fields else {}
+        self.is_foundational = is_foundational
 
     def description_present_tense(self):
         return "apply template"
@@ -369,6 +414,7 @@ class ApplyTemplateStateChange(BaseStateChange):
         return "applied template"
 
     def validate(self, actor, target):
+
         if not super().validate(actor=actor, target=target):
             return False
 
@@ -377,6 +423,7 @@ class ApplyTemplateStateChange(BaseStateChange):
         if not template:
             self.set_validation_error(message=f"No template in database with ID {self.template_model_pk}")
             return False
+
         # check that supplied fields match template's siupplied fields
         needed_field_keys = set([key for key, value in template[0].get_supplied_fields().items()])
         supplied_field_keys = set([key for key, value in self.supplied_fields.items()])
@@ -384,6 +431,16 @@ class ApplyTemplateStateChange(BaseStateChange):
             missing_fields = ', '.join(list(needed_field_keys - supplied_field_keys))
             self.set_validation_error(f"Template needs values for fields {missing_fields}")
             return False
+
+        # attempt to apply actions (but rollback commit regardless)
+        mock_action = MockAction(actor=actor, target=target, change=self)
+        result = template[0].template_data.apply_template(
+            actor=actor, target=target, trigger_action=mock_action, supplied_fields=self.supplied_fields,
+            rollback=True)
+        if "errors" in result:
+            self.set_validation_error(f"Template errors: {'; '.join([error.message for error in result['errors']])}")
+            return False
+
         return True
 
     def implement(self, actor, target, action=None):

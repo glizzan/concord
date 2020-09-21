@@ -400,18 +400,52 @@ class ApplyTemplateStateChange(BaseStateChange):
     pass_action = True
     input_fields = [InputField(name="template_model_pk", type="ObjectIDField", required=True, validate=False),
                     InputField(name="supplied_fields", type="DictField", required=False, validate=False),
-                    InputField(name="is_foundational", type="BooleanField", required=False, validate=False)]
+                    InputField(name="is_foundational", type="BooleanField", required=False, validate=False),
+                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
 
-    def __init__(self, template_model_pk, supplied_fields=None, is_foundational=False):
+    def __init__(self, template_model_pk, supplied_fields=None, is_foundational=False, original_creator_only=False):
         self.template_model_pk = template_model_pk
         self.supplied_fields = supplied_fields if supplied_fields else {}
         self.is_foundational = is_foundational
+        self.original_creator_only = original_creator_only
 
     def description_present_tense(self):
         return "apply template"
 
     def description_past_tense(self):
         return "applied template"
+
+    @classmethod
+    def get_configurable_fields(cls):
+        return {"original_creator_only":
+                {"display": "Only allow the creator of the target of the template to apply template",
+                 "type": "BooleanField"}}
+
+    @classmethod
+    def get_configured_field_text(cls, configuration):
+        if "original_creator_only" in configuration and configuration['original_creator_only']:
+            return ", but only if the user is the creator of the template's target"
+        return ""
+
+    @classmethod
+    def check_configuration_is_valid(cls, configuration):
+        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
+        By contrast, check_configuration checks a specific action against an already-validated configuration."""
+        if "original_creator_only" in configuration and configuration['original_creator_only']:
+            if configuration["original_creator_only"] not in [True, False, "True", "False", "true", "false"]:
+                e = f"original_creator_only must be set to True or False, not {configuration['original_creator_only']}"
+                return False, e
+        return True, ""
+
+    def check_configuration(self, action, permission):
+        configuration = permission.get_configuration()
+        if "original_creator_only" in configuration and configuration['original_creator_only']:
+            error_message = "original_creator_only is true, so the actor must have created the target of the template"
+            if hasattr(action.target, "creator"):
+                if action.actor.pk != action.target.creator:
+                    print(action.actor.pk, " is not equal to ", action.target.creator)
+                    return False, error_message
+        return True, None
 
     def validate(self, actor, target):
 

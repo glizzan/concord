@@ -93,6 +93,7 @@ class AddMembersStateChange(BaseStateChange):
         if not all([isinstance(member_pk, int) for member_pk in self.member_pk_list]):
             self.set_validation_error(message="member_pk_list must contain only integers")
             return False
+
         return True
 
     def implement(self, actor, target):

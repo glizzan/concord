@@ -160,6 +160,10 @@ class ListClient(BaseClient):
         change = sc.EditRowStateChange(row_content=row_content, index=index)
         return self.create_and_take_action(change)
 
+    def move_row(self, old_index, new_index):
+        change = sc.MoveRowStateChange(old_index=old_index, new_index=new_index)
+        return self.create_and_take_action(change)
+
     def delete_row(self, index):
         change = sc.DeleteRowStateChange(index=index)
         return self.create_and_take_action(change)

@@ -1,7 +1,7 @@
 """State Changes for conditional models"""
 from django.core.exceptions import ValidationError
 
-from concord.actions.state_changes import BaseStateChange
+from concord.actions.state_changes import BaseStateChange, InputField
 from concord.actions.utils import Client
 from concord.conditionals.models import VoteCondition, ApprovalCondition
 from concord.actions.models import Action
@@ -18,6 +18,11 @@ class SetConditionOnActionStateChange(BaseStateChange):
     internally, but we're doing it this way for now.  Also not sure if this should be split up into permission
     condition and leadership condition."""
     description = "Set condition on action"
+    input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
+                    InputField(name="condition_data", type="DictField", required=False, validate=False),
+                    InputField(name="permission_pk", type="ObjectIDField", required=False, validate=False),
+                    InputField(name="community_pk", type="ObjectIDField", required=False, validate=False),
+                    InputField(name="leadership_type", type="CharField", required=False, validate=False)]
 
     def __init__(self, *, condition_type, condition_data=None, permission_pk=None, community_pk=None,
                  leadership_type=None):
@@ -111,6 +116,7 @@ class AddVoteStateChange(BaseStateChange):
     description = "Add vote"
     verb_name = "vote"
     action_helps_pass_condition = True
+    input_fields = [InputField(name="vote", type="CharField", required=True, validate=False)]
 
     def __init__(self, vote):
         self.vote = vote

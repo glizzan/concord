@@ -62,6 +62,15 @@ class PermissionsItem(PermissionedModel):
         """Get the ChangeType (short version) of the permission."""
         return self.change_type.split(".")[-1]
 
+    def get_all_context_keys(self):
+        """Helper method to get context keys for the change type."""
+        return self.get_state_change_object().get_context_keys()
+
+    def get_change_fields(self):
+        """Helper method used to get a list of required fields for init of this permission's change
+        type."""
+        return self.get_state_change_object().get_change_field_options()
+
     def set_fields(self, *, owner=None, permitted_object=None, anyone=None, change_type=None, inverse=None,
                    actors=None, roles=None, configuration=None):
         """Helper method to make it easier to save permissions fields in the format our model expects."""
@@ -73,9 +82,16 @@ class PermissionsItem(PermissionedModel):
         self.inverse = inverse if inverse else self.inverse
 
         if actors:
-            self.actors.add_actors(actors=actors)
+            try:
+                self.actors.add_actors(actors=actors)
+            except ValueError:
+                self.actors = actors
+
         if roles:
-            self.roles.add_roles(role_list=roles)
+            try:
+                self.roles.add_roles(role_list=roles)
+            except ValueError:
+                self.roles = roles
 
         if configuration:
             configuration_dict = {key: value for key, value in configuration.items() if value not in [None, [], ""]}
@@ -115,6 +131,8 @@ class PermissionsItem(PermissionedModel):
 
     def set_configuration(self, configuration_dict):
         """Set the configuration of the permission."""
+        if not configuration_dict:
+            configuration_dict = {}
         self.configuration = json.dumps(configuration_dict)
 
     def get_configured_field_data(self):

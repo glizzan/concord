@@ -13,7 +13,7 @@ In order to show you how to add your own resources, we'll walk you through how w
 
 This sounds like a lot, but it's relatively straightforward.  Let's dive in.
 
-Create a new model
+Create a New Model
 ******************
 
 We begin by creating a Django model for our new resource, Lists. This model can go in any ``models.py`` as long as it's an installed app, and Concord's system will automatically detect it.  
@@ -154,7 +154,26 @@ Let's start with ``__init__``. When we initialize our State Change, we need to p
         self.name = name
         self.description = description if description else ""
 
-That's it! The next thing we're going to do is validate our input in the ``validate`` method. This method returns True or False and is called when starting to process an Action. If this method returns False, the process is aborted and an error message returned to the user. Otherwise, processing continues.
+We also need to provide some metadata for our input fields. Primarily, this is used on the front end when users are specifying that some element of the condition depends on the action that triggers the condition. By providing metadata for the state change, we let the user know which elements of the action might be a good match for the condition.
+
+To do this, we import InputField, which is just a named tuple with four fields: name, type, required, and validate. Name should exactly correspond to the input parameter's name; type should be one of a dozen or so options for field types, including standard Django field types like BooleanField and CharField as well as Concord-specific field like ActorListField or RoleListFild; required indicates whether the field is required; and validate indicates whether the field should be checked when the change object is being validated.
+
+A change object's default validate method, defined on the abstract parent class, will look for any fields listed in ``input_fields``. For each field, if validate is True, it will check whether the value supplied for it is valid, using Django's inbuilt ``clean`` method. In some cases, the data we're providing is not meant to be applied directly to the target (for instance, if we are adding a permission to a target, the supplied fields need to be validated against the Permission model, not the target model). In that case, we'd set ``input_target`` to the relevant model, but we don't need to do that here.
+
+We have two input fields, name and description, both of which are CharFields. Only name is required, but both can be validated against the target.
+
+.. code-block:: python
+
+    class AddListStateChange(BaseStateChange):
+        description = ""
+        input_fields = [InputField(name="name", type="CharField", required=True, validate=True),
+                        InputField(name="description", type="CharField", required=False, validate=True)]
+
+        def __init__(self, name, description=None):
+            self.name = name
+            self.description = description if description else ""
+
+The next thing we're going to do is validate our input in the ``validate`` method. This method returns True or False and is called when starting to process an Action. If this method returns False, the process is aborted and an error message returned to the user. Otherwise, processing continues.
 
 Basic validation is taken care of automatically in the validation method defined on BaseStateChange. That method checks whether the target of the action is one of the State Change's allowable targets, and whether the data supplied for individual fields can actually be saved to their corresponding model fields. If you want to add additional validation, you'll make a super call within the method, like so:
 
@@ -175,14 +194,6 @@ Because we don't need to do any extra validation, we can ommit the implementatio
     def get_allowable_targets(cls):
         return cls.get_community_models()
 
-We also want to specify which of the fields on the model are ``input_fields`` which correspond to model fields. The default validate method will look for any fields listed in ``input_fields`` and check whether the value supplied for it is valid, using Django's inbuilt ``clean`` method.  We can add our two fields ``name`` and ``description``, which both correspond to model fields, to the class-level attribute.  In some cases, the data we're providing is not meant to be applied directly to the target (for instance, if we are adding a permission to a target, the supplied fields need to be validated against the Permission model, not the target model). In that case, we'd set ``input_target`` to the relevant model, but we don't need to do that here.
-
-.. code-block:: python
-
-    class AddListStateChange(BaseStateChange):
-        description = ""
-        input_fields = ["name", "description"]
-
 The last major method is ``implement``. This is where we actually save changes to the database. It's called after the action is validated and after it's passed the permissions pipeline. Because this state change adds a list, we'll need to create an instance of our SimpleList model. We feed in the name and description we recieved in ``__init__`` along with specifying that the owner of the SimpleList should be the owner of the group or resource we're adding it to. Note also that we return the created object to the caller.
 
 .. code-block:: python
@@ -191,7 +202,7 @@ The last major method is ``implement``. This is where we actually save changes t
 
     def implement(self, actor, target):
         return SimpleList.objects.create(name=self.name, description=self.description, 
-            owner=target.get_owner())       
+            owner=target.get_owner(), creator=actor)       
 
 Finally, we have three simpler methods.  
 
@@ -216,7 +227,8 @@ Putting this all together, we get the code for our Add List state change:
     class AddListStateChange(BaseStateChange):
         """State Change to create a list in a community (or other target)."""
         description = "Add list"
-        input_fields = ["name", "description"]
+        input_fields = [InputField(name="name", type="CharField", required=True, validate=True),
+                        InputField(name="description", type="CharField", required=False, validate=True)]
 
         def __init__(self, name, description=None):
             self.name = name
@@ -234,7 +246,7 @@ Putting this all together, we get the code for our Add List state change:
 
         def implement(self, actor, target):
             return SimpleList.objects.create(name=self.name, description=self.description, 
-                owner=target.get_owner())
+                owner=target.get_owner(), creator=actor)
 
 Let's take a look at another state change, Edit List:
 
@@ -243,7 +255,8 @@ Let's take a look at another state change, Edit List:
     class EditListStateChange(BaseStateChange):
         """State Change to edit an existing list."""
         description = "Edit list"
-        input_fields = ["name", "description"]
+    input_fields = [InputField(name="name", type="CharField", required=False, validate=True),
+                    InputField(name="description", type="CharField", required=False, validate=True)]
 
         def __init__(self, name=None, description=None):
             self.name = name
@@ -288,6 +301,8 @@ Let's do one more state change, Add Row.
     class AddRowStateChange(BaseStateChange):
         """State Change to add a row to a list."""
         description = "Add row to list"
+        input_fields = [InputField(name="row_content", type="CharField", required=True, validate=False),
+                        InputField(name="index", type="IntegerField", required=False, validate=False)]
 
         def __init__(self, row_content, index=None):
             self.row_content = row_content
@@ -384,7 +399,7 @@ The read methods are straightforward - we merely use the Django models to get th
         return SimpleList.objects.filter(
             owner_content_type=content_type,owner_object_id=owner.id)
 
-State Change methods follow a very specific format.  First, you want to instantiate a State Change object using the parameters passed in, and then you want to call BaseClient's method ``create_and_take_action``. Typically, we import all state changes as ``sc`` for easy reference.  This gives us a client that looks like this:
+Client methods which handle state changes follow a very specific format.  First, you want to instantiate a State Change object using the parameters passed in, and then you want to call BaseClient's method ``create_and_take_action``. Typically, we import all state changes as ``sc`` for easy reference.  This gives us a client that looks like this:
 
 .. code-block:: python
 
@@ -1390,14 +1405,16 @@ Step 2: State Changes
 
 This should be all we need to change on our model. Let's go update our state changes. We'll need to update AddList, EditList, AddRow and EditRow.
 
-We'll start with AddList.  We'll need to add it as an input parameter to our ``__init__``.  We won't need to add it as an input_field since we'll be manually calling our ``validate_configuration`` method. We'll also add it when we're creating our SimpleList object in ``implement``.  The most important change we'll make is overridding the parent ``validate`` method to add our call to ``validate_configuration``.
+We'll start with AddList.  We'll need to add it as an input parameter to our ``__init__``, and add a corresponding entry to our ``input_fields``. We'll also add it when we're creating our SimpleList object in ``implement``.  The most important change we'll make is overridding the parent ``validate`` method to add our call to ``validate_configuration``.
 
 .. code-block:: python
 
     class AddListStateChange(BaseStateChange):
         """State Change to create a list in a community (or other target)."""
         description = "Add list"
-        input_fields = ["name", "description"]
+        input_fields = [InputField(name="name", type="CharField", required=True, validate=True),
+                        InputField(name="configuration", type="DictField", required=True, validate=False),
+                        InputField(name="description", type="CharField", required=False, validate=True)]
         input_target = SimpleList
 
         def __init__(self, name, configuration, description=None):

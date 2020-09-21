@@ -21,11 +21,19 @@ def generate_condition_fields_for_form(condition_object, permissions_objects):
     permission_data = {}
     for short_name, field_dict in condition_object.configurable_fields().items():
         for permission in permissions_objects:
+
             if "full_name" in field_dict and permission.change_type == field_dict["full_name"]:
-                if field_dict["type"] == "PermissionRoleField":
-                    permission_data.update({field_dict["field_name"]: permission.roles.role_list})
-                elif field_dict["type"] == "PermissionActorField":
-                    permission_data.update({field_dict["field_name"]: permission.actors.pk_list})
+
+                if field_dict["type"] in ["RoleField", "RoleListField"]:
+                    try:
+                        permission_data.update({field_dict["field_name"]: permission.roles.role_list})
+                    except AttributeError:
+                        permission_data.update({field_dict["field_name"]: permission.roles})
+                elif field_dict["type"] in ["ActorField", "ActorListField"]:
+                    try:
+                        permission_data.update({field_dict["field_name"]: permission.actors.pk_list})
+                    except AttributeError:
+                        permission_data.update({field_dict["field_name"]: permission.actors})
 
     return condition_object.get_configurable_fields_with_data(permission_data)
 

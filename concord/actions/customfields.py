@@ -300,25 +300,49 @@ class Template(object):
         """Returns True if there are mock actions in the Template model."""
         return True if len(self.action_list) > 0 else False
 
-    def apply_template(self, actor, target, trigger_action, supplied_fields=None):
+    def apply_template(self, actor, target, trigger_action, supplied_fields=None, rollback=False):
         """Applies template by creating the actions one by one and implementing them.  We track older actions
         and results in case they're needed by later actions."""
 
         from concord.actions.models import Action
-        context = {"supplied_fields": supplied_fields, "trigger_action": trigger_action, "actions_and_results": []}
 
-        with transaction.atomic():
+        context_instances = trigger_action.change.all_context_instances(trigger_action)
+        context = {"supplied_fields": supplied_fields, "context": context_instances, "actions_and_results": []}
 
-            for mock_action in self.action_list:
+        try:
 
-                # create action and replace fields
-                action_model = Action(actor=actor, change=mock_action.change, target=target)
-                action_model = replace_fields(action_to_change=action_model, mock_action=mock_action, context=context)
-                action_model.save()
+            validation_errors = []
 
-                # implement and save results to context
-                result = action_model.change.implement(actor=action_model.actor, target=action_model.target)
-                context["actions_and_results"].append({"action": action_model, "result": result})
+            with transaction.atomic():
+
+                for mock_action in self.action_list:
+
+                    # create action and replace fields
+                    action_model = Action(actor=actor, change=mock_action.change, target=target)
+                    action_model = replace_fields(action_to_change=action_model, mock_action=mock_action,
+                                                  context=context)
+                    action_model.save()
+
+                    is_valid = action_model.change.validate(actor=action_model.actor, target=action_model.target)
+                    if not is_valid:
+                        validation_errors.append(action_model.change.validation_error)
+
+                    # implement and save results to context
+                    result = action_model.change.implement(actor=action_model.actor, target=action_model.target)
+                    context["actions_and_results"].append({"action": action_model, "result": result})
+
+                if rollback:
+                    raise ValueError("Pro forma error to roll back transaction when validating")
+
+        except ValueError as error:
+            logger.debug(str(error))
+            if hasattr(trigger_action, "refresh_from_db"):
+                trigger_action.refresh_from_db()
+            if hasattr(target, "refresh_from_db"):
+                target.refresh_from_db()
+
+        if validation_errors:
+            return {"errors": validation_errors}
 
         return context["actions_and_results"]
 

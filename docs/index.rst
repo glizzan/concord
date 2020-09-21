@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 About Concord
-*************
+&&&&&&&&&&&&&
 
 Concord is a Python (Django) library that can be used by developers to build sites with comprehensive, 
 customizable, dynamic, and most importantly *user-determined* community governance.  It can be added to existing
@@ -82,26 +82,26 @@ Templates have a variety of “scopes”, which allow users to narrow their sear
 
 Currently, templates must be defined by developers behind the scenes, but on our roadmap is the creation of an interface for users to develop templates themselves.
 
+Want to contribute to our templates library? Learn :doc:`how to add templates<how_to_add_template>`.
+
 Development Guide
 *****************
 
 Using and Extending Concord
 ---------------------------
 
-Concord is build to be resuable and extensible.  We'll be writing detailed "How To" guides soon, but for now, we will describe at a high level what is possible.
+Concord is build to be resuable and extensible. Currently, the three main ways to extend Concord are by adding conditions, adding permissioned models, and adding templates.  These can be done as part of building a new site, or can be contributed back to the Concord project core.
 
-Currently, the three current ways to extend Concord are by adding conditions, adding permissioned models, and adding templates.  These can be done as part of building a new site, or can be contributed back to the Concord project core.
+When you add a new condition, it will be added to the list of conditions which may be set on permissions or on the "owner" and "governor" roles.  Users will be able to configure and set it, and when an action triggers it a link to it will be created in the action history view.  Adding a new condition requires: defining the condition model and the required methods (such as how the status of the condition is determined); creating change objects corresponding to actions taken on that condition, such as AddVote or Approve; creating a simple client to expose the change objects; and creating a default template for interacting with the condition on the front end.  Depending on the complexity of the condition and the experience of the developer creating it, we estimate that adding new conditions takes a day or two of worker. We're working on a guide to how to add new conditions.
 
-When you add a new condition, it will be added to the list of conditions which may be set on permissions or on the "owner" and "governor" roles.  Users will be able to configure and set it, and when an action triggers it a link to it will be created in the action history view.  Adding a new condition requires: defining the condition model and the required methods (such as how the status of the condition is determined); creating change objects corresponding to actions taken on that condition, such as AddVote or Approve; creating a simple client to expose the change objects; and creating a default template for interacting with the condition on the front end.  Depending on the complexity of the condition and the experience of the developer creating it, we estimate that adding new conditions takes a day or two of worker.
+Creating new permissioned models (also refered to as resources) is a similar process to adding conditions (after all, a condition is a type of permissioned model).  Developers will create a new Django model which inherits from PermissionedModel and define their own custom fields on it.  They must then add change objects and corresponding client methods to control when an instance's data can be changed.  It is up to the developer how to add the permissioned model as a template - the default is "create a Vue component for this Django model" but in practice the template design will be driven by the data model. To learn more, read the guide on :doc:`how to add a permissioned model/resource<how_to_add_resource>`.
 
-Creating new permissioned models is a similar process to adding conditions (after all, a condition is a type of permissioned model).  Developers will create a new Django model which inherits from PermissionedModel and define their own custom fields on it.  They must then add change objects and corresponding client methods to control when an instance's data can be changed.  It is up to the developer how to add the permissioned model as a template - the default is "create a Vue component for this Django model" but in practice the template design will be driven by the data model.
-
-Currently we add templates by writing a template function in template_library.py.  Adding templates can be very quick (under an hour) with the bulk of the work largely coming from adding tests to make sure the template is doing what you expect it to do.
+Currently we add templates by writing a template function in template_library.py.  Adding templates can be very quick (under an hour) with the bulk of the work largely coming from adding tests to make sure the template is doing what you expect it to do. To learn more, read the guide on :doc:`how to add a template<how_to_add_template>`.
 
 Tools and Frameworks Used
 -------------------------
 
-Concord currently relies heavily on two languages and two frameworks.  Concord's back end logic is implemented as a Django (Python) package, and ade avaialble through AJAX views, which return data as JSON for the front end to use.  Developers may implement a completely custom front end, but Concord provides some default templates using the Javascript framework Vue.  We are working on making the templates as modular as possible, so developers can create their own front end but re-use, for instance, the interface for interacting with permissions and conditions, or the inteface for viewing action history. 
+Concord currently relies heavily on two languages and two frameworks. Concord's back end logic is implemented as a Django (Python) package, and made avaialble through AJAX views, which return data as JSON for the front end to use. Developers may implement a completely custom front end, but Concord provides some default templates using the Javascript framework Vue. We are working on making the templates as modular as possible, so developers can create their own front end but re-use, for instance, the interface for interacting with permissions and conditions, or the inteface for viewing action history. 
 
 
 .. toctree::
@@ -109,9 +109,11 @@ Concord currently relies heavily on two languages and two frameworks.  Concord's
    :maxdepth: 2
    :caption: More Info
 
-   example_implementation
+   index
    deep_dives
+   how_to_add_template
    how_to_add_resource
+   example_implementation
 
 .. toctree::
    :hidden:

@@ -9,7 +9,7 @@ from concord.actions.client import BaseClient
 from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources import state_changes as sc
 from concord.actions.permissions import has_permission
-from concord.actions.utils import get_state_changes_settable_on_model_and_parents
+from concord.actions.utils import get_state_changes_settable_on_model
 
 
 ################################
@@ -111,7 +111,7 @@ class PermissionResourceClient(BaseClient):
         which may be set on that model via a permission."""
         if hasattr(model_class, "pk") and isinstance(model_class.pk, int):
             model_class = model_class.__class__   # just in case we've been passed in an instance
-        return get_state_changes_settable_on_model_and_parents(model_class)
+        return get_state_changes_settable_on_model(model_class)
 
     def get_settable_permissions(self, return_format="tuples") -> List[Tuple[str, str]]:
         """Gets a list of permissions it is possible to set on the target, in various formats"""

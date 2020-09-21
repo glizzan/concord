@@ -22,7 +22,7 @@ def field_helper(type_of_field, overrides=None):
             "label": "What roles have this permission?",
             "required": False,
             "default": None,
-            "type": "PermissionRoleField",
+            "type": "RoleListField",
             "value": None,
             "field_name": None,
             "full_name": None
@@ -33,7 +33,40 @@ def field_helper(type_of_field, overrides=None):
             "label": "What actors have this permission?",
             "required": False,
             "default": None,
-            "type": "PermissionActorField",
+            "type": "ActorListField",
+            "value": None,
+            "field_name": None,
+            "full_name": None
+        })
+
+    if type_of_field == "BooleanField":
+        form_field_dict.update({
+            "label": "",
+            "required": False,
+            "default": False,
+            "type": "BooleanField",
+            "value": None,
+            "field_name": None,
+            "full_name": None
+        })
+
+    if type_of_field == "IntegerField":
+        form_field_dict.update({
+            "label": "",
+            "required": False,
+            "default": False,
+            "type": "IntegerField",
+            "value": None,
+            "field_name": None,
+            "full_name": None
+        })
+
+    if type_of_field == "CharField":
+        form_field_dict.update({
+            "label": "",
+            "required": False,
+            "default": False,
+            "type": "CharField",
             "value": None,
             "field_name": None,
             "full_name": None

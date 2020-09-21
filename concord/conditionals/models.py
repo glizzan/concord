@@ -63,7 +63,7 @@ class ConditionModel(PermissionedModel):
 
         for field_name, field_dict in form_dict.items():
 
-            if field_dict["type"] in ["PermissionRoleField", "PermissionActorField"]:
+            if field_dict["type"] in ["RoleField", "RoleListField", "ActorField", "ActorListField"]:
                 permission_field_value = permission_data.get(field_dict["field_name"], None)
                 field_dict["value"] = permission_field_value if permission_field_value else field_dict["value"]
             else:
@@ -155,24 +155,28 @@ class ApprovalCondition(ConditionModel):
     def configurable_fields(cls):
         return {
             "self_approval_allowed": {
-                "display": "Can individuals approve their own actions?",
+                "display": "Can individuals approve their own actions?", "can_depend": False,
                 **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))
             },
             "approve_roles": {
-                "display": "Roles who can approve", "type": "PermissionRoleField", "required": False,
-                "value": None, "field_name": "approve_roles", "full_name": Changes().Conditionals.Approve
+                "display": "Roles who can approve", "type": "RoleListField", "required": False,
+                "can_depend": True, "value": None, "field_name": "approve_roles",
+                "full_name": Changes().Conditionals.Approve
             },
             "approve_actors": {
-                "display": "People who can approve", "type": "PermissionActorField", "required": False,
-                "value": None, "field_name": "approve_actors", "full_name": Changes().Conditionals.Approve
+                "display": "People who can approve", "type": "ActorListField", "required": False,
+                "can_depend": True, "value": None, "field_name": "approve_actors",
+                "full_name": Changes().Conditionals.Approve
             },
             "reject_roles": {
-                "display": "Roles who can reject", "type": "PermissionRoleField", "required": False,
-                "value": None, "field_name": "reject_roles", "full_name": Changes().Conditionals.Reject
+                "display": "Roles who can reject", "type": "RoleListField", "required": False,
+                "can_depend": True, "value": None, "field_name": "reject_roles",
+                "full_name": Changes().Conditionals.Reject
             },
             "reject_actors": {
-                "display": "People who can reject", "type": "PermissionActorField", "required": False,
-                "value": None, "field_name": "reject_actors", "full_name": Changes().Conditionals.Reject
+                "display": "People who can reject", "type": "ActorListField", "required": False,
+                "can_depend": True, "value": None, "field_name": "reject_actors",
+                "full_name": Changes().Conditionals.Reject
             }
         }
 
@@ -321,28 +325,28 @@ class VoteCondition(ConditionModel):
         """Gets fields on condition which may be configured by user."""
         return {
             "allow_abstain": {
-                "display": "Let people abstain from voting?",
+                "display": "Let people abstain from voting?", "can_depend": False,
                 **cls.get_form_dict_for_field(cls._meta.get_field("allow_abstain"))
             },
             "require_majority": {
-                "display": "Require a majority rather than a plurality to pass?",
+                "display": "Require a majority rather than a plurality to pass?", "can_depend": False,
                 **cls.get_form_dict_for_field(cls._meta.get_field("require_majority"))
             },
             "publicize_votes": {
-                "display": "Publicize peoples' votes?",
+                "display": "Publicize peoples' votes?", "can_depend": False,
                 **cls.get_form_dict_for_field(cls._meta.get_field("publicize_votes"))
             },
             "voting_period": {
-                "display": "How long should the vote go on, in hours?",
+                "display": "How long should the vote go on, in hours?", "can_depend": False,
                 **cls.get_form_dict_for_field(cls._meta.get_field("voting_period"))
             },
             "vote_roles": {
-                "display": "Roles who can vote", "type": "PermissionRoleField",
+                "display": "Roles who can vote", "type": "RoleListField", "can_depend": True,
                 "required": False, "value": None, "field_name": "vote_roles",
                 "full_name": Changes().Conditionals.AddVote
             },
             "vote_actors": {
-                "display": "People who can vote", "type": "PermissionActorField",
+                "display": "People who can vote", "type": "ActorListField", "can_depend": True,
                 "required": False, "value": None, "field_name": "vote_actors",
                 "full_name": Changes().Conditionals.AddVote
             },
@@ -395,7 +399,7 @@ def retry_action(sender, instance, created, **kwargs):
     if not created:
         client = Client()
         action = client.Action.get_action_given_pk(pk=instance.action)
-        client.Action.take_action(action=action)
+        client.Action.retake_action(action=action)
 
 
 for conditionModel in [ApprovalCondition, VoteCondition]:

@@ -127,8 +127,6 @@ class PermissionResourceClient(BaseClient):
     def add_permission(self, *, permission_type: str, permission_actors: list = None, permission_roles: list = None,
                        permission_configuration: dict = None, anyone=False) -> Tuple[int, Any]:
         """Add permission to target."""
-        if not permission_actors and not permission_roles and anyone is not True:
-            raise Exception("Either actor or roles must be supplied when creating a permission")
         change = sc.AddPermissionStateChange(
             change_type=permission_type, actors=permission_actors, roles=permission_roles,
             configuration=permission_configuration, anyone=anyone)

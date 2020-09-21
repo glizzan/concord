@@ -561,6 +561,61 @@ class EditRowStateChange(BaseStateChange):
         return target
 
 
+class MoveRowStateChange(BaseStateChange):
+    """State Change to move a row in a list."""
+    description = "Move row in list"
+    input_fields = [InputField(name="old_index", type="CharField", required=True, validate=False),
+                    InputField(name="new_index", type="IntegerField", required=True, validate=False)]
+
+    def __init__(self, old_index, new_index):
+        self.old_index = old_index
+        self.new_index = new_index
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [SimpleList]
+
+    @classmethod
+    def get_settable_classes(cls):
+        return cls.get_community_models() + [SimpleList]
+
+    def description_present_tense(self):
+        return f"move row with current index {self.old_index} to {self.new_index}"
+
+    def description_past_tense(self):
+        return f"moved row with current index {self.old_index} to {self.new_index}"
+
+    def validate(self, actor, target):
+
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if not isinstance(self.old_index, int):
+            self.set_validation_error(message="Current index must be an integer.")
+            return False
+
+        if not isinstance(self.new_index, int):
+            self.set_validation_error(message="New index must be an integer.")
+            return False
+
+        if not 0 <= self.old_index < len(target.get_rows()):
+            message = f"Current index must be within 0 and {len(target.get_rows())} not {self.old_index}"
+            self.set_validation_error(message=message)
+            return False
+
+        if not 0 <= self.new_index < len(target.get_rows()):
+            message = f"New index must be within 0 and {len(target.get_rows())} not {self.new_index}"
+            self.set_validation_error(message=message)
+            return False
+
+        return True
+
+    def implement(self, actor, target):
+        target.move_row(self.old_index, self.new_index)
+        target.save()
+        return target
+
+
 class DeleteRowStateChange(BaseStateChange):
     """State Change to delete a row in a list."""
     description = "Delete row in list"

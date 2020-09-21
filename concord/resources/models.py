@@ -206,6 +206,13 @@ class SimpleList(PermissionedModel):
         rows[index] = row
         self.rows = json.dumps(rows)
 
+    def move_row(self, old_index, new_index):
+        """Moves a row from old index to new index."""
+        rows = self.get_rows()
+        row = rows.pop(old_index)
+        rows.insert(new_index, row)
+        self.rows = json.dumps(rows)
+
     def delete_row(self, index):
         """Delete a row from the list."""
         rows = self.get_rows()

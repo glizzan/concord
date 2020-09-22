@@ -310,10 +310,11 @@ class TemplateModel(PermissionedModel):
         field data if passed in."""
         if trigger_action and supplied_field_data:
             return self.template_data.programmatic_description(
-                trigger_action=trigger_action, supplied_field_data=supplied_field_data,
+                name=self.name, trigger_action=trigger_action, supplied_field_data=supplied_field_data,
                 supplied_field_options=self.get_supplied_fields())
         else:
-            return self.template_data.programmatic_description_uninstantiated(self.get_supplied_fields())
+            return self.template_data.programmatic_description_uninstantiated(
+                name=self.name, supplied_field_options=self.get_supplied_fields())
 
     def get_supplied_fields(self):
         """Get supplied fields as dictionary."""

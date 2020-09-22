@@ -346,23 +346,24 @@ class Template(object):
 
         return context["actions_and_results"]
 
-    def programmatic_description_uninstantiated(self, supplied_field_options=None):
+    def programmatic_description_uninstantiated(self, name, supplied_field_options=None):
         """Gets a complete, programmatically generated list of actions.  No trigger action, as this is called
         when the template has not yet been triggered.  Supplied fields is a list of fields to be supplied and
         contains no user-supplied values."""
-        descriptions = [mock_action_to_text(mock) for mock in self.action_list]
+        actions = [mock_action_to_text(mock) for mock in self.action_list]
         supplied_fields = supplied_fields_to_text(None, supplied_field_options)
         foundational = foundational_actions_to_text(self.action_list)
-        return {"actions": descriptions, "supplied_fields": supplied_fields, "foundational": foundational}
+        return {"name": name, "actions": actions, "supplied_fields": supplied_fields, "foundational": foundational}
 
-    def programmatic_description(self, trigger_action=None, supplied_field_data=None, supplied_field_options=None):
+    def programmatic_description(self, name, trigger_action=None, supplied_field_data=None,
+                                 supplied_field_options=None):
         """Gets a complete, programmatically generated list of actions.  Trigger action and supplied fields are
         technically optional but should be passed in as this is called when a template has actually been applied
         or is in the process of being applied."""
-        descriptions = [mock_action_to_text(mock, trigger_action) for mock in self.action_list]
+        actions = [mock_action_to_text(mock, trigger_action) for mock in self.action_list]
         supplied_fields = supplied_fields_to_text(supplied_field_data, supplied_field_options)
         foundational = foundational_actions_to_text(self.action_list)
-        return {"actions": descriptions, "supplied_fields": supplied_fields, "foundational": foundational}
+        return {"name": name, "actions": actions, "supplied_fields": supplied_fields, "foundational": foundational}
 
     def get_mock_action_given_unique_id(self, unique_id):
         """Gets a Mock Action from the action list if it matches the unique_id passed in."""

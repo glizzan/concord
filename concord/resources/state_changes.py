@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class AddCommentStateChange(BaseStateChange):
     """State Change to add a comment."""
     description = "Add comment"
+    section = "Comment"
     input_fields = [InputField(name="text", type="CharField", required=True, validate=True),
                     InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
     input_target = Comment
@@ -76,6 +77,7 @@ class AddCommentStateChange(BaseStateChange):
 class EditCommentStateChange(BaseStateChange):
     """State Change to edit a comment."""
     description = "Edit comment"
+    section = "Comment"
     context_keys = ["comment", "commented_object"]
     input_fields = [InputField(name="text", type="CharField", required=True, validate=True),
                     InputField(name="commenter_only", type="BooleanField", required=False, validate=False),
@@ -170,6 +172,7 @@ class EditCommentStateChange(BaseStateChange):
 class DeleteCommentStateChange(BaseStateChange):
     """State Change to delete a comment."""
     description = "Delete comment"
+    section = "Comment"
     context_keys = ["comment", "commented_object"]
     input_fields = [InputField(name="commenter_only", type="BooleanField", required=False, validate=False),
                     InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
@@ -360,6 +363,7 @@ class RemoveItemStateChange(BaseStateChange):
 class AddListStateChange(BaseStateChange):
     """State Change to create a list in a community (or other target)."""
     description = "Add list"
+    section = "List"
     input_fields = [InputField(name="name", type="CharField", required=True, validate=True),
                     InputField(name="configuration", type="DictField", required=True, validate=False),
                     InputField(name="description", type="CharField", required=False, validate=True)]
@@ -400,6 +404,7 @@ class AddListStateChange(BaseStateChange):
 class EditListStateChange(BaseStateChange):
     """State Change to edit an existing list."""
     description = "Edit list"
+    section = "List"
     input_fields = [InputField(name="name", type="CharField", required=False, validate=True),
                     InputField(name="configuration", type="DictField", required=False, validate=False),
                     InputField(name="description", type="CharField", required=False, validate=True)]
@@ -451,6 +456,7 @@ class EditListStateChange(BaseStateChange):
 class DeleteListStateChange(BaseStateChange):
     """State Change to delete an existing list."""
     description = "Delete list"
+    section = "List"
 
     @classmethod
     def get_allowable_targets(cls):
@@ -475,6 +481,7 @@ class DeleteListStateChange(BaseStateChange):
 class AddRowStateChange(BaseStateChange):
     """State Change to add a row to a list."""
     description = "Add row to list"
+    section = "List"
     input_fields = [InputField(name="row_content", type="CharField", required=True, validate=False),
                     InputField(name="index", type="IntegerField", required=False, validate=False)]
 
@@ -518,6 +525,7 @@ class AddRowStateChange(BaseStateChange):
 class EditRowStateChange(BaseStateChange):
     """State Change to edit a row in a list."""
     description = "Edit row in list"
+    section = "List"
     input_fields = [InputField(name="row_content", type="CharField", required=True, validate=False),
                     InputField(name="index", type="IntegerField", required=True, validate=False)]
 
@@ -564,6 +572,7 @@ class EditRowStateChange(BaseStateChange):
 class MoveRowStateChange(BaseStateChange):
     """State Change to move a row in a list."""
     description = "Move row in list"
+    section = "List"
     input_fields = [InputField(name="old_index", type="CharField", required=True, validate=False),
                     InputField(name="new_index", type="IntegerField", required=True, validate=False)]
 
@@ -619,6 +628,7 @@ class MoveRowStateChange(BaseStateChange):
 class DeleteRowStateChange(BaseStateChange):
     """State Change to delete a row in a list."""
     description = "Delete row in list"
+    section = "List"
     input_fields = [InputField(name="index", type="IntegerField", required=True, validate=False)]
 
     def __init__(self, index):

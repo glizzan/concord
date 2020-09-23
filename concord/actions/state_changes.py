@@ -25,6 +25,7 @@ class BaseStateChange(object):
     input_target: Any = None
     context_keys: List[str] = []
     is_foundational = False
+    section: str = "Miscellaneous"
 
     @classmethod
     def get_change_type(cls):
@@ -205,6 +206,7 @@ class ChangeOwnerStateChange(BaseStateChange):
     description = "Change owner"
     preposition = "for"
     is_foundational = True
+    section = "Leadership"
     input_fields = [InputField(name="new_owner_content_type", type="ContentTypeField", required=True, validate=False),
                     InputField(name="new_owner_id", type="ObjectIDField", required=True, validate=False)]
 
@@ -251,6 +253,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
     """State change object for enabling the foundational permission of a permissioned model."""
     description = "Enable the foundational permission"
     preposition = "for"
+    section = "Permissions"
     is_foundational = True
 
     def description_present_tense(self):
@@ -267,8 +270,9 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
 class DisableFoundationalPermissionStateChange(BaseStateChange):
     """State change object for disabling the foundational permission of a permissioned model."""
-    description = "disable foundational permission"
+    description = "Disable foundational permission"
     preposition = "for"
+    section = "Permissions"
     is_foundational = True
 
     def description_present_tense(self):
@@ -287,6 +291,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
     """State change object for enabling the governing permission of a permissioned model."""
     description = "Enable the governing permission"
     preposition = "for"
+    section = "Permissions"
     is_foundational = True
 
     def description_present_tense(self):
@@ -303,8 +308,9 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
 class DisableGoverningPermissionStateChange(BaseStateChange):
     """State change object for disabling the governing permission of a permissioned model."""
-    description = "disable governing permission"
+    description = "Disable governing permission"
     preposition = "for"
+    section = "Permissions"
     is_foundational = True
 
     def description_present_tense(self):

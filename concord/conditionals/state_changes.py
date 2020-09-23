@@ -115,6 +115,7 @@ class AddVoteStateChange(BaseStateChange):
     """State change for adding a vote."""
     description = "Add vote"
     verb_name = "vote"
+    section = "Vote"
     action_helps_pass_condition = True
     input_fields = [InputField(name="vote", type="CharField", required=True, validate=False)]
 
@@ -168,6 +169,7 @@ class ApproveStateChange(BaseStateChange):
     """State change for approving a condition."""
     description = "Approve"
     preposition = ""
+    section = "Approval"
     verb_name = "approve"
     action_helps_pass_condition = True
 
@@ -206,6 +208,7 @@ class RejectStateChange(BaseStateChange):
     """State change for rejecting a condition.."""
     description = "Reject"
     preposition = ""
+    section = "Approval"
     verb_name = "reject"
     action_helps_pass_condition = False
 

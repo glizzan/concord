@@ -25,8 +25,8 @@ class AddPermissionStateChange(BaseStateChange):
     description = "Add permission"
     section = "Permissions"
     input_fields = [InputField(name="change_type", type="CharField", required=True, validate=True),
-                    InputField(name="actors", type="ActorListField", required=True, validate=True),
-                    InputField(name="roles", type="RoleListField", required=True, validate=True),
+                    InputField(name="actors", type="ActorListField", required=True, validate=False),
+                    InputField(name="roles", type="RoleListField", required=True, validate=False),
                     InputField(name="configuration", type="DictField", required=False, validate=True),
                     InputField(name="anyone", type="BooleanField", required=False, validate=True),
                     InputField(name="inverse", type="BooleanField", required=False, validate=True)]
@@ -452,7 +452,7 @@ class AddPermissionConditionStateChange(BaseStateChange):
 
     def __init__(self, *, condition_type, condition_data, permission_data):
         self.condition_type = condition_type
-        self.condition_data = condition_data
+        self.condition_data = condition_data if condition_data else {}
         self.permission_data = permission_data if permission_data else []
 
     @classmethod
@@ -480,7 +480,8 @@ class AddPermissionConditionStateChange(BaseStateChange):
 
         mock_action_list = []
         action_1 = client.Conditional.set_condition_on_action(
-            condition_type=self.condition_type, condition_data=self.condition_data, permission_pk=permission.pk)
+            condition_type=self.condition_type, condition_data=self.condition_data,
+            permission_data=self.permission_data, permission_pk=permission.pk)
         action_1.target = "{{context.action}}"
         mock_action_list.append(action_1)
 
@@ -499,6 +500,10 @@ class AddPermissionConditionStateChange(BaseStateChange):
 
         if not self.condition_type:
             self.set_validation_error(message="condition_type cannot be None")
+            return False
+
+        if not Client().Conditional.is_valid_condition_type(self.condition_type):
+            self.set_validation_error(message=f"condition_type must be a valid type not {self.condition_type}")
             return False
 
         try:

@@ -713,8 +713,8 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
     def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
         self.condition_type = condition_type
-        self.condition_data = condition_data
-        self.permission_data = permission_data
+        self.condition_data = condition_data if condition_data else {}
+        self.permission_data = permission_data if permission_data else []
         self.leadership_type = leadership_type
 
     @classmethod
@@ -737,7 +737,8 @@ class AddLeadershipConditionStateChange(BaseStateChange):
         mock_action_list = []
         action_1 = client.Conditional.set_condition_on_action(
             condition_type=self.condition_type, condition_data=self.condition_data,
-            community_pk=target.pk, leadership_type=self.leadership_type)
+            community_pk=target.pk, leadership_type=self.leadership_type,
+            permission_data=self.permission_data)
         action_1.target = "{{context.action}}"
         mock_action_list.append(action_1)
 
@@ -770,6 +771,11 @@ class AddLeadershipConditionStateChange(BaseStateChange):
 
         if not self.condition_type:
             self.set_validation_error(message="condition_type cannont be None")
+            return False
+
+        if not Client().Conditional.is_valid_condition_type(self.condition_type):
+            message = f"condition_type must be a valid condition class not {self.condition_type}"
+            self.set_validation_error(message=message)
             return False
 
         if not self.leadership_type:

@@ -2,7 +2,7 @@
 
 Concord is a framework for implementing user-controlled permissions and governance structures. Sites built with Concord allow communities of users to determine which actions may be taken in their communities using a variety of decision-making processes.
 
-To learn more about the design and implementation of Concord, check out [our documentation]().
+To learn more about the design and implementation of Concord, check out [our documentation](https://glizzan-concord.readthedocs.io/en/latest/).
 
 The project is maintained by the [Glizzan organization](https://www.glizzan.com/) and surrounding community. To join, please email glizzanplatform@gmail.com to ask for an invite to [our Zulip discussion space](https://glizzan.zulipchat.com/). Please note: this project uses the [Contributor Covenant](https://www.contributor-covenant.org/version/2/0/code_of_conduct/) as our Code of Conduct, and by participating you agree to abide by its terms.
 
@@ -34,4 +34,4 @@ Nevertheless, it's worth sketching out a number of the ways in which you can con
 * adding to the test suites
 * writing new features or fixing bugs
 
-In particular, Concord is built to be extensible in three major ways: through the addition of new templates, new condition types, and new resource types. Please see the Documentation for how to do so: [How to Add a Template](), [How to Add a Resource](), [How to Add a Condition]().
+In particular, Concord is built to be extensible in three major ways: through the addition of new templates, new condition types, and new resource types. Please see the Documentation for how to do so: [How to Add a Template](https://glizzan-concord.readthedocs.io/en/latest/how_to_add_template.html), [How to Add a Resource](https://glizzan-concord.readthedocs.io/en/latest/how_to_add_resource.html), [How to Add a Condition]() (coming soon).

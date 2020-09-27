@@ -55,7 +55,8 @@ def parse_action_list_into_condition_and_permission_objects(action_list):
 
     # get condition object
     condition_model = Client().Conditional.get_condition_class(condition_type=action_list[0].change.condition_type)
-    condition_object = condition_model(**action_list[0].change.condition_data)
+    data = action_list[0].change.condition_data if action_list[0].change.condition_data else {}
+    condition_object = condition_model(**data)
 
     # get permissions objects
     permission_objects = []
@@ -123,3 +124,60 @@ def description_for_passing_voting_condition(condition, fill_dict=None):
         people_str = ""
 
     return f"a {vote_type} of people{people_str} vote for it within {condition.describe_voting_period()}"
+
+
+def description_for_passing_consensus_condition(condition, fill_dict=None):
+    """Generate a 'plain English' description for passing the consensus condtion."""
+
+    participate_actors = fill_dict.get("participate_actors", []) if fill_dict else None
+    participate_roles = fill_dict.get("participate_roles", []) if fill_dict else None
+
+    if not fill_dict or (not participate_roles and not participate_actors):
+        consensus_type = "strict" if condition.is_strict else "loose"
+        return f"a group of people must agree to it through {consensus_type} consensus"
+
+    participate_str = roles_and_actors({"roles": participate_roles, "actors": participate_actors})
+
+    if condition.is_strict:
+        return f"{participate_str} must agree to it with everyone participating and no one blocking"
+    else:
+        return f"{participate_str} must agree to it with no one blocking"
+
+
+def parse_duration_into_units(duration):
+    """Given a period of time in hours, parses into months, weeks, days, hours, minutes."""
+
+    weeks = int(int(duration) / 168)
+    time_remaining = duration % 168
+    days = int(int(time_remaining) / 24)
+    time_remaining = int(time_remaining) % 24
+    hours = int(time_remaining)
+    minutes = int((duration - int(duration)) * 60)
+
+    return {"weeks": weeks, "days": days, "hours": hours, "minutes": minutes}
+
+
+def display_duration_units(weeks=0, days=0, hours=0, minutes=0):
+    """Creates human readable description of duration period."""
+
+    time_pieces = []
+
+    if weeks > 0:
+        time_pieces.append(f"{weeks} weeks" if weeks > 1 else "1 week")
+    if days > 0:
+        time_pieces.append(f"{days} days" if days > 1 else "1 day")
+    if hours > 0:
+        time_pieces.append(f"{hours} hours" if hours > 1 else "1 hour")
+    if minutes > 0:
+        time_pieces.append(f"{minutes} minutes" if minutes > 1 else "1 minute")
+
+    if len(time_pieces) == 1:
+        return time_pieces[0]
+
+    if len(time_pieces) > 1:
+        last_time_piece = time_pieces.pop()
+        description = ", ".join(time_pieces)
+        description += " and " + last_time_piece
+        return description
+
+    return ""

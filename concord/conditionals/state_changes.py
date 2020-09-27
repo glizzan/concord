@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange, InputField
 from concord.actions.utils import Client
-from concord.conditionals.models import VoteCondition, ApprovalCondition
+from concord.conditionals.models import VoteCondition, ApprovalCondition, ConsensusCondition
 from concord.actions.models import Action
 
 
@@ -20,14 +20,16 @@ class SetConditionOnActionStateChange(BaseStateChange):
     description = "Set condition on action"
     input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
                     InputField(name="condition_data", type="DictField", required=False, validate=False),
+                    InputField(name="permission_data", type="DictField", required=False, validate=False),
                     InputField(name="permission_pk", type="ObjectIDField", required=False, validate=False),
                     InputField(name="community_pk", type="ObjectIDField", required=False, validate=False),
                     InputField(name="leadership_type", type="CharField", required=False, validate=False)]
 
-    def __init__(self, *, condition_type, condition_data=None, permission_pk=None, community_pk=None,
-                 leadership_type=None):
+    def __init__(self, *, condition_type, condition_data=None, permission_data=None, permission_pk=None,
+                 community_pk=None, leadership_type=None):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else {}
+        self.permission_data = permission_data if permission_data else {}
         self.permission_pk = permission_pk
         self.community_pk = community_pk
         self.leadership_type = leadership_type
@@ -82,13 +84,18 @@ class SetConditionOnActionStateChange(BaseStateChange):
             self.set_validation_error(message="Target must be an action")
             return False
 
+        if not self.condition_type:
+            self.set_validation_error(message="You must set a condition type")
+            return False
+
+        if not Client().Conditional.is_valid_condition_type(self.condition_type):
+            self.set_validation_error(message=f"condition_type must be a valid type not {self.condition_type}")
+            return False
+
         try:
             condition_class = self.get_condition_class()
             source_id = self.generate_source_id()
-
-            condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(),
-                            **(self.condition_data if self.condition_data else {}))
-
+            condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(), **self.condition_data)
             return True
         except ValidationError as error:
             self.set_validation_error(message=error.message)
@@ -103,6 +110,10 @@ class SetConditionOnActionStateChange(BaseStateChange):
         condition_instance = condition_class.objects.create(
             action=target.pk, source_id=source_id, owner=self.get_owner(), **condition_data)
 
+        condition_instance.initialize_condition(target, condition_data, self.permission_data,
+                                                self.leadership_type)
+        condition_instance.save()
+
         return condition_instance
 
 
@@ -116,7 +127,6 @@ class AddVoteStateChange(BaseStateChange):
     description = "Add vote"
     verb_name = "vote"
     section = "Vote"
-    action_helps_pass_condition = True
     input_fields = [InputField(name="vote", type="CharField", required=True, validate=False)]
 
     def __init__(self, vote):
@@ -171,7 +181,6 @@ class ApproveStateChange(BaseStateChange):
     preposition = ""
     section = "Approval"
     verb_name = "approve"
-    action_helps_pass_condition = True
 
     @classmethod
     def get_allowable_targets(cls):
@@ -210,7 +219,7 @@ class RejectStateChange(BaseStateChange):
     preposition = ""
     section = "Approval"
     verb_name = "reject"
-    action_helps_pass_condition = False
+    rejects_condition = True
 
     @classmethod
     def get_allowable_targets(cls):
@@ -243,3 +252,80 @@ class RejectStateChange(BaseStateChange):
         target.reject()
         target.save()
         return True
+
+
+#########################################
+### Consensus Condition State Changes ###
+#########################################
+
+class RespondConsensusStateChange(BaseStateChange):
+    """State change for responding to a consensus condition"""
+    description = "Respond"
+    preposition = ""
+    section = "Consensus"
+    verb_name = "respond"
+    input_fields = [InputField(name="response", type="CharField", required=True, validate=False)]
+
+    def __init__(self, response):
+        self.response = response
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [ConsensusCondition]
+
+    def description_present_tense(self):
+        return f"respond with {self.response}"
+
+    def description_past_tense(self):
+        return f"responded with {self.response}"
+
+    def validate(self, actor, target):
+        """Checks that the actor is a participant."""
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if self.response not in target.response_choices:
+            self.set_validation_error(
+                f"Response must be one of {', '.join(target.response_choices)}, not {self.response}")
+            return False
+
+        return True
+
+    def implement(self, actor, target):
+        target.add_response(actor, self.response)
+        target.save()
+        return self.response
+
+
+class ResolveConsensusStateChange(BaseStateChange):
+    """State change for resolving a consensus condition."""
+    description = "Resolve"
+    preposition = ""
+    section = "Consensus"
+    verb_name = "resolve"
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return [ConsensusCondition]
+
+    def description_present_tense(self):
+        return "resolve"
+
+    def description_past_tense(self):
+        return "resolved"
+
+    def validate(self, actor, target):
+        """Checks that the actor is a participant."""
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if not target.ready_to_resolve():
+            self.set_validation_error("The minimum duration of discussion has not yet passed.")
+            return False
+
+        return True
+
+    def implement(self, actor, target):
+        target.resolved = True
+        target.save()
+        return target

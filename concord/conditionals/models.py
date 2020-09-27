@@ -79,6 +79,10 @@ class ConditionModel(PermissionedModel):
         again."""
         return True, ""
 
+    def initialize_condition(self, *args, **kwargs):
+        """Called when creating the condition, and passed condition_data and permission data."""
+        return
+
     # Class methods with default implementation
 
     @classmethod
@@ -265,16 +269,6 @@ class VoteCondition(ConditionModel):
         voted.append(actor.username)
         self.voted = json.dumps(voted)
 
-    def voting_time_remaining(self):
-        """Gets time remaining to vote."""
-        seconds_passed = (timezone.now() - self.voting_starts).total_seconds()
-        hours_passed = seconds_passed / 360
-        return self.voting_period - hours_passed
-
-    def voting_deadline(self):
-        """Gets deadline of vote given starting point and length of vote."""
-        return self.voting_starts + datetime.timedelta(hours=self.voting_period)
-
     def yeas_have_majority(self):
         """Helper method, returns True if yeas currently have majority."""
         if self.yeas > (self.nays + self.abstains):
@@ -298,25 +292,20 @@ class VoteCondition(ConditionModel):
                 return "approved"
             return "rejected"
 
-    def get_voting_period_in_units(self):
-        """Gets configured voting period in units of weeks, days and hours."""
-        weeks = int(int(self.voting_period) / 168)
-        time_remaining = int(self.voting_period) - (weeks * 168)
-        days = int(time_remaining / 24)
-        hours = time_remaining - (days * 24)
-        return weeks, days, hours
+    def voting_time_remaining(self):
+        """Gets time remaining to vote."""
+        seconds_passed = (timezone.now() - self.voting_starts).total_seconds()
+        hours_passed = seconds_passed / 360
+        return self.voting_period - hours_passed
+
+    def voting_deadline(self):
+        """Gets deadline of vote given starting point and length of vote."""
+        return self.voting_starts + datetime.timedelta(hours=self.voting_period)
 
     def describe_voting_period(self):
         """Gets human readable description of voting period."""
-        weeks, days, hours = self.get_voting_period_in_units()
-        time_pieces = []
-        if weeks > 0:
-            time_pieces.append(f"{weeks} weeks" if weeks > 1 else "1 week")
-        if days > 0:
-            time_pieces.append(f"{days} days" if days > 1 else "1 day")
-        if hours > 0:
-            time_pieces.append(f"{hours} hours" if hours > 1 else "1 hour")
-        return ", ".join(time_pieces)
+        units = utils.parse_duration_into_units(self.voting_period)
+        return utils.display_duration_units(**units)
 
     # Required methods
 
@@ -391,6 +380,181 @@ class VoteCondition(ConditionModel):
         return utils.description_for_passing_voting_condition(condition=self, fill_dict=None)
 
 
+class ConsensusCondition(ConditionModel):
+    """Consensus Condition class."""
+    descriptive_name = "Consensus Condition"
+    verb_name = "consense"
+    has_timeout = True
+
+    resolved = models.BooleanField(default=False)
+
+    is_strict = models.BooleanField(default=False)
+    responses = models.CharField(max_length=500, default="{}")
+
+    minimum_duration = models.IntegerField(default=48)
+    discussion_starts = models.DateTimeField(default=timezone.now)
+
+    response_choices = ["support", "support with reservations", "stand aside", "block", "no response"]
+
+    def initialize_condition(self, target, condition_data, permission_data, leadership_type):
+        """Called when creating the condition, and passed condition_data and permission data."""
+
+        client = Client(target=target.target.get_owner())
+        participants = set([])
+
+        for permission in permission_data:
+            if permission["permission_type"] == Changes().Conditionals.RespondConsensus:
+                if permission.get("permission_roles"):
+                    for role in permission["permission_roles"]:
+                        for user in client.Community.get_users_given_role(role_name=role):
+                            participants.add(user)
+                if permission.get("permission_actors"):
+                    for actor in permission["permission_actors"]:
+                        participants.add(int(actor))
+
+        if leadership_type == "owner":
+            for action in client.get_users_with_ownership_privileges():
+                participants.add(int(actor))
+
+        if leadership_type == "governor":
+            for action in client.get_users_with_governorship_privileges():
+                participants.add(int(actor))
+
+        self.create_response_dictionary(participant_pk_list=list(participants))
+
+    def condition_status(self):
+        if not self.resolved:
+            return "waiting"
+        return self.current_result()
+
+    def current_result(self):
+        if self.is_strict:
+            if self.full_participation():
+                if self.has_blocks() or not self.has_support():
+                    return "rejected"
+                return "approved"
+            return "rejected"
+        else:
+            if self.has_blocks() or not self.has_support():
+                return "rejected"
+            return "approved"
+
+    def create_response_dictionary(self, participant_pk_list):
+        response_dict = {pk: "no response" for pk in participant_pk_list}
+        self.responses = json.dumps(response_dict)
+
+    def get_responses(self):
+        return json.loads(self.responses)
+
+    def has_support(self):
+        for user, response in self.get_responses().items():
+            if response in ["support", "support with reservations"]:
+                return True
+        return False
+
+    def full_participation(self):
+        for user, response in self.get_responses().items():
+            if response == "no response":
+                return False
+        return True
+
+    def has_blocks(self):
+        for user, response in self.get_responses().items():
+            if response == "block":
+                return True
+        return False
+
+    def time_until_duration_passed(self):
+        seconds_passed = (timezone.now() - self.discussion_starts).total_seconds()
+        hours_passed = seconds_passed / 360
+        return self.minimum_duration - hours_passed
+
+    def time_remaining_display(self):
+        time_remaining = self.time_until_duration_passed()
+        units = utils.parse_duration_into_units(time_remaining)
+        return utils.display_duration_units(**units)
+
+    def duration_display(self):
+        units = utils.parse_duration_into_units(self.minimum_duration)
+        return utils.display_duration_units(**units)
+
+    def ready_to_resolve(self):
+        if self.time_until_duration_passed() <= 0:
+            return True
+        return False
+
+    def is_participant(self, actor):
+        for user, response in self.get_responses().items():
+            if int(user) == int(actor.pk):
+                return True
+        return False
+
+    def add_response(self, actor, new_response):
+        responses = self.get_responses()
+        for user, response in responses.items():
+            if int(user) == int(actor.pk):
+                responses[user] = new_response
+        self.responses = json.dumps(responses)
+
+    def display_fields(self):
+        """Gets condition fields in form dict format, for displaying in the condition component."""
+        return [
+            # configuration data
+            {"field_name": "minimum_duration", "field_value": self.duration_display(), "hidden": False},
+            {"field_name": "time_remaining", "field_value": self.time_remaining_display(), "hidden": False},
+            {"field_name": "responses", "field_value": self.get_responses(), "hidden": False},
+            {"field_name": "response_options", "field_value": self.response_choices, "hidden": False},
+            {"field_name": "can_be_resolved", "field_value": self.ready_to_resolve(), "hidden": False},
+            {"field_name": "current_result", "field_value": self.current_result(), "hidden": False}
+        ]
+
+    def display_status(self):
+        """Gets 'plain English' display of status."""
+        consensus_type = "strict" if self.is_strict else "loose"
+        if self.resolved:
+            return f"The discussion has ended with result {self.condition_status} under {consensus_type} consensus"
+        return f"The discussion is ongoing with {self.time_remaining_display()}. If the discussion ended now, " + \
+               f"the result would be: {self.current_result()}"
+
+    def description_for_passing_condition(self, fill_dict=None):
+        """Gets plain English description of what must be done to pass the condition."""
+        return utils.description_for_passing_consensus_condition(self, fill_dict)
+
+    @classmethod
+    def configurable_fields(cls):
+        """Gets fields on condition which may be configured by user."""
+        return {
+            "is_strict": {
+                "display": "Use strict consensus mode? (Defaults to loose.)", "can_depend": False,
+                **cls.get_form_dict_for_field(cls._meta.get_field("is_strict"))
+            },
+            "minimum_duration": {
+                "display": "What is the minimum amount of time for discussion?", "can_depend": False,
+                **cls.get_form_dict_for_field(cls._meta.get_field("minimum_duration"))
+            },
+            "participant_roles": {
+                "display": "Roles who can participate in the discussion", "type": "RoleListField",
+                "can_depend": True, "required": False, "value": None, "field_name": "participant_roles",
+                "full_name": Changes().Conditionals.RespondConsensus
+            },
+            "participant_actors": {
+                "display": "People who can participate in the discussion", "type": "ActorListField",
+                "can_depend": True, "required": False, "value": None, "field_name": "participant_actors",
+                "full_name": Changes().Conditionals.RespondConsensus
+            },
+            "resolver_roles": {
+                "display": "Roles who can end discussion", "type": "RoleListField",
+                "can_depend": True, "required": False, "value": None, "field_name": "resolver_roles",
+                "full_name": Changes().Conditionals.ResolveConsensus
+            },
+            "resolver_actors": {
+                "display": "People who can end discussion", "type": "ActorListField", "can_depend": True,
+                "required": False, "value": None, "field_name": "resolver_actors",
+                "full_name": Changes().Conditionals.ResolveConsensus
+            }
+        }
+
+
 # Set up signals so that when a condition is updated, the action it's linked to is retried.
 
 @receiver(retry_action_signal)
@@ -402,5 +566,5 @@ def retry_action(sender, instance, created, **kwargs):
         client.Action.retake_action(action=action)
 
 
-for conditionModel in [ApprovalCondition, VoteCondition]:
+for conditionModel in [ApprovalCondition, VoteCondition, ConsensusCondition]:
     post_save.connect(retry_action, sender=conditionModel)

@@ -15,7 +15,7 @@ from django.core.exceptions import ValidationError
 from concord.actions.models import Action, TemplateModel
 from concord.actions.utils import Changes, Client, get_all_state_changes
 from concord.permission_resources.models import PermissionsItem
-from concord.conditionals.models import ApprovalCondition
+from concord.conditionals.models import ApprovalCondition, ConsensusCondition
 from concord.resources.models import Resource, Item
 from concord.actions.text_utils import condition_template_to_text
 from concord.communities.state_changes import AddLeadershipConditionStateChange
@@ -45,7 +45,8 @@ class DataTestCase(TestCase):
         self.users.jj = User.objects.create(username="julieertz")
         self.users.sully = User.objects.create(username="andisullivan")
         self.users.aubrey = User.objects.create(username="aubreybledsoe")
-        self.users.hao = User.objects.create(username="heatheroreilly")
+        self.users.lindsey = User.objects.create(username="lindseyhoran")
+        self.users.midge = User.objects.create(username="midgepurce")
 
     def display_last_actions(self, number=10):
         """Helper method which shows the last N actions to be created, useful for debugging."""
@@ -1404,8 +1405,8 @@ class ResolutionFieldTest(DataTestCase):
         self.client.Community.change_owner_of_target(new_owner=self.instance)  # Make community self-owned
         self.client.update_target_on_all(target=self.instance)  # make instance the default target for Pinoe
 
-        # Make separate clients for Hao, Crystal, JJ
-        self.haoClient = Client(actor=self.users.hao, target=self.instance)          # non-member
+        # Make separate clients for Midge, Crystal, JJ
+        self.midgeClient = Client(actor=self.users.midge, target=self.instance)      # non-member
         self.roseClient = Client(actor=self.users.rose, target=self.instance)        # member
         self.jjClient = Client(actor=self.users.jj, target=self.instance)            # governing
         self.crystalClient = Client(actor=self.users.crystal, target=self.instance)  # roletest
@@ -1413,7 +1414,7 @@ class ResolutionFieldTest(DataTestCase):
         # Create request objects
         Request = namedtuple('Request', 'user')
         self.request = Request(user=self.users.pinoe)
-        self.haoRequest = Request(user=self.users.hao)
+        self.midgeRequest = Request(user=self.users.midge)
         self.roseRequest = Request(user=self.users.rose)
         self.jjRequest = Request(user=self.users.jj)
         self.crystalRequest = Request(user=self.users.crystal)
@@ -1450,7 +1451,7 @@ class ResolutionFieldTest(DataTestCase):
             permission_type=Changes().Communities.ChangeName)
 
         # Non-member user changes name
-        action, result = self.haoClient.Community.change_name(new_name="Miscellaneous Badasses")
+        action, result = self.midgeClient.Community.change_name(new_name="Miscellaneous Badasses")
         self.assertEquals(action.status, "rejected")
 
         # Inspect action's resolution field
@@ -1532,9 +1533,9 @@ class ResolutionFieldTest(DataTestCase):
         # requirest foundational or governing authority to change.  So only Pinoe
         # can approve.)
 
-        # HAO tries to change the name and fails because she is not a member.  The
+        # Midge tries to change the name and fails because she is not a member.  The
         # condition never gets triggered.
-        action, result = self.haoClient.Community.change_name(new_name="Let's go North Carolina!")
+        action, result = self.midgeClient.Community.change_name(new_name="Let's go North Carolina!")
         self.assertEquals(action.status, "rejected")
         self.assertTrue(action.resolution.is_resolved)
         self.assertFalse(action.resolution.is_approved)
@@ -2120,3 +2121,262 @@ class StateChangeTest(DataTestCase):
                 # check they have same value for required
                 parameter_required = True if parameter.default == inspect._empty else False
                 self.assertEquals(parameter_required, input_field.required, msg=f"check {state_change.__name__} {parameter}")
+
+
+class ConsensusConditionTest(DataTestCase):
+
+    def setUp(self):
+
+        self.client = Client(actor=self.users.pinoe)
+
+        # Create a community with roles
+        self.instance = self.client.Community.create_community(name="USWNT")
+        self.client.update_target_on_all(self.instance)
+        self.client.Community.add_role(role_name="midfielders")
+        self.client.Community.add_role(role_name="forwards")
+        self.client.Community.add_members([self.users.lindsey.pk, self.users.midge.pk, self.users.jj.pk,
+            self.users.rose.pk, self.users.christen.pk])
+        self.client.Community.add_people_to_role(
+            role_name="midfielders", people_to_add=[self.users.lindsey.pk, self.users.jj.pk, self.users.rose.pk])
+        self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.midge.pk, self.users.rose.pk])
+
+        # Create permission and condition
+        action, self.permission = self.client.PermissionResource.add_permission(
+            permission_type=Changes().Communities.ChangeName, permission_roles=["forwards"])
+        self.client.PermissionResource.set_target(self.permission)
+        self.permission_data = [{"permission_type": Changes().Conditionals.RespondConsensus,
+                            "permission_roles": ["midfielders", "forwards"] },
+                           {"permission_type": Changes().Conditionals.ResolveConsensus,
+                            "permission_roles": ["midfielders"]}]
+
+    def test_initialize_consensus_condition(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data, condition_data=None)
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+
+        self.assertDictEqual(self.condition_item.get_responses(),
+                          {"8": "no response", "2": "no response", "11": "no response", "12": "no response"})
+        self.assertFalse(self.condition_item.ready_to_resolve())  # two days (default) have not passed
+
+    def test_consensus_condition_timing(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 332})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+
+        self.assertEquals(self.condition_item.duration_display(), "1 week, 6 days and 20 hours")
+        self.assertEquals(int(self.condition_item.time_until_duration_passed()), 331)
+        self.assertFalse(self.condition_item.ready_to_resolve())
+
+    def test_loose_consensus_accept(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+
+        self.assertTrue(self.condition_item.ready_to_resolve())  # can be resolved right away since duration is 0
+        self.assertEquals(self.condition_item.current_result(), "rejected")  # no support yet
+
+        # users respond, but not all users
+        self.client.update_target_on_all(self.condition_item)
+        self.client.update_actor_on_all(self.users.rose)
+        self.client.ConsensusCondition.respond(response="support")
+        self.client.update_actor_on_all(self.users.midge)
+        self.client.ConsensusCondition.respond(response="stand aside")
+        self.client.update_actor_on_all(self.users.lindsey)
+        self.client.ConsensusCondition.respond(response="support with reservations")
+
+        self.assertDictEqual(self.condition_item.get_responses(),
+                          {"8": "no response", "2": "support", "11": "support with reservations", "12": "stand aside"})
+        self.assertEquals(self.condition_item.current_result(), "approved")  # still no blocks
+
+        self.assertEquals(self.condition_item.condition_status(), "waiting")
+        self.client.ConsensusCondition.resolve()
+        self.assertEquals(self.condition_item.condition_status(), "approved")
+
+    def test_loose_consensus_reject(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+
+        # users respond, some block
+        self.client.update_target_on_all(self.condition_item)
+        self.client.update_actor_on_all(self.users.rose)
+        self.client.ConsensusCondition.respond(response="block")
+        self.client.update_actor_on_all(self.users.midge)
+        self.client.ConsensusCondition.respond(response="stand aside")
+        self.client.update_actor_on_all(self.users.lindsey)
+        self.client.ConsensusCondition.respond(response="support with reservations")
+        self.assertEquals(self.condition_item.current_result(), "rejected")  # still no blocks
+
+        self.assertEquals(self.condition_item.condition_status(), "waiting")
+        self.client.ConsensusCondition.resolve()
+        self.assertEquals(self.condition_item.condition_status(), "rejected")
+
+    def test_strict_consensus_accept(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0, "is_strict": True})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.assertTrue(self.condition_item.is_strict)
+
+        # update some but not all users
+        self.client.update_target_on_all(self.condition_item)
+        self.client.update_actor_on_all(self.users.rose)
+        self.client.ConsensusCondition.respond(response="support")
+        self.client.update_actor_on_all(self.users.midge)
+        self.client.ConsensusCondition.respond(response="stand aside")
+        self.assertEquals(self.condition_item.current_result(), "rejected")  # missing participants = reject in strict mode
+
+        # update the rest
+        self.client.update_actor_on_all(self.users.lindsey)
+        self.client.ConsensusCondition.respond(response="support with reservations")
+        self.client.update_actor_on_all(self.users.jj)
+        self.client.ConsensusCondition.respond(response="support")
+
+        self.assertEquals(self.condition_item.condition_status(), "waiting")
+        self.client.ConsensusCondition.resolve()
+        self.assertEquals(self.condition_item.condition_status(), "approved")
+
+    def test_strict_consensus_reject_with_blocks(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0, "is_strict": True})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.assertTrue(self.condition_item.is_strict)
+
+        # update some but not all users
+        self.client.update_target_on_all(self.condition_item)
+        self.client.update_actor_on_all(self.users.rose)
+        self.client.ConsensusCondition.respond(response="support")
+        self.client.update_actor_on_all(self.users.midge)
+        self.client.ConsensusCondition.respond(response="stand aside")
+        self.client.update_actor_on_all(self.users.lindsey)
+        self.client.ConsensusCondition.respond(response="support with reservations")
+        self.client.update_actor_on_all(self.users.jj)
+        self.client.ConsensusCondition.respond(response="block")
+
+        self.assertEquals(self.condition_item.condition_status(), "waiting")
+        self.client.ConsensusCondition.resolve()
+        self.assertEquals(self.condition_item.condition_status(), "rejected")
+
+    def test_strict_consensus_reject_with_missing_participants(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0, "is_strict": True})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.assertTrue(self.condition_item.is_strict)
+
+        # update some but not all users
+        self.client.update_target_on_all(self.condition_item)
+        self.client.update_actor_on_all(self.users.rose)
+        self.client.ConsensusCondition.respond(response="support")
+        self.client.update_actor_on_all(self.users.jj)
+        self.client.ConsensusCondition.respond(response="stand aside")
+
+        self.assertEquals(self.condition_item.condition_status(), "waiting")
+        action, response = self.client.ConsensusCondition.resolve()
+        self.assertEquals(self.condition_item.condition_status(), "rejected")
+
+    def test_consensus_condition_permissions(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.client.update_target_on_all(self.condition_item)
+
+        # test respond permissions
+        self.client.update_actor_on_all(self.users.midge)  # forward can respond
+        action, result = self.client.ConsensusCondition.respond(response="support")
+        self.assertEquals(action.status, "implemented")
+        self.client.update_actor_on_all(self.users.jj)     # mid can respond
+        action, result = self.client.ConsensusCondition.respond(response="stand aside")
+        self.assertEquals(action.status, "implemented")
+        self.client.update_actor_on_all(self.users.christen)     # person without role cannot respond
+        action, result = self.client.ConsensusCondition.respond(response="stand aside")
+        self.assertEquals(action.status, "rejected")
+
+        # test resolve permissions
+        action, result = self.client.ConsensusCondition.resolve()   # person without role cannot resolve
+        self.assertEquals(action.status, "rejected")
+        self.client.update_actor_on_all(self.users.midge)  # forward cannot resolve
+        action, result = self.client.ConsensusCondition.resolve()
+        self.assertEquals(action.status, "rejected")
+        self.client.update_actor_on_all(self.users.jj)     # mid can resolve
+        action, result = self.client.ConsensusCondition.resolve()
+        self.assertEquals(action.status, "implemented")
+
+    def test_cant_mispell_response(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+
+        # update some but not all users
+        self.client.update_target_on_all(self.condition_item)
+        self.client.update_actor_on_all(self.users.rose)
+        action, result = self.client.ConsensusCondition.respond(response="support w reservation")
+        self.assertEquals(action.error_message,
+            "Response must be one of support, support with reservations, stand aside, block, no response, not support w reservation")
+        self.assertDictEqual(self.condition_item.get_responses(),
+                          {"8": "no response", "2": "no response", "11": "no response", "12": "no response"})
+
+    def test_can_override_previous_response(self):
+
+        # add & trigger condition
+        action, result = self.client.PermissionResource.add_condition_to_permission(
+            condition_type="consensuscondition", permission_data=self.permission_data,
+            condition_data={"minimum_duration": 0})
+        self.client.update_actor_on_all(self.users.midge)
+        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.client.update_target_on_all(self.condition_item)
+
+        # midge responds
+        self.client.update_actor_on_all(self.users.midge)
+        self.client.ConsensusCondition.respond(response="stand aside")
+        self.assertDictEqual(self.condition_item.get_responses(),
+                          {"8": "no response", "2": "no response", "11": "no response", "12": "stand aside"})
+
+        # midge responds again
+        self.client.update_actor_on_all(self.users.midge)
+        self.client.ConsensusCondition.respond(response="support")
+        self.assertDictEqual(self.condition_item.get_responses(),
+                          {"8": "no response", "2": "no response", "11": "no response", "12": "support"})

@@ -150,6 +150,12 @@ class CommunityClient(BaseClient):
         """Returns True if actor has specific role in community. otherwise False."""
         return self.target.roles.has_specific_role(role, actor_pk)
 
+    def get_users_with_ownership_privileges(self):
+        ...
+
+    def get_users_with_governorship_privileges(self):
+        ...
+
     # State changes
 
     def add_members(self, member_pk_list: list) -> Tuple[int, Any]:

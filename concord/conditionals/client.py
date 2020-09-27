@@ -52,6 +52,36 @@ class VoteConditionClient(BaseClient):
         return self.create_and_take_action(change)
 
 
+class ConsensusConditionClient(BaseClient):
+    """The target of the ConsensusConditionClient must always be a ConsensusCondition instance."""
+
+    # Read only
+
+    def resolveable(self) -> tuple:
+        """Returns True if condition is ready to resolve, or False if not. If not, returns time until it
+        will be ready to resolve."""
+        if self.target.ready_to_resolve():
+            return True, None
+        else:
+            return False, self.target.time_until_duration_passed()
+
+    def get_current_results(self) -> Dict:
+        """Gets current results of vote condition."""
+        return self.target.get_responses()
+
+    # State changes
+
+    def respond(self, *, response: str) -> Tuple[int, Any]:
+        """Add response to consensus condition."""
+        change = sc.RespondConsensusStateChange(response=response)
+        return self.create_and_take_action(change)
+
+    def resolve(self) -> Tuple[int, Any]:
+        """Resolve consensus condition."""
+        change = sc.ResolveConsensusStateChange()
+        return self.create_and_take_action(change)
+
+
 class ConditionalClient(BaseClient):
     """ConditionalClient is largely used as an easy way to access all the specific conditionclients at once, but
     can also has some helper methods and one state change - add_condition_to_action."""
@@ -71,6 +101,17 @@ class ConditionalClient(BaseClient):
             raise ValueError(f"No client '{condition_type}', must be one of: {', '.join(Client().client_names)}")
         client.set_target(target=self.get_condition_item(condition_pk=pk, condition_type=condition_type.lower()))
         return client
+
+    def is_valid_condition_type(self, condition_type, lower=True):
+        condition_models = get_all_conditions()
+        for model_type in condition_models:
+            if lower:
+                if model_type.__name__.lower() == condition_type.lower():
+                    return True
+            else:
+                if model_type.__name__ == condition_type:
+                    return True
+        return False
 
     def get_possible_conditions(self):
         """Get all possible conditions."""
@@ -153,11 +194,11 @@ class ConditionalClient(BaseClient):
     # State changes
 
     def set_condition_on_action(self, condition_type, condition_data=None, permission_pk=None,
-                                community_pk=None, leadership_type=None):
+                                community_pk=None, leadership_type=None, permission_data=None):
         """This is almost always created as a mock to be used in a condition TemplateField. Typically when
         creating the mock we want to supply condition_type and condition_data but leave the rest to be
         supplied later. When the action is actually run, the target should *always* be an action!"""
         change = sc.SetConditionOnActionStateChange(
             condition_type=condition_type, condition_data=condition_data, permission_pk=permission_pk,
-            community_pk=community_pk, leadership_type=leadership_type)
+            community_pk=community_pk, leadership_type=leadership_type, permission_data=permission_data)
         return self.create_and_take_action(change)

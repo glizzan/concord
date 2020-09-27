@@ -170,10 +170,10 @@ def condition_template_to_text(condition_action, permissions_actions):
 
         change_type = get_state_change_object(perm_action.change.change_type)
 
-        if change_type.action_helps_pass_condition:
-            phrases.append(roles_and_actors_string + " " + change_type.verb_name)
-        else:
+        if hasattr(change_type, "rejects_condition") and change_type.rejects_condition:
             phrases.append(roles_and_actors_string + " does not " + change_type.verb_name)
+        else:
+            phrases.append(roles_and_actors_string + " " + change_type.verb_name)
 
     text = "on the condition that "
 

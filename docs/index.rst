@@ -6,7 +6,7 @@
 About Concord
 &&&&&&&&&&&&&
 
-Concord is a Python (Django) library that can be used by developers to build sites with comprehensive, 
+Concord is a Python (Django) library that can be used by developers to build sites with comprehensive,
 customizable, dynamic, and most importantly *user-determined* community governance.  It can be added to existing
 websites with Django backends or used to create a new site from scratch.
 
@@ -19,7 +19,7 @@ At its heart, governance revolves around a single question: who gets to do what?
 
 There’s more to governance than simply laying out these rules: there’s wrangling over definitions, questions of fair and unfair enforcement, new rules to be made and old rules to be changed, as time and circumstances and beliefs about right and wrong shift. But “who gets to do what” describes a lot of the most important questions we ask about governance.
 
-We learn about governance from the society we’re born into, and every culture has different models of governance it emphasizes.  In the United States, the two most common models of governance are representative democracy and dictatorship.  Although other governance models exist (for example, in jury selection, or in the oligarchical structure of many non-profits), representative democracy and dictatorship are most commonly found in our institutions and our culture.  It may seem odd to claim we can commonly find dictatorships in the United States, but most for-profit corporations in the United States are run as dictatorships, and many informal projects run by their founders use a structure that the open source community calls “benevolent dictator for life”. 
+We learn about governance from the society we’re born into, and every culture has different models of governance it emphasizes.  In the United States, the two most common models of governance are representative democracy and dictatorship.  Although other governance models exist (for example, in jury selection, or in the oligarchical structure of many non-profits), representative democracy and dictatorship are most commonly found in our institutions and our culture.  It may seem odd to claim we can commonly find dictatorships in the United States, but most for-profit corporations in the United States are run as dictatorships, and many informal projects run by their founders use a structure that the open source community calls “benevolent dictator for life”.
 
 Given the dictator-like governance structure of most corporations, it’s no surprise that most digital platforms - designed and run by corporations - implement only dictatorships.  Sure, a Facebook group or a subreddit may allow the owner to delegate many rights to individual users, but there is always one person who has ultimate control.  While this structure reflects the values of the corporate platform, it does not reflect the values of American society, as they offer no ability to implement representative democracy.  Nor does it give users access to the vast and fascinating variety of governance structures that have been tried and tested, or even just imagined, across the history of the world.
 
@@ -71,12 +71,12 @@ We have designed Concord so that it is relatively easy to plug in new condition 
 
 On our roadmap is the incorporation of ‘filter’ conditions.  As opposed to decision-making conditions, which require interactions from the community to resolve, ‘filter’ conditions would automatically apply existing information to determine whether the action can proceed, eg “this action may be taken if the user was created over one week ago” or “this action may be taken if the user has taken no other similar actions in the last twenty-four hours”.  As with decision-making conditions, they would be configured by the community and could be adjusted over time.
 
-Learn more about “:ref:`how condition models work<condition-models>`”.
+Learn more about “:ref:`how condition models work<condition-models>`” or learn :doc:`how to add a condition<how_to_add_condition>`.
 
 Templates
 ---------
 
-The system described provides the building blocks for a large variety of governance systems. But it may be difficult for new users to build such systems from scratch, and even experienced governance-framers can benefit from access to the innovations of others.  As such, we have a template system which allows users to apply pre-defined sets of permissions to their communities.  
+The system described provides the building blocks for a large variety of governance systems. But it may be difficult for new users to build such systems from scratch, and even experienced governance-framers can benefit from access to the innovations of others.  As such, we have a template system which allows users to apply pre-defined sets of permissions to their communities.
 
 Templates have a variety of “scopes”, which allow users to narrow their search within the template library. A template with “community” scope will likely make broad changes, for example by creating a role ‘voting members’ and making them owners, with a condition of a three-day-long majority vote.  A template with a more narrow “membership” scope will only set permissions related to membership, for example by specifying that anyone may request to be a member of the community but they must get two approvals from role “membership admins”.  Each template has a “plain English” name and description, along with a detailed list of the actual changes a template will make when you apply it.
 
@@ -92,7 +92,7 @@ Using and Extending Concord
 
 Concord is build to be resuable and extensible. Currently, the three main ways to extend Concord are by adding conditions, adding permissioned models, and adding templates.  These can be done as part of building a new site, or can be contributed back to the Concord project core.
 
-When you add a new condition, it will be added to the list of conditions which may be set on permissions or on the "owner" and "governor" roles.  Users will be able to configure and set it, and when an action triggers it a link to it will be created in the action history view.  Adding a new condition requires: defining the condition model and the required methods (such as how the status of the condition is determined); creating change objects corresponding to actions taken on that condition, such as AddVote or Approve; creating a simple client to expose the change objects; and creating a default template for interacting with the condition on the front end.  Depending on the complexity of the condition and the experience of the developer creating it, we estimate that adding new conditions takes a day or two of worker. We're working on a guide to how to add new conditions.
+When you add a new condition, it will be added to the list of conditions which may be set on permissions or on the "owner" and "governor" roles.  Users will be able to configure and set it, and when an action triggers it a link to it will be created in the action history view.  Adding a new condition requires: defining the condition model and the required methods (such as how the status of the condition is determined); creating change objects corresponding to actions taken on that condition, such as AddVote or Approve; creating a simple client to expose the change objects; and creating a default template for interacting with the condition on the front end.  Depending on the complexity of the condition and the experience of the developer creating it, we estimate that adding new conditions takes a day or two of worker. To learn more, read the guide on :doc:`how to add a condition<how_to_add_condition>`.
 
 Creating new permissioned models (also refered to as resources) is a similar process to adding conditions (after all, a condition is a type of permissioned model).  Developers will create a new Django model which inherits from PermissionedModel and define their own custom fields on it.  They must then add change objects and corresponding client methods to control when an instance's data can be changed.  It is up to the developer how to add the permissioned model as a template - the default is "create a Vue component for this Django model" but in practice the template design will be driven by the data model. To learn more, read the guide on :doc:`how to add a permissioned model/resource<how_to_add_resource>`.
 
@@ -101,7 +101,7 @@ Currently we add templates by writing a template function in template_library.py
 Tools and Frameworks Used
 -------------------------
 
-Concord currently relies heavily on two languages and two frameworks. Concord's back end logic is implemented as a Django (Python) package, and made avaialble through AJAX views, which return data as JSON for the front end to use. Developers may implement a completely custom front end, but Concord provides some default templates using the Javascript framework Vue. We are working on making the templates as modular as possible, so developers can create their own front end but re-use, for instance, the interface for interacting with permissions and conditions, or the inteface for viewing action history. 
+Concord currently relies heavily on two languages and two frameworks. Concord's back end logic is implemented as a Django (Python) package, and made avaialble through AJAX views, which return data as JSON for the front end to use. Developers may implement a completely custom front end, but Concord provides some default templates using the Javascript framework Vue. We are working on making the templates as modular as possible, so developers can create their own front end but re-use, for instance, the interface for interacting with permissions and conditions, or the inteface for viewing action history.
 
 
 .. toctree::
@@ -112,6 +112,7 @@ Concord currently relies heavily on two languages and two frameworks. Concord's 
    index
    deep_dives
    how_to_add_template
+   how_to_add_condition
    how_to_add_resource
    example_implementation
 
@@ -130,5 +131,5 @@ Concord currently relies heavily on two languages and two frameworks. Concord's 
    :hidden:
    :maxdepth: 2
    :caption: Search Utilities
-   
+
    genindex

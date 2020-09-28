@@ -7,6 +7,7 @@ from django.db.models import Model
 from django.contrib.auth.models import User
 
 from concord.actions.client import BaseClient
+from concord.actions.utils import Changes
 from concord.actions.text_utils import community_basic_info_to_text, community_governance_info_to_text
 from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
@@ -89,6 +90,10 @@ class CommunityClient(BaseClient):
         roles = RoleHandler()
         roles.initialize_with_creator(creator=self.actor.pk)
         community = self.community_model.objects.create(name=name, roles=roles)
+        from concord.permission_resources.client import PermissionResourceClient
+        client = PermissionResourceClient(actor=self.actor, target=community)
+        client.add_permission(permission_type=Changes().Resources.AddComment,  # type: ignore[attr-defined]
+                              permission_roles=["members"], permission_configuration={"target_type": "action"})
         return community
 
     # Read methods which require target to be set

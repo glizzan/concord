@@ -60,13 +60,9 @@ class Action(models.Model):
                 raise DatabaseError("Must set target and actor before sending or implementing an Action")
         return super().save(*args, **kwargs)  # Call the "real" save() method.
 
-    def get_description(self):
+    def get_description(self, with_actor=True, with_target=True):
         """Gets description of the action by reference to `change_types` set via change field, including the target."""
-        return action_to_text(self)
-
-    def get_targetless_description(self):
-        """Gets description of the action by reference to `change_types` set via change field, without the target."""
-        return action_to_text(self, with_target=False)
+        return action_to_text(self, with_actor, with_target)
 
     # Steps of action execution
 

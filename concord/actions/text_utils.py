@@ -248,7 +248,7 @@ def action_status_to_text(resolution):
     return "action did not meet any permission criteria"
 
 
-def action_to_text(action, with_target=True):
+def action_to_text(action, with_actor=True, with_target=True):
     """Gets a text description of an action."""
 
     if not with_target:
@@ -258,10 +258,12 @@ def action_to_text(action, with_target=True):
     else:
         target_string = f" {action.change.get_preposition()} {action.target.get_name()}"
 
+    actor_string = action.actor.username if with_actor else ""
+
     if action.status == "implemented":
-        return f"{action.actor.username} {action.change.description_past_tense()}" + target_string
+        return f"{actor_string} {action.change.description_past_tense()}" + target_string
     else:
-        return f"{action.actor.username} asked to {action.change.description_present_tense()}" + target_string
+        return f"{actor_string} asked to {action.change.description_present_tense()}" + target_string
 
 
 def supplied_fields_to_text(supplied_field_data, supplied_field_options):

@@ -42,6 +42,9 @@ class CommentCatcher(PermissionedModel):
         """Get name of object."""
         return f"Comment catcher for action {self.action}"
 
+    def get_nested_objects(self):
+        return [self.get_owner()]
+
 
 class Resource(PermissionedModel):
     """Simple resource model.

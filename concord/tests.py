@@ -810,7 +810,7 @@ class BasicCommunityTest(DataTestCase):
         # can't remove that role
         action, result = self.client.Community.remove_role(role_name="forwards")
         self.assertEquals(action.error_message,
-            "Role cannot be deleted until it is removed from permissions: 1")
+            f"Role cannot be deleted until it is removed from permissions: {permission.pk}")
 
         # remove the permission
         self.client.PermissionResource.set_target(target=permission)
@@ -1000,7 +1000,7 @@ class PermissionResourceUtilsTest(DataTestCase):
             permission_type=Changes().Permissions.AddRoleToPermission,
             permission_actors=[self.users.pinoe.pk]
         )
-        self.assertEquals(len(PermissionsItem.objects.all()), 2)
+        self.assertEquals(len(PermissionsItem.objects.all()), 3)
 
         # call delete_permissions_on_target
         delete_permissions_on_target(community)

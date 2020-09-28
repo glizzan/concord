@@ -7,6 +7,7 @@ from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from concord.actions.state_changes import BaseStateChange, InputField
 from concord.resources.models import Resource, Item, Comment, SimpleList
 from concord.permission_resources.utils import delete_permissions_on_target
+from concord.actions.utils import get_all_permissioned_models
 
 
 logger = logging.getLogger(__name__)
@@ -22,10 +23,11 @@ class AddCommentStateChange(BaseStateChange):
     description = "Add comment"
     section = "Comment"
     input_fields = [InputField(name="text", type="CharField", required=True, validate=True),
-                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
+                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False),
+                    InputField(name="target_type", type="CharField", required=False, validate=False)]
     input_target = Comment
 
-    def __init__(self, text, original_creator_only=False):
+    def __init__(self, text, original_creator_only=False, target_type=None):
         self.text = text
 
     def description_present_tense(self):
@@ -38,7 +40,28 @@ class AddCommentStateChange(BaseStateChange):
     def get_configurable_fields(cls):
         return {"original_creator_only":
                 {"display": "Only allow the creator of the target of this comment to edit comment",
-                 "type": "BooleanField"}}
+                 "type": "BooleanField"},
+                "target_type":
+                {"display": "Limit the ability to add comments to a specific type of target",
+                 "type": "CharField"}}
+
+    @classmethod
+    def get_configured_field_text(cls, conf):
+        target_type = conf["target_type"] if "target_type" in conf and conf["target_type"] else None
+        creator_only = conf["original_creator_only"] if "original_creator_only" in conf and  \
+            conf['original_creator_only'] else None
+
+        if target_type and creator_only:
+            return f", but only if the target is of type {conf['target_type']} and the user is " + \
+                   "the creator of the object commented on"
+
+        if target_type:
+            return f", but only if the target is of type {conf['target_type']}"
+
+        if creator_only:
+            return ", but only if the user is the creator of the object commented on"
+
+        return ""
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -49,6 +72,10 @@ class AddCommentStateChange(BaseStateChange):
             if configuration["original_creator_only"] not in [True, False, "True", "False", "true", "false"]:
                 e = f"original_creator_only must be set to True or False, not {configuration['original_creator_only']}"
                 return False, e
+        if "target_type" in configuration and configuration["target_type"]:
+            allowable_types = [mclass.__name__.lower() for mclass in get_all_permissioned_models()] + ["action"]
+            if configuration["target_type"] not in allowable_types:
+                return False, f'target_type must be a permissioned model or action, not {configuration["target_type"]}'
         return True, ""
 
     def check_configuration(self, action, permission):
@@ -62,6 +89,11 @@ class AddCommentStateChange(BaseStateChange):
             if hasattr(action.target, "creator"):
                 if action.actor.pk != action.target.creator:
                     return False, error_message
+        if "target_type" in configuration and configuration["target_type"]:
+            target_type = configuration["target_type"]
+            target_class = action.target.__class__.__name__.lower()
+            if target_class != target_type and not (target_class == "commentcatcher" and target_type == "action"):
+                return False, f'target type {configuration["target_type"]} does not match {target_class}'
         return True, None
 
     def implement(self, actor, target):

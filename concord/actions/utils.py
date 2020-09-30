@@ -401,6 +401,16 @@ def replace_fields(*, action_to_change, mock_action, context):
                     setattr(change_obj_on_action_to_change, change_key, new_value)
                     logger.debug(f"Replaced change obj attr {change_key} on {action_to_change} with {new_value}")
 
+                # if change obj parameter is condition_data check the elements to see if they need to be replaced
+                if change_key == "condition_data":
+                    for dict_key, dict_value in change_value.items():
+                        new_value = replacer(dict_key, dict_value, context)
+                        if new_value is not ...:
+                            change_obj_on_action_to_change = getattr(action_to_change, key)
+                            condition_data = getattr(change_obj_on_action_to_change, "condition_data")
+                            condition_data[dict_key] = new_value
+                            logger.debug(f"Replaced {dict_key} with {new_value} in cond_data on {action_to_change}")
+
                 # if change obj parameter is permission_data check the elements to see if *they* need to be replaced
                 if change_key == "permission_data":
 

@@ -279,9 +279,15 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
         action_3.target = "{{context.action.target}}"
 
         # Step 4: add vote condition to ownership role
-        permission_data = [{"permission_type": Changes().Conditionals.AddVote, "permission_roles": ["voting members"]}]
+        permission_data = [{"permission_type": Changes().Conditionals.AddVote,
+                            "permission_roles": ["voting members"]}]
+        condition_data = {"allow_abstain": "{{supplied_fields.allow_abstain}}",
+                          "require_majority": "{{supplied_fields.require_majority}}",
+                          "publicize_votes": "{{supplied_fields.publicize_votes}}",
+                          "voting_period": "{{supplied_fields.voting_period}}"}
         action_4 = client.Community.add_leadership_condition(
-            condition_type="votecondition", leadership_type="owner", permission_data=permission_data)
+            condition_type="votecondition", leadership_type="owner", condition_data=condition_data,
+            permission_data=permission_data)
         action_4.target = "{{context.action.target}}"
 
         # Step 5: add anyone can join permission

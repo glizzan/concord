@@ -448,7 +448,7 @@ class ApplyTemplateStateChange(BaseStateChange):
         if "original_creator_only" in configuration and configuration['original_creator_only']:
             error_message = "original_creator_only is true, so the actor must have created the target of the template"
             if hasattr(action.target, "creator"):
-                if action.actor.pk != action.target.creator:
+                if action.actor.pk != action.target.creator.pk:
                     return False, error_message
         return True, None
 

@@ -145,9 +145,12 @@ def description_for_passing_consensus_condition(condition, fill_dict=None):
 
 
 def parse_duration_into_units(duration):
-    """Given a period of time in hours, parses into months, weeks, days, hours, minutes."""
+    """Given a period of time in hours, parses into months, weeks, days, hours, minutes.
+    #FIXME: use // instead of int() for clarity"""
 
-    weeks = int(int(duration) / 168)
+    duration = int(duration)
+
+    weeks = int(duration / 168)
     time_remaining = duration % 168
     days = int(int(time_remaining) / 24)
     time_remaining = int(time_remaining) % 24

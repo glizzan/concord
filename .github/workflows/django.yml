@@ -33,6 +33,6 @@ jobs:
       run: |
         cd concord
         flake8 --exclude *migrations*,tests.py,settings.py,__init__.py --max-line-length 120 --ignore E266,E401,F841,W503,W504
-    - name: Check type hints
-      run: |
-        mypy concord
+    # - name: Check type hints
+    #   run: |
+    #     mypy concord

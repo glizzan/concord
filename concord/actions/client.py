@@ -145,7 +145,15 @@ class BaseClient(object):
             if permissioned_model.__name__.lower() == model:
                 return permissioned_model.objects.get(pk=pk)
 
+    def set_default_permissions(self, created_model):
+        """Gets sidewide default permissions and sets those corresponding to the given model, using
+        actor and target."""
+        from concord.permission_resources.utils import set_default_permissions
+        set_default_permissions(self.actor, created_model)
+
     # State Change methods
+
+    # Read
 
     def get_target_data(self, fields_to_include=None):
         """Gets information about the target after passing request through permissions pipeline. Supply
@@ -154,7 +162,7 @@ class BaseClient(object):
         change = sc.ViewStateChange(fields_to_include=fields_to_include)
         return self.create_and_take_action(change)
 
-    # Writing
+    # Write
 
     def change_owner_of_target(self, new_owner) -> Tuple[int, Any]:
         """Changes the owner of the Client's target.

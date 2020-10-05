@@ -1,15 +1,9 @@
 """AppConfig for Community app."""
 
-import importlib
-
-from django.apps import AppConfig
+from concord.actions.apps import ConcordAppConfig
 
 
-class CommunitiesConfig(AppConfig):
+class CommunitiesConfig(ConcordAppConfig):
     """AppConfig for Community app."""
     name = 'concord.communities'
     verbose_name = "Communities"
-
-    def get_concord_module(self, module_name):
-        """Helper method to let utils easily access specific files."""
-        return importlib.import_module(".communities." + module_name, package="concord")

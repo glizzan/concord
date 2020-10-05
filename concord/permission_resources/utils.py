@@ -4,6 +4,7 @@ import json, logging
 from collections import OrderedDict
 
 from concord.actions.serializers import deserialize_state_change
+from concord.actions.utils import get_default_permissions
 
 
 logger = logging.getLogger(__name__)
@@ -61,3 +62,21 @@ def delete_permissions_on_target(target):
         delete_permissions_on_target(permission)
         logging.info(f"Deleting {permission}")
         permission.delete()
+
+
+def set_default_permissions(actor, instance):
+    """Given an actor, target, and model, set the default permissions associated with that model."""
+
+    from concord.permission_resources.client import PermissionResourceClient
+    client = PermissionResourceClient(actor=actor, target=instance)
+
+    if hasattr(instance, "is_community") and instance.is_community:
+        model_type = "community"
+    else:
+        model_type = instance.__class__.__name__.lower()
+
+    default_permissions = get_default_permissions()
+
+    for permission in default_permissions.get(model_type, []):
+        logger.debug(f"Adding permission with parameters {permission} to {instance}")
+        client.add_permission(**permission)

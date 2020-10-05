@@ -76,6 +76,12 @@ class BaseStateChange(object):
         """Helper method which lets us use alternative community models as targets for community actions."""
         return get_all_community_models()
 
+    def set_default_permissions(self, actor, instance):
+        """Helper method to easily set default permissions on an object, called
+        by implement when implement creates a new permissioned model."""
+        from concord.permission_resources.utils import set_default_permissions
+        return set_default_permissions(actor, instance)
+
     # Field methods
 
     @classmethod
@@ -447,9 +453,11 @@ class ApplyTemplateStateChange(BaseStateChange):
         configuration = permission.get_configuration()
         if "original_creator_only" in configuration and configuration['original_creator_only']:
             error_message = "original_creator_only is true, so the actor must have created the target of the template"
-            if hasattr(action.target, "creator"):
+            if hasattr(action.target, "creator") and action.target.creator:
                 if action.actor.pk != action.target.creator.pk:
                     return False, error_message
+            else:
+                return False, "original_creator_only is set but target does not have a creator"
         return True, None
 
     def validate(self, actor, target):

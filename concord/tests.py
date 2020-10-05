@@ -1000,7 +1000,7 @@ class PermissionResourceUtilsTest(DataTestCase):
             permission_type=Changes().Permissions.AddRoleToPermission,
             permission_actors=[self.users.pinoe.pk]
         )
-        self.assertEquals(len(PermissionsItem.objects.all()), 3)
+        self.assertEquals(len(PermissionsItem.objects.all()), 4)
 
         # call delete_permissions_on_target
         delete_permissions_on_target(community)
@@ -2380,3 +2380,33 @@ class ConsensusConditionTest(DataTestCase):
         self.client.ConsensusCondition.respond(response="support")
         self.assertDictEqual(self.condition_item.get_responses(),
                           {"8": "no response", "2": "no response", "11": "no response", "12": "support"})
+
+
+class DefaultPermissionsTest(DataTestCase):
+
+    def setUp(self):
+
+        self.client = Client(actor=self.users.pinoe)
+
+    def test_default_permissions(self):
+
+        # test community
+        self.instance = self.client.Community.create_community(name="USWNT")
+        items = self.client.PermissionResource.get_permissions_on_object(target_object=self.instance)
+        self.assertEquals(len(items), 2)
+        self.assertCountEqual([item.change_type for item in items],
+                              [Changes().Resources.AddComment, Changes().Actions.ApplyTemplate])
+        self.assertEquals([item.roles.role_list for item in items],
+                          [["members"], ["members"]])
+
+        # # test simplelist defaults
+        # self.client.update_target_on_all(self.instance)
+        # action, list_instance = self.client.List.add_list(name="Awesome Players",
+        #     configuration={"player name": {"required": True}, "team": {"required": False}},
+        #     description="Our fave players")
+        # items = self.client.PermissionResource.get_permissions_on_object(target_object=list_instance)
+        # self.assertEquals(len(items), 6)
+        # self.assertCountEqual(
+        #     [item.change_type for item in items],
+        #     [Changes().Resources.EditList, Changes().Resources.DeleteList, Changes().Resources.AddRow,
+        #      Changes().Resources.EditRow, Changes().Resources.MoveRow, Changes().Resources.DeleteRow])

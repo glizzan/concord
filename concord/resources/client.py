@@ -90,8 +90,9 @@ class ResourceClient(BaseClient):
 
     def create_resource(self, *, name: str) -> Resource:
         """Create a resource given name of resource to be created."""
-        created = Resource.objects.create(name=name, owner=self.actor.default_community)
-        return created
+        resource = Resource.objects.create(name=name, owner=self.actor.default_community)
+        self.set_default_permissions(resource)
+        return resource
 
     # Read only
 

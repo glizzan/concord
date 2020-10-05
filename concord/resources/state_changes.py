@@ -3,10 +3,9 @@
 import logging
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-
-from concord.actions.state_changes import BaseStateChange, InputField
 from concord.resources.models import Resource, Item, Comment, SimpleList
-from concord.permission_resources.utils import delete_permissions_on_target
+from concord.actions.state_changes import BaseStateChange, InputField
+
 from concord.actions.utils import get_all_permissioned_models
 
 
@@ -101,8 +100,10 @@ class AddCommentStateChange(BaseStateChange):
         comment = Comment(text=self.text, commentor=actor)
         comment.commented_object = target
         comment.owner = target.get_owner()
-
         comment.save()
+
+        self.set_default_permissions(actor, comment)
+
         return comment
 
 
@@ -289,6 +290,7 @@ class DeleteCommentStateChange(BaseStateChange):
         return "deleted comment"
 
     def implement(self, actor, target):
+        from concord.permission_resources.utils import delete_permissions_on_target
         pk = target.pk
         delete_permissions_on_target(target)
         target.delete()
@@ -355,6 +357,7 @@ class AddItemStateChange(BaseStateChange):
 
     def implement(self, actor, target):
         item = Item.objects.create(name=self.name, resource=target, owner=actor.default_community)
+        self.set_default_permissions(actor, item)
         return item
 
 
@@ -379,6 +382,7 @@ class RemoveItemStateChange(BaseStateChange):
 
     def implement(self, actor, target):
         try:
+            from concord.permission_resources.utils import delete_permissions_on_target
             delete_permissions_on_target(target)
             target.delete()
             return True
@@ -430,6 +434,7 @@ class AddListStateChange(BaseStateChange):
         simple_list = SimpleList(name=self.name, description=self.description, owner=target.get_owner(), creator=actor)
         simple_list.set_row_configuration(self.configuration)
         simple_list.save()
+        self.set_default_permissions(actor, simple_list)
         return simple_list
 
 

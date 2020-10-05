@@ -179,6 +179,22 @@ def get_state_changes_settable_on_model(model_class):
     return matching_state_changes
 
 
+def get_default_permissions():
+    """Get default permissions for permissioned models."""
+    default_permissions = {}
+    for app in get_all_apps():
+        default_permissions_module = app.get_concord_module("default_permissions")
+        members = inspect.getmembers(default_permissions_module)
+        if members:
+            for name, value in members:
+                if name == "DEFAULT_PERMISSIONS":
+                    for model_type, permissions in value.items():
+                        if model_type not in default_permissions:
+                            default_permissions[model_type] = []
+                        default_permissions[model_type] += permissions
+    return default_permissions
+
+
 class Attributes(object):
     """Hack to allow nested attributes on Changes."""
     ...

@@ -91,15 +91,10 @@ class Action(models.Model):
             self.resolution.refresh_pipeline_status()
             has_permission(action=self)
 
-            if self.status == "waiting" and len(self.resolution.uncreated_conditions()) > 0:
-
+            if self.status == "waiting":
                 from concord.actions.utils import Client
                 client = Client()
-                for source_id in self.resolution.uncreated_conditions():
-                    condition = client.Conditional.trigger_condition_creation_from_source_id(
-                        action=self, source_id=source_id)
-                    logger.info(f"Created condition {condition.pk} on action {self.pk} with source_id {source_id}")
-                    self.resolution.condition_created(source_id)
+                client.Conditional.create_conditions_for_action(action=self)
 
         if self.status == "approved":
             result = self.implement_action()

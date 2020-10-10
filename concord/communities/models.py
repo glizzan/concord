@@ -7,7 +7,6 @@ from django.db.models.signals import post_save
 from concord.actions.models import PermissionedModel
 from concord.communities.customfields import RoleHandler, RoleField
 from concord.actions.customfields import TemplateField, Template
-from concord.conditionals.utils import generate_condition_form_from_action_list
 
 
 ################################
@@ -22,8 +21,10 @@ class BaseCommunityModel(PermissionedModel):
     name = models.CharField(max_length=200)
     roles = RoleField(default=RoleHandler)
 
-    owner_condition = TemplateField(default=Template, system=True)
-    governor_condition = TemplateField(default=Template, system=True)
+    owner_condition = models.ForeignKey('conditionals.ConditionManager', on_delete=models.SET_NULL, null=True,
+                                        blank=True, related_name="%(app_label)s_%(class)s_owner_conditioned")
+    governor_condition = models.ForeignKey('conditionals.ConditionManager', on_delete=models.SET_NULL, null=True,
+                                           blank=True, related_name="%(app_label)s_%(class)s_governor_conditioned")
 
     class Meta:
         abstract = True
@@ -47,9 +48,9 @@ class BaseCommunityModel(PermissionedModel):
         """Returns True if community has a condition set on owner or on governor, depending on the leadership_type
         passed in."""
         if leadership_type == "owner":
-            return self.has_owner_condition()
+            return bool(self.owner_condition)
         elif leadership_type == "governor":
-            return self.has_governor_condition()
+            return bool(self.governor_condition)
 
     def get_condition(self, leadership_type):
         """Gets the condition set on the leadership type specified."""
@@ -58,30 +59,11 @@ class BaseCommunityModel(PermissionedModel):
         elif leadership_type == "governor":
             return self.governor_condition
 
-    def has_owner_condition(self):
-        """Returns True if community has an owner condition, False if not."""
-        if self.owner_condition and self.owner_condition.has_template():
-            return True
-        return False
-
-    def has_governor_condition(self):
-        """Returns True if community has a governor condition, False if not."""
-        if self.governor_condition and self.governor_condition.has_template():
-            return True
-        return False
-
-    def get_condition_data(self, leadership_type, info="all"):
-        """Uses the change data saved in the mock actions to instantiate the condition and permissions
-        that will be created and get their info, to be used in forms"""
-
-        if leadership_type == "owner" and self.has_owner_condition():
-            action_list = self.owner_condition.action_list
-        elif leadership_type == "governor" and self.has_governor_condition():
-            action_list = self.governor_condition.action_list
-        else:
-            return
-
-        return generate_condition_form_from_action_list(action_list, info)
+    def get_condition_data(self, leadership_type):
+        if leadership_type == "owner" and self.owner_condition:
+            return self.owner_condition.get_condition_form_data()
+        elif leadership_type == "governor" and self.governor_condition:
+            return self.governor_condition.get_condition_form_data()
 
 
 class Community(BaseCommunityModel):

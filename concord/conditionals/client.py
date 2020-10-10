@@ -8,6 +8,7 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 from concord.actions.utils import Client, get_all_conditions
 from concord.conditionals import state_changes as sc
+from concord.conditionals.models import ConditionManager
 
 
 logger = logging.getLogger(__name__)
@@ -123,13 +124,29 @@ class ConditionalClient(BaseClient):
             if condition.__name__.lower() == condition_type.lower():
                 return condition
 
-    def get_condition_item_given_action_and_source(self, *, action_pk: int, source_id: str) -> Model:
-        """Given the action_pk and source_id corresponding to a condition item, get that item."""
-        for condition_class in self.get_possible_conditions():
-            condition_items = condition_class.objects.filter(action=action_pk, source_id=source_id)
-            if condition_items:
-                return condition_items[0]
-        return None
+    def get_condition_manager(self, source, leadership_type) -> Model:
+        """Gets the condition manager for a source."""
+        if source.__class__.__name__ == "PermissionsItem":
+            return source.condition
+        elif leadership_type == "owner":
+            return source.owner_condition
+        elif leadership_type == "governor":
+            return source.governor_condition
+
+    def create_conditions_for_action(self, action):
+        # note that action.resolution.conditions doesn't get saved to db so this only works if called directly after
+        # being run through permissions pipeline
+        if hasattr(action.resolution, "conditions"):
+            for condition_manager in action.resolution.conditions:
+                condition_manager.create_uncreated_conditions(action)
+
+    def get_condition_items_given_action_and_source(self, *, action, source, leadership_type=None) -> Model:
+        """Given the action which triggered a condition, the source and the leadership type, get the item.
+        NOTE: an action should never trigger an item from both governor and owner, as owner is its own pipeline, so
+        possibly you could just check both?
+        """
+        manager = self.get_condition_manager(source, leadership_type)
+        return list(manager.get_condition_instances(action).values())
 
     def get_condition_items_for_action(self, *, action_pk):
         """Get all condition items set on an action."""
@@ -140,65 +157,14 @@ class ConditionalClient(BaseClient):
                 all_condition_items = all_condition_items + list(condition_items)
         return all_condition_items
 
-    def get_condition_item_on_permission(self, *, action_pk: int, permission_pk: int):
-        """Get condition item corresponding to a specific action and permission."""
-        source_id = "perm_" + str(permission_pk)
-        return self.get_condition_item_given_action_and_source(action_pk=action_pk, source_id=source_id)
-
-    def get_condition_item_on_community(self, *, action_pk: int, community_pk: int, leadership_type: str):
-        """Get condition item on an action given the community & leadership type that triggered it."""
-        source_id = leadership_type + "_" + str(community_pk)
-        return self.get_condition_item_given_action_and_source(action_pk=action_pk, source_id=source_id)
-
-    def get_or_create_condition_on_permission(self, action, permission):
-        """Given an action and permission, if a condition item exists get it, otherwise create it."""
-        condition_item = self.get_condition_item_on_permission(action_pk=action.pk, permission_pk=permission.pk)
-        if not condition_item:
-            condition_item = self.trigger_condition_creation(action=action, permission=permission)
-        return condition_item
-
-    def get_or_create_condition_on_community(self, action, community, leadership_type):
-        """Given an action and community & leadership type, if a condition item exists get it, otherwise create it."""
-        condition_item = self.get_condition_item_on_community(action_pk=action.pk, community_pk=community.pk,
-                                                              leadership_type=leadership_type)
-        if not condition_item:
-            condition_item = self.trigger_condition_creation(action=action, community=community,
-                                                             leadership_type=leadership_type)
-        return condition_item
-
-    def trigger_condition_creation(self, *, action, permission=None, community=None, leadership_type=None):
-        """Create a condition item given action and corresponding info about the condition that triggered it."""
-        condition = permission.condition if permission else None
-        condition = community.owner_condition if community and leadership_type == "owner" else condition
-        condition = community.governor_condition if community and leadership_type == "governor" else condition
-        if not condition:
-            raise ValueError("Must supply permission or community & leadership type to trigger_condition_creation")
-        actions_and_results = condition.apply_template(trigger_action=action, target=action, actor=action.actor)
-        # We know that a condition template has a condition as the result of the first action, so we can find it
-        # and return it here
-        condition_item = actions_and_results[0]["result"]
-        return condition_item
-
-    def trigger_condition_creation_from_source_id(self, *, action, source_id):
-        """Trigger condition creation given an action and the source_id that triggered it."""
-
-        source, pk = source_id.split("_")
-
-        if source == "perm":
-            permission = Client().PermissionResource.get_permission(pk=int(pk))
-            return self.trigger_condition_creation(action=action, permission=permission)
-        else:
-            community = Client().Community.get_community(community_pk=pk)
-            return self.trigger_condition_creation(action=action, community=community, leadership_type=source)
-
     # State changes
 
-    def set_condition_on_action(self, condition_type, condition_data=None, permission_pk=None,
-                                community_pk=None, leadership_type=None, permission_data=None):
-        """This is almost always created as a mock to be used in a condition TemplateField. Typically when
-        creating the mock we want to supply condition_type and condition_data but leave the rest to be
-        supplied later. When the action is actually run, the target should *always* be an action!"""
-        change = sc.SetConditionOnActionStateChange(
-            condition_type=condition_type, condition_data=condition_data, permission_pk=permission_pk,
-            community_pk=community_pk, leadership_type=leadership_type, permission_data=permission_data)
+    def add_condition(self, *, condition_type, condition_data=None, permission_data=None, leadership_type=None):
+        change = sc.AddConditionStateChange(
+            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data,
+            leadership_type=leadership_type)
+        return self.create_and_take_action(change)
+
+    def remove_conditions(self, *, leadership_type=None, element_id=None):
+        change = sc.RemoveConditionStateChange(leadership_type=leadership_type, element_id=element_id)
         return self.create_and_take_action(change)

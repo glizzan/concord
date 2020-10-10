@@ -35,7 +35,8 @@ class PermissionsItem(PermissionedModel):
     permitted_object_id = models.PositiveIntegerField()
     permitted_object = GenericForeignKey('permitted_object_content_type', 'permitted_object_id')
 
-    condition = TemplateField(default=Template, system=True)   # Defaults to empty Template object
+    condition = models.ForeignKey('conditionals.ConditionManager', on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="%(app_label)s_%(class)s_conditioned")
 
     actors = ActorListField(default=ActorList)  # Defaults to empty ActorList object
     roles = RoleListField(default=RoleList)  # Defaults to empty RoleList object
@@ -101,15 +102,13 @@ class PermissionsItem(PermissionedModel):
 
     def has_condition(self):
         """Returns True if PermissionsItem has condition, otherwise False."""
-        if self.condition and self.condition.has_template():
-            return True
-        return False
+        return bool(self.condition)
 
-    def get_condition_data(self, info="all"):
-        """Uses the change data saved in the mock actions to instantiate the condition and permissions
-        that will be created and get their info, to be used in forms"""
-        from concord.conditionals.utils import generate_condition_form_from_action_list
-        return generate_condition_form_from_action_list(self.condition.action_list, info)
+    def get_condition_data(self):
+        """Used in forms."""
+        if self.condition:
+            return self.condition.get_condition_form_data()
+        return {}
 
     def get_permitted_object(self):
         """Gets the permitted object, that is the permissioned model that the permission is set on."""

@@ -234,19 +234,6 @@ class CommunityClient(BaseClient):
         change = sc.RemovePeopleFromRoleStateChange(role_name=role_name, people_to_remove=people_to_remove)
         return self.create_and_take_action(change)
 
-    def add_leadership_condition(self, *, condition_type, leadership_type, condition_data=None, permission_data=None):
-        """Add condition to leadership type (owners or governors)."""
-        change = sc.AddLeadershipConditionStateChange(
-            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data,
-            leadership_type=leadership_type
-        )
-        return self.create_and_take_action(change)
-
-    def remove_leadership_condition(self, *, leadership_type):
-        """Remove condition from leadership type (owners or governors)."""
-        change = sc.RemoveLeadershipConditionStateChange(leadership_type=leadership_type)
-        return self.create_and_take_action(change)
-
     def update_owners(self, *, new_owner_data):
         """Takes in a list of owners, adds those that are missing and removes those that
         are no longer there."""

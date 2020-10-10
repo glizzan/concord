@@ -179,17 +179,6 @@ class PermissionResourceClient(BaseClient):
         change = sc.DisableAnyoneStateChange()
         return self.create_and_take_action(change)
 
-    def add_condition_to_permission(self, *, condition_type, condition_data=None, permission_data=None):
-        """Add a condition to the permission."""
-        change = sc.AddPermissionConditionStateChange(
-            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data)
-        return self.create_and_take_action(change)
-
-    def remove_condition_from_permission(self):
-        """Remove a condition from the permission."""
-        change = sc.RemovePermissionConditionStateChange()
-        return self.create_and_take_action(change)
-
     # Complex/multiple state changes
 
     def update_configuration(self, *, configuration_dict: dict, permission):

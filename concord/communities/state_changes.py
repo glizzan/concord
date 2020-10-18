@@ -1,7 +1,5 @@
 """Community state changes."""
 
-from django.core.exceptions import ValidationError
-
 from concord.actions.state_changes import BaseStateChange, InputField
 from concord.actions.text_utils import list_to_text
 from concord.actions.utils import Client

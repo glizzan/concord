@@ -210,7 +210,7 @@ def community_governance_info_to_text(community):
         text += "By default, the owners do not need to approve actions in the community"
 
     if community.has_condition("owner"):
-        text += ", " + community.owner_condition.description + ". "
+        text += ", " + community.owner_condition.get_condition_form_data()["how_to_pass_overall"] + ". "
     else:
         text += ". "
 
@@ -220,7 +220,7 @@ def community_governance_info_to_text(community):
         text += "The governors of the community can take actions only when specified"
 
     if community.has_condition("governor"):
-        text += ", " + community.governor_condition.description + ". "
+        text += ", " + community.governor_condition.get_condition_form_data()["how_to_pass_overall"] + ". "
     else:
         text += ". "
 

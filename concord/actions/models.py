@@ -164,6 +164,12 @@ class PermissionedModel(models.Model):
         client = Client()
         return client.Action.get_action_history_given_target(target=self)
 
+    def get_permissions(self):
+        """Helper method to get permissions set on model."""
+        from concord.actions.utils import Client
+        client = Client()
+        return client.PermissionResource.get_permissions_on_object(self)
+
     def get_nested_objects(self):
         """Gets objects that the model is nested within.
 

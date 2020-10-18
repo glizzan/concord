@@ -21,6 +21,7 @@ class AddCommentStateChange(BaseStateChange):
     """State Change to add a comment."""
     description = "Add comment"
     section = "Comment"
+    context_keys = ["commented_object"]
     input_fields = [InputField(name="text", type="CharField", required=True, validate=True),
                     InputField(name="original_creator_only", type="BooleanField", required=False, validate=False),
                     InputField(name="target_type", type="CharField", required=False, validate=False)]
@@ -34,6 +35,14 @@ class AddCommentStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return "added comment"
+
+    @classmethod
+    def get_context_instances(cls, action):
+        """Returns the commented object by its model name, to handle cases where the referer knows the model type
+        vs doesn't know the model type."""
+        commented_object = action.target
+        model_name = commented_object.__class__.__name__.lower()
+        return {"commented_object": commented_object, model_name: commented_object}
 
     @classmethod
     def get_configurable_fields(cls):
@@ -182,7 +191,8 @@ class EditCommentStateChange(BaseStateChange):
                     return False, error_message
         return True, None
 
-    def get_context_instances(self, action):
+    @classmethod
+    def get_context_instances(cls, action):
         """Returns the comment and the commented object. Also returns the commented object by its model
         name, to handle cases where the referer knows the model type vs doesn't know the model type."""
         comment = action.target
@@ -275,7 +285,8 @@ class DeleteCommentStateChange(BaseStateChange):
                     return False, error_message
         return True, None
 
-    def get_context_instances(self, action):
+    @classmethod
+    def get_context_instances(cls, action):
         """Returns the comment and the commented object. Also returns the commented object by its model
         name, to handle cases where the referer knows the model type vs doesn't know the model type."""
         comment = action.target

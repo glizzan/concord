@@ -1,19 +1,37 @@
 """Utils for conditionals package."""
 
-from concord.actions.utils import Client
+from concord.actions.utils import Changes
 from concord.actions.text_utils import roles_and_actors
-from concord.permission_resources.models import PermissionsItem
 
 
-def description_for_passing_approval_condition(fill_dict=None):
+def get_permission_value(permission_data, permission_type, assignee_type):
+    """Given permission data in the form of a list of dicts, with keys 'permission_type',
+    'permission_roles', 'permission_actors' and 'permission_configuration, gets the
+    value being looked up."""
+
+    if not permission_data:
+        return []
+
+    permission = [p for p in permission_data if p["permission_type"] == permission_type]
+    if not permission:
+        return []
+
+    if "permission_" + assignee_type in permission[0]:
+        value = permission[0]["permission_" + assignee_type]
+        return value if value else []
+
+    return []
+
+
+def description_for_passing_approval_condition(permission_data=None):
     """Generate a 'plain English' description for passing the approval condtion."""
 
-    approve_actors = fill_dict.get("approve_actors", []) if fill_dict else None
-    approve_roles = fill_dict.get("approve_roles", []) if fill_dict else None
-    reject_actors = fill_dict.get("reject_actors", []) if fill_dict else None
-    reject_roles = fill_dict.get("reject_roles", []) if fill_dict else None
+    approve_actors = get_permission_value(permission_data, Changes().Conditionals.Approve, "actors")
+    approve_roles = get_permission_value(permission_data, Changes().Conditionals.Approve, "roles")
+    reject_actors = get_permission_value(permission_data, Changes().Conditionals.Reject, "actors")
+    reject_roles = get_permission_value(permission_data, Changes().Conditionals.Reject, "roles")
 
-    if not fill_dict or (not approve_roles and not approve_actors):
+    if not approve_roles and not approve_actors:
         return "one person needs to approve this action"
 
     approve_str = roles_and_actors({"roles": approve_roles, "actors": approve_actors})
@@ -22,32 +40,32 @@ def description_for_passing_approval_condition(fill_dict=None):
     else:
         reject_str = ""
 
-    return f"one person {approve_str} needs to approve{reject_str}"
+    return f"{approve_str} needs to approve this action{reject_str}"
 
 
-def description_for_passing_voting_condition(condition, fill_dict=None):
+def description_for_passing_voting_condition(condition, permission_data=None):
     """Generate a 'plain English' description for passing the approval condtion."""
 
-    vote_actors = fill_dict.get("vote_actors", []) if fill_dict else None
-    vote_roles = fill_dict.get("vote_roles", []) if fill_dict else None
+    vote_actors = get_permission_value(permission_data, Changes().Conditionals.AddVote, "actors")
+    vote_roles = get_permission_value(permission_data, Changes().Conditionals.AddVote, "roles")
 
     vote_type = "majority" if condition.require_majority else "plurality"
 
-    if fill_dict and (vote_roles or vote_actors):
+    if vote_roles or vote_actors:
         people_str = roles_and_actors({'roles': vote_roles, 'actors': vote_actors})
     else:
-        people_str = ""
+        people_str = "people"
 
-    return f"a {vote_type} of people{people_str} vote for it within {condition.describe_voting_period()}"
+    return f"a {vote_type} of {people_str} vote for it within {condition.describe_voting_period()}"
 
 
-def description_for_passing_consensus_condition(condition, fill_dict=None):
+def description_for_passing_consensus_condition(condition, permission_data=None):
     """Generate a 'plain English' description for passing the consensus condtion."""
 
-    participate_actors = fill_dict.get("participate_actors", []) if fill_dict else None
-    participate_roles = fill_dict.get("participate_roles", []) if fill_dict else None
+    participate_actors = get_permission_value(permission_data, Changes().Conditionals.RespondConsensus, "actors")
+    participate_roles = get_permission_value(permission_data, Changes().Conditionals.RespondConsensus, "roles")
 
-    if not fill_dict or (not participate_roles and not participate_actors):
+    if not participate_roles and not participate_actors:
         consensus_type = "strict" if condition.is_strict else "loose"
         return f"a group of people must agree to it through {consensus_type} consensus"
 

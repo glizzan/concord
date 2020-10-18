@@ -6,7 +6,6 @@ from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
 from concord.communities.customfields import RoleHandler, RoleField
-from concord.actions.customfields import TemplateField, Template
 
 
 ################################

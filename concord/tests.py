@@ -396,9 +396,11 @@ class PermissionSystemTest(DataTestCase):
             condition_type="approvalcondition", condition_data=None, permission_data=permission_data)
 
         permission = PermissionsItem.objects.get(pk=permission.pk)  #refresh
-        self.assertDictEqual(list(permission.get_condition_data().values())[0],
+        permission_form = list(permission.get_condition_data().values())[0]
+        permission_form.pop("element_id")  # can't compare it below since we don't know the value
+        self.assertDictEqual(permission_form,
             {'type': 'ApprovalCondition', 'display_name': 'Approval Condition',
-            'how_to_pass': 'one person needs to approve this action',
+            'how_to_pass': 'individual 1 needs to approve this action',
             'fields':
             {'self_approval_allowed':
                 {'display': 'Can individuals approve their own actions?', 'field_name': 'self_approval_allowed',
@@ -563,7 +565,7 @@ class ConditionalsTest(DataTestCase):
         self.assertEquals(Action.objects.get(pk=rose_action.pk).status, "waiting")
 
         # Now Pinoe removes the condition
-        action, result = self.client.Conditional.remove_conditions()
+        action, result = self.client.Conditional.remove_condition()
 
         # When Rose tries again, it passes
         rose_action_two, item = self.roseClient.Resource.add_item(item_name="Rose's item")
@@ -663,6 +665,173 @@ class ConditionalsTest(DataTestCase):
         sullyClient.ApprovalCondition.set_target(target=conditional_action)
         action, result = sullyClient.ApprovalCondition.approve()
         self.assertEquals(Action.objects.get(pk=rose_action_three.pk).status, "waiting")
+
+    def test_multiple_conditions_pass(self):
+
+        # Pinoe creates resource, permission on resource, and adds two conditions
+        resource = self.client.Resource.create_resource(name="Go USWNT!")
+        self.client.PermissionResource.set_target(target=resource)
+        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
+            permission_actors=[self.users.rose.pk])
+        self.client.Conditional.set_target(target=permission)
+        permission_data = [
+            {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}
+        ]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+
+        # Rose takes action, it's waiting
+        self.client.Resource.set_actor(actor=self.users.rose)
+        self.client.Resource.set_target(target=resource)
+        rose_action, item = self.client.Resource.add_item(item_name="Rose's first item")
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Resolve first condition but Rose is still waiting
+        condition_items = self.client.Conditional.get_condition_items_given_action_and_source(
+            action=rose_action, source=permission)
+        crystalClient = Client(target=condition_items[0], actor=self.users.crystal)
+        action, result = crystalClient.ApprovalCondition.approve()
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Resolve second condition and Rose's action has passed
+        crystalClient.update_target_on_all(condition_items[1])
+        action, result = crystalClient.ApprovalCondition.approve()
+        rose_action = Action.objects.get(pk=rose_action.pk)  # refresh
+        self.assertEquals(rose_action.status, "implemented")
+
+    def test_multiple_conditions_fail(self):
+
+        # Pinoe creates resource, permission on resource, and adds two conditions
+        resource = self.client.Resource.create_resource(name="Go USWNT!")
+        self.client.PermissionResource.set_target(target=resource)
+        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
+            permission_actors=[self.users.rose.pk])
+        self.client.Conditional.set_target(target=permission)
+        permission_data = [
+            {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]},
+            {"permission_type": Changes().Conditionals.Reject, "permission_actors": [self.users.crystal.pk]}
+        ]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+
+        # Rose takes action, it's waiting
+        self.client.Resource.set_actor(actor=self.users.rose)
+        self.client.Resource.set_target(target=resource)
+        rose_action, item = self.client.Resource.add_item(item_name="Rose's first item")
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Resolve first condition but Rose is still waiting
+        condition_items = self.client.Conditional.get_condition_items_given_action_and_source(
+            action=rose_action, source=permission)
+        crystalClient = Client(target=condition_items[0], actor=self.users.crystal)
+        action, result = crystalClient.ApprovalCondition.approve()
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Reject second condition and Rose's action has failed
+        crystalClient.update_target_on_all(condition_items[1])
+        action, result = crystalClient.ApprovalCondition.reject()
+        rose_action = Action.objects.get(pk=rose_action.pk)  # refresh
+        self.assertEquals(rose_action.status, "rejected")
+
+    def test_remove_one_condition(self):
+
+        # Pinoe creates resource, permission on resource, and adds two conditions
+        resource = self.client.Resource.create_resource(name="Go USWNT!")
+        self.client.PermissionResource.set_target(target=resource)
+        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
+            permission_actors=[self.users.rose.pk])
+        self.client.Conditional.set_target(target=permission)
+        permission_data = [
+            {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]},
+            {"permission_type": Changes().Conditionals.Reject, "permission_actors": [self.users.crystal.pk]}
+        ]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+
+        # Then removes one
+        element_ids = self.client.Conditional.get_element_ids()
+        action, result = self.client.Conditional.remove_condition(element_id=element_ids[0])
+
+        # Rose takes action, it's waiting
+        self.client.Resource.set_actor(actor=self.users.rose)
+        self.client.Resource.set_target(target=resource)
+        rose_action, item = self.client.Resource.add_item(item_name="Rose's first item")
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Remaining condition handled
+        condition_items = self.client.Conditional.get_condition_items_given_action_and_source(
+            action=rose_action, source=permission)
+        crystalClient = Client(target=condition_items[0], actor=self.users.crystal)
+        action, result = crystalClient.ApprovalCondition.approve()
+        rose_action = Action.objects.get(pk=rose_action.pk)  # refresh
+        self.assertEquals(rose_action.status, "implemented")
+
+    def test_edit_condition(self):
+
+        # Create additional clients
+        self.roseClient = Client(actor=self.users.rose)
+        self.crystalClient = Client(actor=self.users.crystal)
+        self.sullyClient = Client(actor=self.users.sully)
+
+        # Pinoe creates resource, permission on resource, and adds condition
+        resource = self.client.Resource.create_resource(name="Go USWNT!")
+        self.client.PermissionResource.set_target(target=resource)
+        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
+            permission_actors=[self.users.rose.pk])
+        self.client.Conditional.set_target(target=permission)
+        permission_data = [
+            {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]},
+            {"permission_type": Changes().Conditionals.Reject, "permission_actors": [self.users.crystal.pk]}
+        ]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
+
+        # Rose takes action, it's waiting
+        self.roseClient.Resource.set_target(target=resource)
+        rose_action, item = self.roseClient.Resource.add_item(item_name="Rose's first item")
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Condition resolved, Rose's action has passed
+        condition_items = self.client.Conditional.get_condition_items_given_action_and_source(
+            action=rose_action, source=permission)
+        self.crystalClient.update_target_on_all(target=condition_items[0])
+        action, result = self.crystalClient.ApprovalCondition.approve()
+        rose_action = Action.objects.get(pk=rose_action.pk)  # refresh
+        self.assertEquals(rose_action.status, "implemented")
+
+        # Edit condition
+        element_ids = self.client.Conditional.get_element_ids()
+        permission_data = [
+            {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.sully.pk]},
+            {"permission_type": Changes().Conditionals.Reject, "permission_actors": [self.users.sully.pk]}
+        ]
+        action, result = self.client.Conditional.edit_condition(
+            element_id=element_ids[0], permission_data=permission_data)
+
+        # Rose takes second action, it's waiting
+        self.roseClient.Resource.set_target(target=resource)
+        rose_action, item = self.roseClient.Resource.add_item(item_name="Rose's second item")
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Crystal can't approve
+        condition_items = self.client.Conditional.get_condition_items_given_action_and_source(
+            action=rose_action, source=permission)
+        self.crystalClient.update_target_on_all(target=condition_items[0])
+        action, result = self.crystalClient.ApprovalCondition.approve()
+        rose_action = Action.objects.get(pk=rose_action.pk)  # refresh
+        self.assertEquals(rose_action.status, "waiting")
+
+        # Sully can
+        self.sullyClient.update_target_on_all(target=condition_items[0])
+        action, result = self.sullyClient.ApprovalCondition.approve()
+        rose_action = Action.objects.get(pk=rose_action.pk)  # refresh
+        self.assertEquals(rose_action.status, "implemented")
 
 
 class BasicCommunityTest(DataTestCase):

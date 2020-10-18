@@ -134,9 +134,9 @@ class CommunityClient(BaseClient):
         """Gets governance info about the community as text."""
         return community_basic_info_to_text(self.target) + " " + community_governance_info_to_text(self.target)
 
-    def get_condition_data(self, leadership_type, info="all") -> dict:
+    def get_condition_data(self, leadership_type) -> dict:
         """Gets condition data for conditions set on owners and governors."""
-        return self.target.get_condition_data(leadership_type=leadership_type, info=info)
+        return self.target.get_condition_data(leadership_type=leadership_type)
 
     def has_foundational_authority(self, *, actor) -> bool:
         """Returns True if actor has foundational authority, otherwise False."""

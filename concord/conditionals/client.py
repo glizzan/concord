@@ -8,7 +8,6 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 from concord.actions.utils import Client, get_all_conditions
 from concord.conditionals import state_changes as sc
-from concord.conditionals.models import ConditionManager
 
 
 logger = logging.getLogger(__name__)
@@ -157,6 +156,11 @@ class ConditionalClient(BaseClient):
                 all_condition_items = all_condition_items + list(condition_items)
         return all_condition_items
 
+    def get_element_ids(self, leadership_type=None):
+        """Given a condition mananger, get the element IDs of the contained conditions."""
+        condition_manager = self.get_condition_manager(self.target, leadership_type)
+        return condition_manager.get_element_ids()
+
     # State changes
 
     def add_condition(self, *, condition_type, condition_data=None, permission_data=None, leadership_type=None):
@@ -165,6 +169,12 @@ class ConditionalClient(BaseClient):
             leadership_type=leadership_type)
         return self.create_and_take_action(change)
 
-    def remove_conditions(self, *, leadership_type=None, element_id=None):
+    def edit_condition(self, *, element_id, condition_data=None, permission_data=None, leadership_type=None):
+        change = sc.EditConditionStateChange(
+            element_id=element_id, condition_data=condition_data, permission_data=permission_data,
+            leadership_type=leadership_type)
+        return self.create_and_take_action(change)
+
+    def remove_condition(self, *, leadership_type=None, element_id=None):
         change = sc.RemoveConditionStateChange(leadership_type=leadership_type, element_id=element_id)
         return self.create_and_take_action(change)

@@ -2,6 +2,7 @@
 
 import datetime, json, random
 from abc import abstractmethod
+from dataclasses import dataclass, asdict
 
 from django.db import models
 from django.utils import timezone
@@ -9,7 +10,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from concord.actions.models import PermissionedModel
-from concord.actions.utils import Changes, Client, get_all_conditions, replacer
+from concord.actions.utils import Changes, Client, get_all_conditions, replacer, get_state_change_object
 from concord.conditionals import utils
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
 from concord.permission_resources.models import PermissionsItem
@@ -19,7 +20,6 @@ from concord.permission_resources.models import PermissionsItem
 ### Conditional Resource/Items ###
 ##################################
 
-from dataclasses import dataclass, asdict
 
 @dataclass
 class ConditionData:
@@ -29,15 +29,17 @@ class ConditionData:
 
 
 class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model here?
-    """The compound manager is associated with a single permission or leadership type on a community and coordinates any
-    conditions set.
+    """The compound manager is associated with a single permission or leadership type on a community and coordinates
+    any conditions set.
 
     Conditions field should have structure: {unique_id: ConditionData(), unique_id: ConditionData()}
-    condition_data is the data needed to instantiate or otherwise manage the specific condition, with the following options:
+    condition_data is the data needed to instantiate or otherwise manage the specific condition, with the following
+    options:
+
         acceptance: {condition_type: X, condition_data: {}, permission_data: {}}
 
-    For clarity's sake, any ConditionModel is refered to as an "instance" and the dictionaries/dataclass obj's corresponding
-    to them are referred to as a "dataclass".
+    For clarity's sake, any ConditionModel is refered to as an "instance" and the dictionaries/dataclass obj's
+    corresponding to them are referred to as a "dataclass".
     """
     community = models.IntegerField()
     conditions = models.TextField()
@@ -54,13 +56,39 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
             return {element_id: ConditionData(**data) for element_id, data in condition_dataclasses.items()}
         return {}
 
+    def get_condition_dataclass(self, element_id):
+        condition_dataclasses = self.get_condition_dataclasses()
+        return condition_dataclasses[element_id]
+
+    def clean_permission_data(self, permission_data):
+        for perm in permission_data:
+            if "permission_actors" in perm and perm["permission_actors"] is None:
+                del(perm["permission_actors"])
+            if "permission_roles" in perm and perm["permission_roles"] is None:
+                del(perm["permission_roles"])
+        return permission_data
+
     def set_conditions(self, condition_dataclasses):
         conditions = {element_id: asdict(data) for element_id, data in condition_dataclasses.items()}
         self.conditions = json.dumps(conditions)
 
     def add_condition(self, condition):
+        condition["permission_data"] = self.clean_permission_data(condition["permission_data"])
         condition_dataclasses = self.get_condition_dataclasses()
         condition_dataclasses.update({random.getrandbits(20): ConditionData(data=condition)})
+        self.set_conditions(condition_dataclasses)
+
+    def edit_condition(self, element_id, condition_data):
+        condition_dataclasses = self.get_condition_dataclasses()
+        condition_data["permission_data"] = self.clean_permission_data(condition_data["permission_data"])
+        condition_dataclasses[element_id].data = condition_data
+        self.set_conditions(condition_dataclasses)
+
+    def edit_condition_by_key(self, element_id, key, value):
+        condition_dataclasses = self.get_condition_dataclasses()
+        if key == "permission_data":
+            value = self.clean_permission_data(value)
+        condition_dataclasses[element_id].data[key] = value
         self.set_conditions(condition_dataclasses)
 
     def remove_condition(self, element_id):
@@ -89,7 +117,7 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
 
     def get_condition_model(self, condition_type):
         for condition_model in get_all_conditions():
-            if condition_model.__name__.lower() == condition_type:
+            if condition_model.__name__.lower() == condition_type.lower():
                 return condition_model
 
     def lookup_condition(self, element_id, condition_dataclass, action):
@@ -100,15 +128,20 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
 
     def create_condition(self, element_id, condition_dataclass, action):
 
-        # replace fields in condition & permission data
+        # replace fields in condition data
         context = {"context": {"action": action}}
         for field_name, field_value in condition_dataclass.data["condition_data"].items():
             result = replacer(field_name, field_value, context)
             condition_dataclass.data["condition_data"][field_name] = result if result != ... else field_value
+
+        # replace fields in permission data
         for index, permission in enumerate(condition_dataclass.data["permission_data"]):
+            change_object = get_state_change_object(permission["permission_type"])
+            context = {"context": change_object.all_context_instances(action)}
             for field_name, field_value in permission.items():
                 result = replacer(field_name, field_value, context)
-                condition_dataclass.data["permission_data"][index][field_name] = result if result != ... else field_value
+                result = result if result != ... else field_value
+                condition_dataclass.data["permission_data"][index][field_name] = result
 
         if condition_dataclass.mode == "acceptance":
 
@@ -121,11 +154,11 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
 
             for permission in condition_dataclass.data["permission_data"]:
                 permission_item = PermissionsItem()
-                permission_item.set_fields(owner=self.get_owner(), permitted_object=condition_instance,
-                                      change_type=permission["permission_type"],
-                                      actors=permission.get("permission_actors", []),
-                                      roles=permission.get("permission_roles", []),
-                                      configuration=permission.get("permission_configuration", {}))
+                permission_item.set_fields(
+                    owner=self.get_owner(), permitted_object=condition_instance,
+                    change_type=permission["permission_type"], actors=permission.get("permission_actors", []),
+                    roles=permission.get("permission_roles", []),
+                    configuration=permission.get("permission_configuration", {}))
                 permission_item.save()
 
             return condition_instance
@@ -173,20 +206,28 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
     def get_condition_form_data(self):
 
         form = {}
+        how_to_pass_overall = []
 
-        for element_id, dataclass in self.get_condition_dataclasses().items():
+        for element_id, dc in self.get_condition_dataclasses().items():
 
-            condition_model = self.get_condition_model(dataclass.data["condition_type"])
-            condition_object = condition_model(**dataclass.data["condition_data"])
-            field_data = condition_object.get_configurable_fields_with_data(dataclass.data['permission_data'])
+            condition_model = self.get_condition_model(dc.data["condition_type"])
+            condition_object = condition_model(**dc.data["condition_data"])
+            field_data = condition_object.get_configurable_fields_with_data(dc.data['permission_data'])
+            how_to_pass = condition_object.description_for_passing_condition(
+                permission_data=dc.data['permission_data'])
+            how_to_pass_overall.append(how_to_pass)
+
             form.update({
                 element_id: {
                     "type": condition_object.__class__.__name__,
                     "display_name": condition_object.descriptive_name,
-                    "how_to_pass": condition_object.description_for_passing_condition(),
-                    "fields": field_data
+                    "how_to_pass": how_to_pass,
+                    "fields": field_data,
+                    "element_id": element_id
                 }
             })
+
+        form["how_to_pass_overall"] = ", and ".join(how_to_pass_overall)
 
         return form
 
@@ -237,8 +278,8 @@ class ConditionModel(PermissionedModel):
 
             if field_dict["type"] in ["RoleField", "RoleListField"]:
                 permission = [perm for perm in permission_data if perm["permission_type"] == field_dict["full_name"]]
-                if permission and "permission_roles" in permission and permission["permission_roles"]:
-                    field_dict["value"] = permission["permission_roles"]
+                if permission and "permission_roles" in permission[0] and permission[0]["permission_roles"]:
+                    field_dict["value"] = permission[0]["permission_roles"]
                 continue
 
             if field_dict["type"] in ["ActorField", "ActorListField"]:
@@ -295,7 +336,7 @@ class ConditionModel(PermissionedModel):
         return {}
 
     @abstractmethod
-    def description_for_passing_condition(self, fill_dict):
+    def description_for_passing_condition(self, permission_data=None):
         """This method returns a verbose, human-readable description of what will fulfill this condition.  It optionally
         accepts permission data from the configured condition_template to be more precise about who can do what."""
 
@@ -383,8 +424,8 @@ class ApprovalCondition(ConditionModel):
         else:
             return "approved"
 
-    def description_for_passing_condition(self, fill_dict=None):
-        return utils.description_for_passing_approval_condition(fill_dict=fill_dict)
+    def description_for_passing_condition(self, permission_data=None):
+        return utils.description_for_passing_approval_condition(permission_data=permission_data)
 
 
 class VoteCondition(ConditionModel):
@@ -555,9 +596,9 @@ class VoteCondition(ConditionModel):
             base_str += f". The vote ended with result {self.condition_status()}."
         return base_str
 
-    def description_for_passing_condition(self, fill_dict=None):
+    def description_for_passing_condition(self, permission_data=None):
         """Gets plain English description of what must be done to pass the condition."""
-        return utils.description_for_passing_voting_condition(condition=self, fill_dict=None)
+        return utils.description_for_passing_voting_condition(condition=self, permission_data=permission_data)
 
 
 class ConsensusCondition(ConditionModel):
@@ -696,9 +737,9 @@ class ConsensusCondition(ConditionModel):
         return f"The discussion is ongoing with {self.time_remaining_display()}. If the discussion ended now, " + \
                f"the result would be: {self.current_result()}"
 
-    def description_for_passing_condition(self, fill_dict=None):
+    def description_for_passing_condition(self, permission_data=None):
         """Gets plain English description of what must be done to pass the condition."""
-        return utils.description_for_passing_consensus_condition(self, fill_dict)
+        return utils.description_for_passing_consensus_condition(self, permission_data)
 
     @classmethod
     def configurable_fields(cls):

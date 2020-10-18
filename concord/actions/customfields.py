@@ -172,7 +172,7 @@ class Resolution:
 
         elif condition_manager.condition_status(action) == "approved":
             self.approve_action(pipeline=pipeline, approved_role=matched_role,
-                approved_condition=condition_manager.get_condition_names())
+                                approved_condition=condition_manager.get_condition_names())
 
     def process_resolution(self, pipeline, permission, passes, matched_role, condition_manager, action):
         """Parses the result of a permissions or conditions check and updates resolution accordingly."""
@@ -189,7 +189,8 @@ class Resolution:
 
         if condition_manager and condition_manager.condition_status(action) == "rejected":
             # should be true - we don't call here in foundational or governing unless we're checking conditions
-            log = f"action passed {pipeline} pipeline but was rejected by condition {condition_manager.get_condition_names()}"
+            names = condition_manager.get_condition_names()
+            log = f"action passed {pipeline} pipeline but was rejected by condition {names}"
             self.reject_action(pipeline=pipeline, log=log)
 
 

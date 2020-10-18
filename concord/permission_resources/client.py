@@ -102,9 +102,9 @@ class PermissionResourceClient(BaseClient):
                 matching_permissions.append(permission)
         return matching_permissions
 
-    def get_condition_data(self, info="all") -> dict:
+    def get_condition_data(self) -> dict:
         """Get condition data on the target."""
-        return self.target.get_condition_data(info)
+        return self.target.get_condition_data()
 
     def get_settable_permissions_for_model(self, model_class):
         """Given a model class (or, optionally, an instance of a model class), gets the state change objects

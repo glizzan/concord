@@ -2,13 +2,13 @@
 
 import logging
 
-from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.state_changes import BaseStateChange, InputField
 from concord.permission_resources.models import PermissionsItem
 from concord.actions.text_utils import get_verb_given_permission_type
-from concord.actions.utils import get_state_change_object, Client
-from concord.permission_resources.models import Template
+from concord.actions.utils import get_state_change_object
+from concord.actions.models import TemplateModel
 from concord.permission_resources.utils import delete_permissions_on_target
 
 
@@ -461,7 +461,7 @@ class EditTemplateStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return [Template]
+        return [TemplateModel]
 
     @classmethod
     def get_settable_classes(cls):

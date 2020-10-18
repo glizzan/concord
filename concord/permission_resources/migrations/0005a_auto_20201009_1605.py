@@ -8,13 +8,11 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('permission_resources', '0004_permissionsitem_creator'),
-        ('conditionals', '0006_conditionmanager'),
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.RemoveField(
             model_name='permissionsitem',
             name='condition',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='permission_resources_permissionsitem_conditioned', to='conditionals.ConditionManager'),
         ),
     ]

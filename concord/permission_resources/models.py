@@ -8,7 +8,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
-from concord.actions.customfields import Template, TemplateField
 from concord.permission_resources.customfields import ActorList, ActorListField, RoleList, RoleListField
 from concord.actions.text_utils import permission_to_text, permission_change_to_text
 from concord.actions.utils import Client, get_state_change_object
@@ -63,7 +62,7 @@ class PermissionsItem(PermissionedModel):
         """Get the ChangeType (short version) of the permission."""
         return self.change_type.split(".")[-1]
 
-    def get_all_context_keys(self):
+    def get_context_keys(self):
         """Helper method to get context keys for the change type."""
         return self.get_state_change_object().get_context_keys()
 

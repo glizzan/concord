@@ -118,7 +118,8 @@ def specific_permission_pipeline(action):
         for permission in client.PermissionResource.get_specific_permissions(
                 change_type=action.change.get_change_type()):
             passes, matched_role, condition_manager = check_specific_permission(permission, action)
-            action.resolution.process_resolution("specific", permission, passes, matched_role, condition_manager, action)
+            action.resolution.process_resolution("specific", permission, passes, matched_role,
+                                                 condition_manager, action)
             if passes:
                 return action
 

@@ -83,4 +83,4 @@ def set_default_permissions(actor, instance):
         action, permission = client.PermissionResource.add_permission(**permission)
         if condition_data:
             client.update_target_on_all(target=permission)
-            client.PermissionResource.add_condition_to_permission(**condition_data)
+            client.Conditional.add_condition(**condition_data)

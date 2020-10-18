@@ -320,7 +320,7 @@ def replacer(key, value, context):
         command = value.replace("{{", "").replace("}}", "").strip()
 
         if command[0:7] == "nested:":
-            # In some cases (usually when included a condition in a template) we need to protect the 'inner' template
+            # Occasionally (eg when including a condition in a template) we need to protect the 'inner' replace field
             command = command[7:]
             new_value = "{{" + command + "}}"
             logging.debug(f"nested replacer string: Replacing {key} {value} with {new_value}")

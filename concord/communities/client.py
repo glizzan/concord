@@ -134,9 +134,9 @@ class CommunityClient(BaseClient):
         """Gets governance info about the community as text."""
         return community_basic_info_to_text(self.target) + " " + community_governance_info_to_text(self.target)
 
-    def get_condition_data(self, leadership_type, info="all") -> dict:
+    def get_condition_data(self, leadership_type) -> dict:
         """Gets condition data for conditions set on owners and governors."""
-        return self.target.get_condition_data(leadership_type=leadership_type, info=info)
+        return self.target.get_condition_data(leadership_type=leadership_type)
 
     def has_foundational_authority(self, *, actor) -> bool:
         """Returns True if actor has foundational authority, otherwise False."""
@@ -232,19 +232,6 @@ class CommunityClient(BaseClient):
     def remove_people_from_role(self, *, role_name: str, people_to_remove: list) -> Tuple[int, Any]:
         """Remove people from role in community."""
         change = sc.RemovePeopleFromRoleStateChange(role_name=role_name, people_to_remove=people_to_remove)
-        return self.create_and_take_action(change)
-
-    def add_leadership_condition(self, *, condition_type, leadership_type, condition_data=None, permission_data=None):
-        """Add condition to leadership type (owners or governors)."""
-        change = sc.AddLeadershipConditionStateChange(
-            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data,
-            leadership_type=leadership_type
-        )
-        return self.create_and_take_action(change)
-
-    def remove_leadership_condition(self, *, leadership_type):
-        """Remove condition from leadership type (owners or governors)."""
-        change = sc.RemoveLeadershipConditionStateChange(leadership_type=leadership_type)
         return self.create_and_take_action(change)
 
     def update_owners(self, *, new_owner_data):

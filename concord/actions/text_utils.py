@@ -155,20 +155,19 @@ def roles_and_actors(role_and_actor_dict):
 
 # Called mostly outside this file
 
-def condition_template_to_text(condition_action, permissions_actions):
-    """This function assumes the first parameter is a condition to be set on an action and the second parameter
-    a list of permissions on that condition. Written to be understood by people setting conditions on permissions,
-    so typically we're adding the second part of a sentence that begins 'X has permission to Y...'"""
+def condition_to_text(condition_change_object):
+    """Written to be understood by people setting conditions on permissions, so typically we're adding the second
+    part of a sentence that begins 'X has permission to Y...'"""
 
     # For now, we ignore the configuration in condition_action, and build our text from the permissions_actions
 
     phrases = []
-    for perm_action in permissions_actions:
+    for permission in condition_change_object.permission_data:
 
-        roles_and_actors_string = roles_and_actors({"roles": perm_action.change.roles,
-                                                    "actors": perm_action.change.actors})
+        roles_and_actors_string = roles_and_actors({"roles": permission.get("permission_roles", []),
+                                                    "actors": permission.get("permission_actors", [])})
 
-        change_type = get_state_change_object(perm_action.change.change_type)
+        change_type = get_state_change_object(permission["permission_type"])
 
         if hasattr(change_type, "rejects_condition") and change_type.rejects_condition:
             phrases.append(roles_and_actors_string + " does not " + change_type.verb_name)
@@ -181,7 +180,7 @@ def condition_template_to_text(condition_action, permissions_actions):
         # This means that the default permissions will be used, but this function has no way of knowing what
         # the default permission is, so we must be vague.  Condition action should always be
         # SetConditionOnActionStateChange so get_condition_verb should always be valid.
-        return text + "the governors and/or owners " + condition_action.change.get_condition_verb()
+        return text + "the governors and/or owners " + condition_change_object.get_condition_verb()
 
     if len(phrases) == 1:
         return text + phrases[0]
@@ -210,8 +209,8 @@ def community_governance_info_to_text(community):
     else:
         text += "By default, the owners do not need to approve actions in the community"
 
-    if community.has_owner_condition():
-        text += ", " + community.owner_condition.description + ". "
+    if community.has_condition("owner"):
+        text += ", " + community.owner_condition.get_condition_form_data()["how_to_pass_overall"] + ". "
     else:
         text += ". "
 
@@ -220,8 +219,8 @@ def community_governance_info_to_text(community):
     else:
         text += "The governors of the community can take actions only when specified"
 
-    if community.has_governor_condition():
-        text += ", " + community.governor_condition.description + ". "
+    if community.has_condition("governor"):
+        text += ", " + community.governor_condition.get_condition_form_data()["how_to_pass_overall"] + ". "
     else:
         text += ". "
 

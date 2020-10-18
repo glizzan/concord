@@ -26,20 +26,10 @@ def check_conditional(action, community_or_permission, leadership_type=None):
             Either "owner" or "governor". Required if community_or_permission is community.
             ignored if community_or_permission is permission.
 
-    Returns a dict containing condition information if condition_item exists or, if condition item
-    does not exist, the same dict structure populated by Nones."""
+    Returns the associated condition manager."""
 
     client = Client()
-    source_id = f"{leadership_type}_{str(community_or_permission.pk)}" if leadership_type else \
-                f"perm_{str(community_or_permission.pk)}"
-    condition_item = client.Conditional.get_condition_item_given_action_and_source(
-        action_pk=action.pk, source_id=source_id)
-
-    return {
-        "condition_item": condition_item,
-        "source_id": source_id,
-        "condition_status": condition_item.condition_status() if condition_item else "not created"
-    }
+    return client.Conditional.get_condition_manager(community_or_permission, leadership_type)
 
 
 def foundational_permission_pipeline(action):
@@ -57,12 +47,12 @@ def foundational_permission_pipeline(action):
         action.resolution.reject_action(pipeline="foundational")
         return action
 
-    if not community.has_owner_condition():
+    if not community.has_condition("owner"):
         action.resolution.approve_action(pipeline="foundational", approved_role=matched_role)
         return action
 
-    condition_data = check_conditional(action, community, "owner")
-    action.resolution.process_resolution("foundational", None, True, matched_role, condition_data)
+    condition_manager = check_conditional(action, community, "owner")
+    action.resolution.process_resolution("foundational", None, True, matched_role, condition_manager, action)
     return action
 
 
@@ -90,9 +80,9 @@ def check_specific_permission(permission, action):
         return False, None, None
 
     if permission.has_condition():
-        condition_data = check_conditional(action, permission)
-        passes = True if condition_data["condition_status"] == "approved" else False
-        return passes, matched_role, condition_data
+        condition_manager = check_conditional(action, permission)
+        passes = True if condition_manager.condition_status(action) == "approved" else False
+        return passes, matched_role, condition_manager
 
     return True, matched_role, None
 
@@ -117,8 +107,8 @@ def specific_permission_pipeline(action):
 
     # Get and check target level permissions
     for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
-        passes, matched_role, condition_data = check_specific_permission(permission, action)
-        action.resolution.process_resolution("specific", permission, passes, matched_role, condition_data)
+        passes, matched_role, condition_manager = check_specific_permission(permission, action)
+        action.resolution.process_resolution("specific", permission, passes, matched_role, condition_manager, action)
         if passes:
             return action
 
@@ -127,8 +117,9 @@ def specific_permission_pipeline(action):
         client.PermissionResource.set_target(target=nested_object)
         for permission in client.PermissionResource.get_specific_permissions(
                 change_type=action.change.get_change_type()):
-            passes, matched_role, condition_data = check_specific_permission(permission, action)
-            action.resolution.process_resolution("specific", permission, passes, matched_role, condition_data)
+            passes, matched_role, condition_manager = check_specific_permission(permission, action)
+            action.resolution.process_resolution("specific", permission, passes, matched_role,
+                                                 condition_manager, action)
             if passes:
                 return action
 
@@ -150,12 +141,12 @@ def governing_permission_pipeline(action):
         action.resolution.reject_action(pipeline="governing", log="user does not have governing permission")
         return action
 
-    if not community.has_governor_condition():
+    if not community.has_condition("governor"):
         action.resolution.approve_action(pipeline="governing", approved_role=matched_role)
         return action
 
-    condition_data = check_conditional(action, community, "governor")
-    action.resolution.process_resolution("governing", None, True, matched_role, condition_data)
+    condition_manager = check_conditional(action, community, "governor")
+    action.resolution.process_resolution("governing", None, True, matched_role, condition_manager, action)
     return action
 
 

@@ -185,7 +185,8 @@ class BaseStateChange(object):
             return defaults + [cls.get_allowable_targets()[0].__name__.lower()]
         return defaults + cls.context_keys
 
-    def all_context_instances(self, action):
+    @classmethod
+    def all_context_instances(cls, action):
         """Given the specific action that contains this change object, returns a dictionary
         with relevant model_instances. Used primarily by templates.
 
@@ -198,10 +199,11 @@ class BaseStateChange(object):
             action.target.__class__.__name__.lower(): action.target
         }
 
-        context_dict = {**context_dict, **self.get_context_instances(action)}
+        context_dict = {**context_dict, **cls.get_context_instances(action)}
         return context_dict
 
-    def get_context_instances(self, action):
+    @classmethod
+    def get_context_instances(cls, action):
         """Method to be optionally overridden by State Changes, adding context instances."""
         return {}
 

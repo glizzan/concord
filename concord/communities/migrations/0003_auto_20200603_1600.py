@@ -7,29 +7,31 @@ from django.apps import apps
 
 def postgres_migration_prep(apps, schema_editor):
 
-    # Find all community models that have a changing condition field, aka all
-    # communities that inherit from the abstract BaseCommunity model
+    ... # below is now breaking migrations, so commenting it out
 
-    from concord.communities.models import Community, DefaultCommunity
+    # # Find all community models that have a changing condition field, aka all
+    # # communities that inherit from the abstract BaseCommunity model
 
-    model_list = [Community, DefaultCommunity]
-    # if hasattr(settings, "ALTERNATIVE_COMMUNITY_MODELS"):
-    #     for model in settings.ALTERNATIVE_COMMUNITY_MODELS:
-    #         model_class = apps.get_model(model["app_name"], model["model_name"])
-    #         model_list.append(model_class)
+    # from concord.communities.models import Community, DefaultCommunity
 
-    # For all community objects in the DB, give them a default template field
-    # need to get all that have is_community attr
+    # model_list = [Community, DefaultCommunity]
+    # # if hasattr(settings, "ALTERNATIVE_COMMUNITY_MODELS"):
+    # #     for model in settings.ALTERNATIVE_COMMUNITY_MODELS:
+    # #         model_class = apps.get_model(model["app_name"], model["model_name"])
+    # #         model_list.append(model_class)
 
-    from concord.actions.customfields import Template
+    # # For all community objects in the DB, give them a default template field
+    # # need to get all that have is_community attr
 
-    for model in model_list:
+    # from concord.actions.customfields import Template
 
-        update_parameters = {
-            "owner_condition": Template(system=True),
-            "governor_condition": Template(system=True)
-        }
-        model.objects.update(**update_parameters)
+    # for model in model_list:
+
+    #     update_parameters = {
+    #         "owner_condition": Template(system=True),
+    #         "governor_condition": Template(system=True)
+    #     }
+    #     model.objects.update(**update_parameters)
 
 
 

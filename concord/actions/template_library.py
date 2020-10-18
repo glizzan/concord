@@ -106,7 +106,7 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
                             "permission_actors": "{{nested:context.simplelist.creator||to_pk_in_list}}"},
                            {"permission_type": Changes().Conditionals.Reject,
                             "permission_actors": "{{nested:context.simplelist.creator||to_pk_in_list}}"}]
-        action_3 = client.PermissionResource.add_condition_to_permission(
+        action_3 = client.Conditional.add_condition(
             condition_type="approvalcondition", permission_data=permission_data
         )
         action_3.target = "{{previous.1.result}}"
@@ -116,9 +116,8 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
             permission_roles=['members'], permission_type=Changes().Resources.EditRow)
 
         # Step 5: set approval condition on permission
-        action_5 = client.PermissionResource.add_condition_to_permission(
-            condition_type="approvalcondition", permission_data=permission_data
-        )
+        action_5 = client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
         action_5.target = "{{previous.3.result}}"
 
         # Step 6: give members permission to edit row
@@ -126,9 +125,8 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
             permission_roles=['members'], permission_type=Changes().Resources.DeleteRow)
 
         # Step 7: set approval condition on permission
-        action_7 = client.PermissionResource.add_condition_to_permission(
-            condition_type="approvalcondition", permission_data=permission_data
-        )
+        action_7 = client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
         action_7.target = "{{previous.5.result}}"
 
         return [action_1, action_2, action_3, action_4, action_5, action_6, action_7]
@@ -168,7 +166,7 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
 
         # Step 5: add vote condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.AddVote, "permission_roles": ["owners"]}]
-        action_5 = client.Community.add_leadership_condition(
+        action_5 = client.Conditional.add_condition(
             condition_type="votecondition", leadership_type="owner", permission_data=permission_data)
 
         # Step 6: create role 'membership admins'
@@ -188,9 +186,8 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
             "permission_type": Changes().Conditionals.Approve,
             "permission_roles": ["membership admins"]
         }]
-        action_9 = client.PermissionResource.add_condition_to_permission(
-            condition_type="approvalcondition", permission_data=permission_data
-        )
+        action_9 = client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
         action_9.target = "{{previous.7.result}}"
 
         return [action_1, action_2, action_3, action_4, action_5, action_6, action_7, action_8, action_9]
@@ -230,7 +227,7 @@ class CommunityCoreTeamTemplate(TemplateLibraryObject):
         # Step 5: add approval condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.Approve, "permission_roles": ["core team"]},
                            {"permission_type": Changes().Conditionals.Reject, "permission_roles": ["core team"]}]
-        action_5 = client.Community.add_leadership_condition(
+        action_5 = client.Conditional.add_condition(
             condition_type="approvalcondition", leadership_type="owner", permission_data=permission_data)
 
         # Step 6: add anyone can join permission
@@ -285,7 +282,7 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
                           "require_majority": "{{supplied_fields.require_majority}}",
                           "publicize_votes": "{{supplied_fields.publicize_votes}}",
                           "voting_period": "{{supplied_fields.voting_period}}"}
-        action_4 = client.Community.add_leadership_condition(
+        action_4 = client.Conditional.add_condition(
             condition_type="votecondition", leadership_type="owner", condition_data=condition_data,
             permission_data=permission_data)
         action_4.target = "{{context.action.target}}"
@@ -326,7 +323,7 @@ class InviteOnlyMembershipTemplate(TemplateLibraryObject):
                             "permission_actors": "{{nested:context.action.change.member_pk_list}}"},
                            {"permission_type": Changes().Conditionals.Reject,
                             "permission_actors": "{{nested:context.action.change.member_pk_list}}"}]
-        action_2 = client.PermissionResource.add_condition_to_permission(
+        action_2 = client.Conditional.add_condition(
             condition_type="approvalcondition", permission_data=permission_data)
         action_2.target = "{{previous.0.result}}"
 
@@ -359,7 +356,7 @@ class AnyoneCanRequestMembershipTemplate(TemplateLibraryObject):
             "permission_actors": "{{supplied_fields.approve_permission_actors}}",
             "permission_roles": "{{supplied_fields.approve_permission_roles}}"
         }]
-        action_2 = client.PermissionResource.add_condition_to_permission(
+        action_2 = client.Conditional.add_condition(
             condition_type="approvalcondition", permission_data=permission_data
         )
         action_2.target = "{{previous.0.result}}"

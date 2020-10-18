@@ -2,13 +2,13 @@
 
 import logging
 
-from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.state_changes import BaseStateChange, InputField
 from concord.permission_resources.models import PermissionsItem
-from concord.actions.text_utils import condition_template_to_text, get_verb_given_permission_type
-from concord.actions.utils import get_state_change_object, Client
-from concord.permission_resources.models import Template
+from concord.actions.text_utils import get_verb_given_permission_type
+from concord.actions.utils import get_state_change_object
+from concord.actions.models import TemplateModel
 from concord.permission_resources.utils import delete_permissions_on_target
 
 
@@ -442,114 +442,6 @@ class DisableAnyoneStateChange(BaseStateChange):
         return target
 
 
-class AddPermissionConditionStateChange(BaseStateChange):
-    """State change to add a condition to a permission."""
-    description = "Add condition to permission"
-    section = "Permissions"
-    input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
-                    InputField(name="condition_data", type="DictField", required=True, validate=False),
-                    InputField(name="permission_data", type="DictField", required=True, validate=False)]
-
-    def __init__(self, *, condition_type, condition_data, permission_data):
-        self.condition_type = condition_type
-        self.condition_data = condition_data if condition_data else {}
-        self.permission_data = permission_data if permission_data else []
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
-    def description_present_tense(self):
-        return f"add condition {self.condition_type} to permission"
-
-    def description_past_tense(self):
-        return f"added condition {self.condition_type} to permission"
-
-    def generate_mock_actions(self, actor, permission):
-        """Helper method with template generation logic, since we're using it in both validate and implement.
-        The actions below are stored within the template, and copied+instantiated when a separate action triggers
-        the permission to do so."""
-
-        client = Client(actor=actor)
-        client.Conditional.mode = "mock"
-        client.PermissionResource.mode = "mock"
-
-        mock_action_list = []
-        action_1 = client.Conditional.set_condition_on_action(
-            condition_type=self.condition_type, condition_data=self.condition_data,
-            permission_data=self.permission_data, permission_pk=permission.pk)
-        action_1.target = "{{context.action}}"
-        mock_action_list.append(action_1)
-
-        client.PermissionResource.target = action_1
-        for permission_item_data in self.permission_data:
-            next_action = client.PermissionResource.add_permission(**permission_item_data)
-            next_action.target = "{{previous.0.result}}"
-            mock_action_list.append(next_action)
-
-        return mock_action_list
-
-    def validate(self, actor, target):
-
-        if not super().validate(actor=actor, target=target):
-            return False
-
-        if not self.condition_type:
-            self.set_validation_error(message="condition_type cannot be None")
-            return False
-
-        if not Client().Conditional.is_valid_condition_type(self.condition_type):
-            self.set_validation_error(message=f"condition_type must be a valid type not {self.condition_type}")
-            return False
-
-        try:
-            self.generate_mock_actions(actor, target)
-            return True
-        except ValidationError as error:
-            self.set_validation_error(message=error.message)
-            return False
-
-    def implement(self, actor, target):
-
-        target.condition.action_list = self.generate_mock_actions(actor, target)
-        condition_action = target.condition.action_list[0]
-        permissions_actions = target.condition.action_list[1:]
-
-        target.condition.description = condition_template_to_text(condition_action, permissions_actions)
-
-        target.save()
-        return target
-
-
-class RemovePermissionConditionStateChange(BaseStateChange):
-    """State change to remove a condition from a permission."""
-    description = "Remove condition from permission"
-    section = "Permissions"
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
-
-    def description_present_tense(self):
-        return "remove condition from permission"
-
-    def description_past_tense(self):
-        return "removed condition from permission"
-
-    def implement(self, actor, target):
-        target.condition.action_list = []
-        target.save()
-        return target
-
-
 ##############################
 ### Template State Changes ###
 ##############################
@@ -569,7 +461,7 @@ class EditTemplateStateChange(BaseStateChange):
 
     @classmethod
     def get_allowable_targets(cls):
-        return [Template]
+        return [TemplateModel]
 
     @classmethod
     def get_settable_classes(cls):

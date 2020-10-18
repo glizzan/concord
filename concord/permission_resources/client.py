@@ -102,9 +102,9 @@ class PermissionResourceClient(BaseClient):
                 matching_permissions.append(permission)
         return matching_permissions
 
-    def get_condition_data(self, info="all") -> dict:
+    def get_condition_data(self) -> dict:
         """Get condition data on the target."""
-        return self.target.get_condition_data(info)
+        return self.target.get_condition_data()
 
     def get_settable_permissions_for_model(self, model_class):
         """Given a model class (or, optionally, an instance of a model class), gets the state change objects
@@ -177,17 +177,6 @@ class PermissionResourceClient(BaseClient):
     def remove_anyone_from_permission(self):
         """Remove the ability for everyone to have the permission."""
         change = sc.DisableAnyoneStateChange()
-        return self.create_and_take_action(change)
-
-    def add_condition_to_permission(self, *, condition_type, condition_data=None, permission_data=None):
-        """Add a condition to the permission."""
-        change = sc.AddPermissionConditionStateChange(
-            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data)
-        return self.create_and_take_action(change)
-
-    def remove_condition_from_permission(self):
-        """Remove a condition from the permission."""
-        change = sc.RemovePermissionConditionStateChange()
         return self.create_and_take_action(change)
 
     # Complex/multiple state changes

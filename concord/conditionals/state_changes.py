@@ -2,119 +2,292 @@
 from django.core.exceptions import ValidationError
 
 from concord.actions.state_changes import BaseStateChange, InputField
-from concord.actions.utils import Client
+from concord.actions.utils import Client, get_state_change_object
 from concord.conditionals.models import VoteCondition, ApprovalCondition, ConsensusCondition
 from concord.actions.models import Action
+from concord.permission_resources.models import PermissionsItem
 
 
-###################################
-### All Condition State Changes ###
-###################################
+##########################################
+### Add/Remove Condition State Changes ###
+##########################################
 
 
-class SetConditionOnActionStateChange(BaseStateChange):
-    """State change which actually creates a condition item associated with a specific action. I'm not actually 100%
-    sure this should be a state change, since as far as I can tell this will always be triggered by the system
-    internally, but we're doing it this way for now.  Also not sure if this should be split up into permission
-    condition and leadership condition."""
-    description = "Set condition on action"
+class AddConditionStateChange(BaseStateChange):
+    """State change to add condition to permission or leadership role."""
+    description = "Add condition"
+    section = "Permissions"
     input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
-                    InputField(name="condition_data", type="DictField", required=False, validate=False),
-                    InputField(name="permission_data", type="DictField", required=False, validate=False),
-                    InputField(name="permission_pk", type="ObjectIDField", required=False, validate=False),
-                    InputField(name="community_pk", type="ObjectIDField", required=False, validate=False),
-                    InputField(name="leadership_type", type="CharField", required=False, validate=False)]
+                    InputField(name="condition_data", type="DictField", required=True, validate=False),
+                    InputField(name="permission_data", type="DictField", required=True, validate=False),
+                    InputField(name="leadership_type", type="CharField", required=True, validate=False)]
 
-    def __init__(self, *, condition_type, condition_data=None, permission_data=None, permission_pk=None,
-                 community_pk=None, leadership_type=None):
+    def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else {}
-        self.permission_data = permission_data if permission_data else {}
-        self.permission_pk = permission_pk
-        self.community_pk = community_pk
+        self.permission_data = permission_data if permission_data else []
         self.leadership_type = leadership_type
 
     @classmethod
     def get_allowable_targets(cls):
-        """Returns the classes that an action of this type may target."""
-        from concord.actions.models import Action
-        return [Action]
+        return cls.get_community_models() + [PermissionsItem]
 
-    def get_condition_class(self):
-        """Gets the condition class object given the condition type."""
-        return Client().Conditional.get_condition_class(condition_type=self.condition_type)
+    def description_present_tense(self):
+        target_string = self.leadership_type if self.leadership_type else "permission"
+        return f"add condition {self.condition_type} to {target_string}"
 
-    def get_condition_verb(self):
-        """Get the verb of the associated condition."""
-        return self.get_condition_class().verb_name
-
-    def get_owner(self):
-        """The owner of the condition should be the community in which it is created.  For now, this means
-        looking up permission and getting owner, or using community if community is set.
-
-        Note that if multiple community models are being used, and the community pk passed in is not the
-        primary/default model, this will break."""
-
-        if self.permission_pk:
-            permission = Client().PermissionResource.get_permission(pk=self.permission_pk)
-            return permission.get_owner()
-
-        if self.community_pk:
-            return Client().Community.get_community(community_pk=self.community_pk)
-
-    def generate_source_id(self):
-        """Generates a source_id to use when creating condition item."""
-        source_pk = self.permission_pk if self.permission_pk else self.community_pk
-        source_type = "perm" if self.permission_pk else self.leadership_type
-        return source_type + "_" + str(source_pk)
+    def description_past_tense(self):
+        target_string = self.leadership_type if self.leadership_type else "permission"
+        return f"added condition {self.condition_type} to {target_string}"
 
     def validate(self, actor, target):
+
         if not super().validate(actor=actor, target=target):
             return False
 
-        if not self.permission_pk and not self.community_pk:
-            self.set_validation_error(message="Must supply either permission_pk or community_pk when setting condition")
-            return False
-
-        if self.community_pk and not self.leadership_type:
-            self.set_validation_error(message="Must supply leadership type ('own' or 'gov') if conditioning community")
-            return False
-
-        if target.__class__.__name__ not in ["Action"]:  # allow "MockAction"?
-            self.set_validation_error(message="Target must be an action")
-            return False
-
         if not self.condition_type:
-            self.set_validation_error(message="You must set a condition type")
+            self.set_validation_error(message="condition_type cannont be None")
             return False
 
         if not Client().Conditional.is_valid_condition_type(self.condition_type):
-            self.set_validation_error(message=f"condition_type must be a valid type not {self.condition_type}")
+            message = f"condition_type must be a valid condition class not {self.condition_type}"
+            self.set_validation_error(message=message)
             return False
 
-        try:
-            condition_class = self.get_condition_class()
-            source_id = self.generate_source_id()
-            condition_class(action=target.pk, source_id=source_id, owner=self.get_owner(), **self.condition_data)
-            return True
-        except ValidationError as error:
-            self.set_validation_error(message=error.message)
-            return False
+        if hasattr(target, "is_community") and target.is_community:
+
+            if not self.leadership_type:
+                self.set_validation_error(message="leadership_type cannot be None")
+                return False
+
+            if self.leadership_type not in ["owner", "governor"]:
+                self.set_validation_error(message="leadership_type must be 'owner' or 'governor'")
+                return False
+
+        ### validate condition_data
+
+        condition_model = Client(actor="system").Conditional.get_condition_class(condition_type=self.condition_type)
+        model_instance = condition_model()
+
+        for field_name, field_value in self.condition_data.items():
+
+            if type(field_value) == str and field_value[:2] == "{{":
+                continue  # don't validate if it's a replaced field
+
+            try:
+                field_instance = model_instance._meta.get_field(field_name)
+            except AttributeError:
+                self.set_validation_error(message=f"There is no field {field_name} on condition {self.condition_type}")
+                return False
+
+            try:
+                field_instance.clean(field_value, model_instance)
+            except ValidationError:
+                self.set_validation_error(message=f"{field_value} is not valid value for {field_name}")
+                return False
+
+        ### validate permission_data
+
+        for permission in self.permission_data:
+
+            state_change_object = get_state_change_object(permission["permission_type"])
+            if condition_model not in state_change_object.get_allowable_targets():
+                message = f"Permission type {permission['permission_type']} cannot be set on {condition_model}"
+                self.set_validation_error(message=message)
+                return False
+
+            if "permission_roles" not in permission and "permission_actors" not in permission:
+                message = f"Must supply either roles or actors to permission {permission['permission_type']}"
+                self.set_validation_error(message=message)
+                return False
+
+            for field_name, field_value in permission.get("permission_configuration", {}):
+                if field_name not in [field.name for field in state_change_object.input_fields]:
+                    message = f"{field_name} is not an input field for {permission['permission_type']}"
+                    self.set_validation_error(message=message)
+                    return False
+                # TODO: check field type specified in change object's InputFields against field_value
+                # (skipping replaced fields)
+
+        return True
 
     def implement(self, actor, target):
 
-        condition_class = self.get_condition_class()
-        source_id = self.generate_source_id()
+        attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
+        manager = getattr(target, attr_name)
 
-        condition_data = self.condition_data if self.condition_data else {}  # replaces none so ** doesn't give an error
-        condition_instance = condition_class.objects.create(
-            action=target.pk, source_id=source_id, owner=self.get_owner(), **condition_data)
+        if not manager:
+            from concord.conditionals.models import ConditionManager
+            owner = target.get_owner()
+            set_on = self.leadership_type if self.leadership_type else "permission"
+            manager = ConditionManager.objects.create(owner=owner, community=owner.pk, set_on=set_on)
+            setattr(target, attr_name, manager)
+            target.save()
 
-        condition_instance.initialize_condition(target, condition_data, self.permission_data,
-                                                self.leadership_type)
-        condition_instance.save()
+        condition_data = {"condition_type": self.condition_type, "condition_data": self.condition_data,
+                          "permission_data": self.permission_data}
+        manager.add_condition(condition_data)
+        manager.save()
 
-        return condition_instance
+        return manager
+
+
+class EditConditionStateChange(BaseStateChange):
+    """State change to add condition to permission or leadership role."""
+    description = "Add condition"
+    section = "Permissions"
+    input_fields = [InputField(name="element_id", type="IntegerField", required=True, validate=False),
+                    InputField(name="condition_data", type="DictField", required=False, validate=False),
+                    InputField(name="permission_data", type="DictField", required=False, validate=False),
+                    InputField(name="leadership_type", type="CharField", required=False, validate=False)]
+
+    def __init__(self, *, element_id, condition_data=None, permission_data=None, leadership_type=None):
+        self.element_id = element_id
+        self.condition_data = condition_data if condition_data else {}
+        self.permission_data = permission_data if permission_data else []
+        self.leadership_type = leadership_type
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return cls.get_community_models() + [PermissionsItem]
+
+    def description_present_tense(self):
+        target_string = self.leadership_type if self.leadership_type else "permission"
+        return f"edit {target_string} condition {self.element_id}"
+
+    def description_past_tense(self):
+        target_string = self.leadership_type if self.leadership_type else "permission"
+        return f"edited {target_string} condition {self.element_id}"
+
+    def validate(self, actor, target):
+
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if hasattr(target, "is_community") and target.is_community:
+
+            if not self.leadership_type:
+                self.set_validation_error(message="leadership_type cannot be None")
+                return False
+
+            if self.leadership_type not in ["owner", "governor"]:
+                self.set_validation_error(message="leadership_type must be 'owner' or 'governor'")
+                return False
+
+        if self.leadership_type:
+            condition_manager = getattr(target, self.leadership_type + "_condition")
+        else:
+            condition_manager = target.condition
+
+        condition_element = condition_manager.get_condition_dataclass(self.element_id)
+
+        condition_model = Client(actor="system").Conditional.get_condition_class(
+            condition_type=condition_element.data["condition_type"])
+        model_instance = condition_model()
+
+        ### validate condition_data
+        for field_name, field_value in self.condition_data.items():
+
+            if type(field_value) == str and field_value[:2] == "{{":
+                continue  # don't validate if it's a replaced field
+
+            try:
+                field_instance = model_instance._meta.get_field(field_name)
+            except AttributeError:
+                self.set_validation_error(message=f"There is no field {field_name} on condition {self.condition_type}")
+                return False
+
+            try:
+                field_instance.clean(field_value, model_instance)
+            except ValidationError:
+                self.set_validation_error(message=f"{field_value} is not valid value for {field_name}")
+                return False
+
+        ## validate permission data
+        for permission in self.permission_data:
+
+            state_change_object = get_state_change_object(permission["permission_type"])
+            if condition_model not in state_change_object.get_allowable_targets():
+                message = f"Permission type {permission['permission_type']} cannot be set on {condition_model}"
+                self.set_validation_error(message=message)
+                return False
+
+            if "permission_roles" not in permission and "permission_actors" not in permission:
+                message = f"Must supply either roles or actors to permission {permission['permission_type']}"
+                self.set_validation_error(message=message)
+                return False
+
+            for field_name, field_value in permission.get("permission_configuration", {}):
+                if field_name not in [field.name for field in state_change_object.input_fields]:
+                    message = f"{field_name} is not an input field for {permission['permission_type']}"
+                    self.set_validation_error(message=message)
+                    return False
+                # TODO: check field type specified in change object's InputFields against field_value
+                # (skipping replaced fields)
+
+        return True
+
+    def implement(self, actor, target):
+
+        attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
+        manager = getattr(target, attr_name)
+
+        if self.condition_data:
+            manager.edit_condition_by_key(self.element_id, "condition_data", self.condition_data)
+
+        if self.permission_data:
+            manager.edit_condition_by_key(self.element_id, "permission_data", self.permission_data)
+
+        manager.save()
+        return manager
+
+
+class RemoveConditionStateChange(BaseStateChange):
+    """State change to remove condition from Community."""
+    description = "Remove condition"
+    is_foundational = True
+    section = "Leadership"
+    input_fields = [InputField(name="leadership_type", type="CharField", required=True, validate=False),
+                    InputField(name="element_id", type="IntegerField", required=False, validate=False)]
+
+    def __init__(self, *, leadership_type, element_id=None):
+        self.leadership_type = leadership_type
+        self.element_id = element_id
+
+    @classmethod
+    def get_allowable_targets(cls):
+        return cls.get_community_models() + [PermissionsItem]
+
+    def description_present_tense(self):
+        target_string = self.leadership_type if self.leadership_type else "permission"
+        return f"remove condition from {target_string}"
+
+    def description_past_tense(self):
+        target_string = self.leadership_type if self.leadership_type else "permission"
+        return f"removed condition from {target_string}"
+
+    def validate(self, actor, target):
+
+        if not super().validate(actor=actor, target=target):
+            return False
+
+        if hasattr(target, "is_community") and target.is_community and not self.leadership_type:
+            self.set_validation_error(message="leadership_type cannot be None")
+            return False
+
+        return True
+
+    def implement(self, actor, target):
+
+        attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
+        manager = getattr(target, attr_name)
+
+        if self.element_id:
+            manager.remove_condition(self.element_id)
+            manager.save()
+            return manager
+        else:
+            manager.delete()
 
 
 ####################################

@@ -45,7 +45,6 @@ class Resolution:
         self.foundational_status = foundational_status
         self.specific_status = specific_status
         self.governing_status = governing_status
-        self.conditions = conditions if conditions else {}
         self.log = log if log else ""
         self.approved_through = approved_through
         self.approved_role = approved_role
@@ -146,52 +145,52 @@ class Resolution:
         if len(self.log) < 300:
             self.log = self.log + "  " + message if self.log else message
 
-    def condition_created(self, source_id):
-        """Marks a source_id as having a condition created for it."""
-        self.conditions[source_id] = True
-
-    def uncreated_conditions(self):
-        """Returns a list of source_ids corresponding to uncreated conditions."""
-        return [source_id for source_id, is_created in self.conditions.items() if not is_created]
-
-    def apply_condition_data(self, pipeline, permission, matched_role, condition_data):
+    def apply_condition_data(self, pipeline, permission, matched_role, condition_manager, action):
         """Updates resolution based on condition data."""
-
-        if condition_data["condition_item"]:
-            condition_name = condition_data["condition_item"].get_model_name()
-        else:
-            condition_name = "not created"
 
         check_string = f"permission {permission}" if permission else f"{pipeline} authority"
 
-        if condition_data["condition_status"] == "waiting":
-            log = f"waiting on condition '{condition_name}' for {check_string} (role {matched_role})"
-            self.set_waiting(pipeline=pipeline, log=log)
-        elif condition_data["condition_status"] == "not created":
-            log = f"{pipeline}: waiting on uncreated condition for {check_string} (role {matched_role})"
-            self.set_waiting(pipeline=pipeline, log=log)
-            self.conditions.update({condition_data["source_id"]: False})   # False since condition is not created
-        elif condition_data["condition_status"] == "approved":
-            self.approve_action(pipeline=pipeline, approved_role=matched_role, approved_condition=condition_name)
+        if condition_manager.condition_status(action) == "waiting":
 
-        return condition_name
+            uncreated_conditions = condition_manager.uncreated_conditions(action)
+            waiting_conditions = condition_manager.waiting_condition_names(action)
 
-    def process_resolution(self, pipeline, permission, passes, matched_role, condition_data):
+            if uncreated_conditions:
+                uncreated_string = f"uncreated condition(s) {uncreated_conditions}"
+                if not hasattr(self, "conditions"):
+                    self.conditions = []
+                self.conditions.append(condition_manager)
+            else:
+                uncreated_string = ""
+
+            waiting_string = f"created condition(s) {waiting_conditions}" if waiting_conditions else ""
+
+            and_string = " and " if uncreated_string and waiting_string else ""
+
+            log = f"waiting on {uncreated_string}{and_string}{waiting_string} for {check_string} (role {matched_role})"
+            self.set_waiting(pipeline=pipeline, log=log)
+
+        elif condition_manager.condition_status(action) == "approved":
+            self.approve_action(pipeline=pipeline, approved_role=matched_role,
+                                approved_condition=condition_manager.get_condition_names())
+
+    def process_resolution(self, pipeline, permission, passes, matched_role, condition_manager, action):
         """Parses the result of a permissions or conditions check and updates resolution accordingly."""
 
-        if condition_data:
-            condition_name = self.apply_condition_data(pipeline, permission, matched_role, condition_data)
+        if condition_manager:
+            self.apply_condition_data(pipeline, permission, matched_role, condition_manager, action)
 
-        if not condition_data and passes:
+        if not condition_manager and passes:
             self.approve_action(pipeline=pipeline, approved_role=matched_role)
 
         # If pipeline is specific, don't reject the action - we have more specific permissions to check
         if pipeline == "specific":
             return
 
-        if condition_data["condition_status"] == "rejected":
+        if condition_manager and condition_manager.condition_status(action) == "rejected":
             # should be true - we don't call here in foundational or governing unless we're checking conditions
-            log = f"action passed {pipeline} pipeline but was rejected by condition {condition_name}"
+            names = condition_manager.get_condition_names()
+            log = f"action passed {pipeline} pipeline but was rejected by condition {names}"
             self.reject_action(pipeline=pipeline, log=log)
 
 

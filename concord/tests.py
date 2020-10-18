@@ -1137,7 +1137,7 @@ class PermissionResourceUtilsTest(DataTestCase):
             permission_type=Changes().Permissions.AddRoleToPermission,
             permission_actors=[self.users.pinoe.pk]
         )
-        self.assertEquals(len(PermissionsItem.objects.all()), 4)
+        self.assertEquals(len(PermissionsItem.objects.all()), 5)
 
         # call delete_permissions_on_target
         delete_permissions_on_target(community)
@@ -2523,11 +2523,12 @@ class DefaultPermissionsTest(DataTestCase):
         # test community
         self.instance = self.client.Community.create_community(name="USWNT")
         items = self.client.PermissionResource.get_permissions_on_object(target_object=self.instance)
-        self.assertEquals(len(items), 2)
+        self.assertEquals(len(items), 3)
         self.assertCountEqual([item.change_type for item in items],
-                              [Changes().Resources.AddComment, Changes().Actions.ApplyTemplate])
+                              [Changes().Resources.AddComment, Changes().Actions.ApplyTemplate,
+                               Changes().Communities.AddMembers])
         self.assertEquals([item.roles.role_list for item in items],
-                          [["members"], ["members"]])
+                          [["members"], ["members"], []])
 
         # # test simplelist defaults
         # self.client.update_target_on_all(self.instance)

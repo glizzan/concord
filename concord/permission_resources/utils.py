@@ -67,8 +67,8 @@ def delete_permissions_on_target(target):
 def set_default_permissions(actor, instance):
     """Given an actor, target, and model, set the default permissions associated with that model."""
 
-    from concord.permission_resources.client import PermissionResourceClient
-    client = PermissionResourceClient(actor=actor, target=instance)
+    from concord.actions.utils import Client
+    client = Client(actor=actor, target=instance)
 
     if hasattr(instance, "is_community") and instance.is_community:
         model_type = "community"
@@ -79,4 +79,8 @@ def set_default_permissions(actor, instance):
 
     for permission in default_permissions.get(model_type, []):
         logger.debug(f"Adding permission with parameters {permission} to {instance}")
-        client.add_permission(**permission)
+        condition_data = permission.pop("condition", None)
+        action, permission = client.PermissionResource.add_permission(**permission)
+        if condition_data:
+            client.update_target_on_all(target=permission)
+            client.PermissionResource.add_condition_to_permission(**condition_data)

@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.customfields import Template
-from concord.actions.utils import Changes, Client
+from concord.utils.helpers import Changes, Client
 from concord.actions.models import TemplateModel
 
 
@@ -75,9 +75,10 @@ class TemplateLibraryObject(metaclass=ABCMeta):
         template_data = Template(action_list=self.get_and_process_action_list())
         scopes = json.dumps(self.scopes)
         supplied_fields = json.dumps(self.supplied_fields if self.supplied_fields else {})
-        return TemplateModel.objects.create(
+        t = TemplateModel.objects.create(
             template_data=template_data, user_description=self.get_description(), scopes=scopes,
             name=self.name, supplied_fields=supplied_fields, owner=self.get_superuser())
+        return t
 
 
 class SimpleListLimitedMemberTemplate(TemplateLibraryObject):

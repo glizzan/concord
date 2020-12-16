@@ -4,9 +4,9 @@ import logging
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from concord.resources.models import Resource, Item, Comment, SimpleList
-from concord.actions.state_changes import BaseStateChange, InputField
-
-from concord.actions.utils import get_all_permissioned_models
+from concord.actions.state_changes import BaseStateChange
+from concord.utils.lookups import get_all_permissioned_models
+from concord.utils import field_utils
 
 
 logger = logging.getLogger(__name__)
@@ -19,16 +19,23 @@ logger = logging.getLogger(__name__)
 
 class AddCommentStateChange(BaseStateChange):
     """State Change to add a comment."""
-    description = "Add comment"
+
+    change_description = "Add comment"
     section = "Comment"
+    model_based_validation = (Comment, ["text"])
     context_keys = ["commented_object"]
-    input_fields = [InputField(name="text", type="CharField", required=True, validate=True),
-                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False),
-                    InputField(name="target_type", type="CharField", required=False, validate=False)]
-    input_target = Comment
+    configurable_fields = ["original_creator_only", "target_type"]
+
+    # Fields
+    text = field_utils.CharField(label="Comment text", required=True)
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment")
+    target_type = field_utils.CharField(label="Add comments only to this type of target")
 
     def __init__(self, text, original_creator_only=False, target_type=None):
+        super().__init__()
         self.text = text
+        self.original_creator_only = original_creator_only
+        self.target_type = target_type
 
     def description_present_tense(self):
         return "add comment"
@@ -43,15 +50,6 @@ class AddCommentStateChange(BaseStateChange):
         commented_object = action.target
         model_name = commented_object.__class__.__name__.lower()
         return {"commented_object": commented_object, model_name: commented_object}
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"original_creator_only":
-                {"display": "Only allow the creator of the target of this comment to edit comment",
-                 "type": "BooleanField"},
-                "target_type":
-                {"display": "Limit the ability to add comments to a specific type of target",
-                 "type": "CharField"}}
 
     @classmethod
     def get_configured_field_text(cls, conf):
@@ -104,7 +102,7 @@ class AddCommentStateChange(BaseStateChange):
                 return False, f'target type {configuration["target_type"]} does not match {target_class}'
         return True, None
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         comment = Comment(text=self.text, commentor=actor)
         comment.commented_object = target
@@ -118,14 +116,19 @@ class AddCommentStateChange(BaseStateChange):
 
 class EditCommentStateChange(BaseStateChange):
     """State Change to edit a comment."""
-    description = "Edit comment"
+    change_description = "Edit comment"
     section = "Comment"
     context_keys = ["comment", "commented_object"]
-    input_fields = [InputField(name="text", type="CharField", required=True, validate=True),
-                    InputField(name="commenter_only", type="BooleanField", required=False, validate=False),
-                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
+    model_based_validation = (Comment, ["text"])
+    configurable_fields = ["original_creator_only", "commenter_only"]
+
+    # Fields
+    text = field_utils.CharField(label="Comment text", required=True)
+    commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment")
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment")
 
     def __init__(self, text, commenter_only=False, original_creator_only=False):
+        super().__init__()
         self.text = text
         self.commenter_only = commenter_only
         self.original_creator_only = original_creator_only
@@ -139,13 +142,6 @@ class EditCommentStateChange(BaseStateChange):
         """Comments may be made on any target - it's up to the front end to decide what comment functionality to
         expose to the user."""
         return cls.get_all_possible_targets()
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"commenter_only": {"display": "Only allow commenter to edit comment", "type": "BooleanField"},
-                "original_creator_only":
-                    {"display": "Only allow the creator of the target of this comment to edit comment",
-                     "type": "BooleanField"}}
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -206,7 +202,7 @@ class EditCommentStateChange(BaseStateChange):
     def description_past_tense(self):
         return "edited comment"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.text = self.text
         target.save()
         return target
@@ -214,13 +210,17 @@ class EditCommentStateChange(BaseStateChange):
 
 class DeleteCommentStateChange(BaseStateChange):
     """State Change to delete a comment."""
-    description = "Delete comment"
+    change_description = "Delete comment"
     section = "Comment"
     context_keys = ["comment", "commented_object"]
-    input_fields = [InputField(name="commenter_only", type="BooleanField", required=False, validate=False),
-                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
+    configurable_fields = ["original_creator_only", "commenter_only"]
+
+    # Fields
+    commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment")
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can delete comment")
 
     def __init__(self, commenter_only=False, original_creator_only=False):
+        super().__init__()
         self.commenter_only = commenter_only
         self.original_creator_only = original_creator_only
 
@@ -233,13 +233,6 @@ class DeleteCommentStateChange(BaseStateChange):
         """Comments may be made on any target - it's up to the front end to decide what comment functionality to
         expose to the user."""
         return cls.get_all_possible_targets()
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"commenter_only": {"display": "Only allow commenter to delete comment", "type": "BooleanField"},
-                "original_creator_only":
-                    {"display": "Only allow the creator of the target of this comment to delete comment",
-                     "type": "BooleanField"}}
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -300,7 +293,7 @@ class DeleteCommentStateChange(BaseStateChange):
     def description_past_tense(self):
         return "deleted comment"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         from concord.permission_resources.utils import delete_permissions_on_target
         pk = target.pk
         delete_permissions_on_target(target)
@@ -314,11 +307,15 @@ class DeleteCommentStateChange(BaseStateChange):
 
 class ChangeResourceNameStateChange(BaseStateChange):
     """State Change to change a resource name."""
-    description = "Change name of resource"
+    change_description = "Change name of resource"
     preposition = "for"
-    input_fields = [InputField(name="name", type="CharField", required=True, validate=True)]
+    model_based_validation = ("target", ["name"])
+
+    # Fields
+    name = field_utils.CharField(label="New name", required=True)
 
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     @classmethod
@@ -335,7 +332,7 @@ class ChangeResourceNameStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"changed name of resource to {self.name}"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.name = self.name
         target.save()
         return target
@@ -343,11 +340,14 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
 class AddItemStateChange(BaseStateChange):
     """State Change to add item to a resource."""
-    description = "Add item to resource"
-    input_fields = [InputField(name="name", type="CharField", required=True, validate=True)]
-    input_target = Item
+    change_description = "Add item to resource"
+    model_based_validation = (Item, ["name"])
+
+    # Fields
+    name = field_utils.CharField(label="New name", required=True)
 
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     @classmethod
@@ -366,7 +366,7 @@ class AddItemStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added item {self.name}"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         item = Item.objects.create(name=self.name, resource=target, owner=actor.default_community)
         self.set_default_permissions(actor, item)
         return item
@@ -374,7 +374,7 @@ class AddItemStateChange(BaseStateChange):
 
 class RemoveItemStateChange(BaseStateChange):
     """State Change to remove item from a resource."""
-    description = "Remove item from resource"
+    change_description = "Remove item from resource"
     preposition = "from"
 
     @classmethod
@@ -391,7 +391,7 @@ class RemoveItemStateChange(BaseStateChange):
     def description_past_tense(self):
         return "removed item"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         try:
             from concord.permission_resources.utils import delete_permissions_on_target
             delete_permissions_on_target(target)
@@ -409,14 +409,17 @@ class RemoveItemStateChange(BaseStateChange):
 
 class AddListStateChange(BaseStateChange):
     """State Change to create a list in a community (or other target)."""
-    description = "Add list"
+    change_description = "Add list"
     section = "List"
-    input_fields = [InputField(name="name", type="CharField", required=True, validate=True),
-                    InputField(name="configuration", type="DictField", required=True, validate=False),
-                    InputField(name="description", type="CharField", required=False, validate=True)]
-    input_target = SimpleList
+    model_based_validation = (SimpleList, ["name", "description"])
+
+    # Fields
+    name = field_utils.CharField(label="Name", required=True)
+    configuration = field_utils.DictField(label="Configuration", required=True)
+    description = field_utils.CharField(label="Description")
 
     def __init__(self, name, configuration, description=None):
+        super().__init__()
         self.name = name
         self.configuration = configuration
         self.description = description if description else ""
@@ -441,7 +444,7 @@ class AddListStateChange(BaseStateChange):
             self.set_validation_error(message=error.message)
             return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         simple_list = SimpleList(name=self.name, description=self.description, owner=target.get_owner(), creator=actor)
         simple_list.set_row_configuration(self.configuration)
         simple_list.save()
@@ -451,13 +454,17 @@ class AddListStateChange(BaseStateChange):
 
 class EditListStateChange(BaseStateChange):
     """State Change to edit an existing list."""
-    description = "Edit list"
+    change_description = "Edit list"
     section = "List"
-    input_fields = [InputField(name="name", type="CharField", required=False, validate=True),
-                    InputField(name="configuration", type="DictField", required=False, validate=False),
-                    InputField(name="description", type="CharField", required=False, validate=True)]
+    model_based_validation = ("target", ["name", "description"])
+
+    # Fields
+    name = field_utils.CharField(label="Name")
+    configuration = field_utils.DictField(label="Configuration")
+    description = field_utils.CharField(label="Description")
 
     def __init__(self, name=None, configuration=None, description=None):
+        super().__init__()
         self.name = name
         self.configuration = configuration
         self.description = description
@@ -492,7 +499,7 @@ class EditListStateChange(BaseStateChange):
                 return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.name = self.name if self.name else target.name
         target.description = self.description if self.description else target.description
         if self.configuration:
@@ -503,7 +510,7 @@ class EditListStateChange(BaseStateChange):
 
 class DeleteListStateChange(BaseStateChange):
     """State Change to delete an existing list."""
-    description = "Delete list"
+    change_description = "Delete list"
     section = "List"
 
     @classmethod
@@ -520,7 +527,7 @@ class DeleteListStateChange(BaseStateChange):
     def description_past_tense(self):
         return "deleted list"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         pk = target.pk
         target.delete()
         return pk
@@ -528,12 +535,15 @@ class DeleteListStateChange(BaseStateChange):
 
 class AddRowStateChange(BaseStateChange):
     """State Change to add a row to a list."""
-    description = "Add row to list"
+    change_description = "Add row to list"
     section = "List"
-    input_fields = [InputField(name="row_content", type="CharField", required=True, validate=False),
-                    InputField(name="index", type="IntegerField", required=False, validate=False)]
+
+    # Fields
+    row_content = field_utils.CharField(label="Content of row", required=True)
+    index = field_utils.IntegerField(label="Index of row")
 
     def __init__(self, row_content, index=None):
+        super().__init__()
         self.row_content = row_content
         self.index = index
 
@@ -564,7 +574,7 @@ class AddRowStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.add_row(self.row_content, self.index)
         target.save()
         return target
@@ -572,12 +582,13 @@ class AddRowStateChange(BaseStateChange):
 
 class EditRowStateChange(BaseStateChange):
     """State Change to edit a row in a list."""
-    description = "Edit row in list"
+    change_description = "Edit row in list"
     section = "List"
-    input_fields = [InputField(name="row_content", type="CharField", required=True, validate=False),
-                    InputField(name="index", type="IntegerField", required=True, validate=False)]
+    row_content = field_utils.CharField(label="Content of row", required=True)
+    index = field_utils.IntegerField(label="Index of row", required=True)
 
     def __init__(self, row_content, index):
+        super().__init__()
         self.row_content = row_content
         self.index = index
 
@@ -611,7 +622,7 @@ class EditRowStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.edit_row(self.row_content, self.index)
         target.save()
         return target
@@ -619,12 +630,16 @@ class EditRowStateChange(BaseStateChange):
 
 class MoveRowStateChange(BaseStateChange):
     """State Change to move a row in a list."""
-    description = "Move row in list"
+    change_description = "Move row in list"
     section = "List"
-    input_fields = [InputField(name="old_index", type="CharField", required=True, validate=False),
-                    InputField(name="new_index", type="IntegerField", required=True, validate=False)]
+
+    # Fields
+
+    old_index = field_utils.IntegerField(label="Old index of row", required=True)
+    new_index = field_utils.IntegerField(label="New index of row", required=True)
 
     def __init__(self, old_index, new_index):
+        super().__init__()
         self.old_index = old_index
         self.new_index = new_index
 
@@ -667,7 +682,7 @@ class MoveRowStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.move_row(self.old_index, self.new_index)
         target.save()
         return target
@@ -675,11 +690,14 @@ class MoveRowStateChange(BaseStateChange):
 
 class DeleteRowStateChange(BaseStateChange):
     """State Change to delete a row in a list."""
-    description = "Delete row in list"
+    change_description = "Delete row in list"
     section = "List"
-    input_fields = [InputField(name="index", type="IntegerField", required=True, validate=False)]
+
+    # Fields
+    index = field_utils.IntegerField(label="Index of row to delete", required=True)
 
     def __init__(self, index):
+        super().__init__()
         self.index = index
 
     @classmethod
@@ -707,7 +725,7 @@ class DeleteRowStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.delete_row(int(self.index))
         target.save()
         return target

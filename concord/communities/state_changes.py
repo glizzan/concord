@@ -1,8 +1,10 @@
 """Community state changes."""
 
-from concord.actions.state_changes import BaseStateChange, InputField
-from concord.actions.text_utils import list_to_text
-from concord.actions.utils import Client
+from concord.actions.state_changes import BaseStateChange
+from concord.utils.text_utils import list_to_text
+from concord.utils.helpers import Client
+
+from concord.utils import field_utils
 
 
 ###############################
@@ -12,12 +14,15 @@ from concord.actions.utils import Client
 
 class ChangeNameStateChange(BaseStateChange):
     """State change to change name of Community."""
-    description = "Change name of community"
+    change_description = "Change name of community"
     preposition = "for"
     section = "Community"
-    input_fields = [InputField(name="name", type="CharField", required=True, validate=True)]
+    model_based_validation = ("target", ["name"])
+
+    name = field_utils.CharField(label="New name", required=True)
 
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     @classmethod
@@ -30,7 +35,7 @@ class ChangeNameStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"changed name of community to {self.name}"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.name = self.name
         target.save()
         return target
@@ -38,22 +43,21 @@ class ChangeNameStateChange(BaseStateChange):
 
 class AddMembersStateChange(BaseStateChange):
     """State change to add members to Community."""
-    description = "Add members to community"
+    change_description = "Add members to community"
     section = "Community"
-    input_fields = [InputField(name="member_pk_list", type="ActorListField", required=True, validate=False),
-                    InputField(name="self_only", type="BooleanField", required=False, validate=False)]
+    configurable_fields = ["self_only"]
+
+    member_pk_list = field_utils.ActorListField(label="People to add as members", required=True)
+    self_only = field_utils.BooleanField(label="Only allow actor to add self as member")
 
     def __init__(self, member_pk_list, self_only=False):
+        super().__init__()
         self.member_pk_list = member_pk_list
         self.self_only = self_only
 
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_community_models()
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"self_only": {"display": "Only allow actors to add themselves", "type": "BooleanField"}}
 
     @classmethod
     def get_configured_field_text(cls, configuration):
@@ -96,7 +100,7 @@ class AddMembersStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_members(self.member_pk_list)
         target.save()
         return target
@@ -104,23 +108,22 @@ class AddMembersStateChange(BaseStateChange):
 
 class RemoveMembersStateChange(BaseStateChange):
     """State change to remove members from Community."""
-    description = "Remove members from community"
+    change_description = "Remove members from community"
     preposition = "from"
     section = "Community"
-    input_fields = [InputField(name="member_pk_list", type="ActorListField", required=True, validate=False),
-                    InputField(name="self_only", type="BooleanField", required=False, validate=False)]
+    configurable_fields = ["self_only"]
+
+    member_pk_list = field_utils.ActorListField(label="People to remove as members", required=True)
+    self_only = field_utils.BooleanField(label="Only allow actor to remove self as member")
 
     def __init__(self, member_pk_list, self_only=False):
+        super().__init__()
         self.member_pk_list = member_pk_list
         self.self_only = self_only
 
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_community_models()
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"self_only": {"display": "Only allow actors to remove themselves", "type": "BooleanField"}}
 
     def description_present_tense(self):
         return f"remove members {list_to_text(self.member_pk_list)}"
@@ -166,7 +169,7 @@ class RemoveMembersStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         # Remove members from custom roles
         for role_name in target.roles.get_custom_roles():
@@ -180,12 +183,14 @@ class RemoveMembersStateChange(BaseStateChange):
 
 class AddGovernorStateChange(BaseStateChange):
     """State change to add governor to Community."""
-    description = "Add governor of community"
+    change_description = "Add governor of community"
     is_foundational = True
     section = "Leadership"
-    input_fields = [InputField(name="governor_pk", type="ActorPKField", required=True, validate=False)]
+
+    governor_pk = field_utils.ActorField(label="Person to add as governor", required=True)
 
     def __init__(self, governor_pk):
+        super().__init__()
         self.governor_pk = governor_pk
 
     @classmethod
@@ -198,7 +203,7 @@ class AddGovernorStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added {self.governor_pk} as governor"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_governor(self.governor_pk)
         target.save()
         return target
@@ -206,13 +211,15 @@ class AddGovernorStateChange(BaseStateChange):
 
 class RemoveGovernorStateChange(BaseStateChange):
     """State change to remove governor from Community."""
-    description = "Remove governor from community"
+    change_description = "Remove governor from community"
     preposition = "from"
     section = "Leadership"
     is_foundational = True
-    input_fields = [InputField(name="governor_pk", type="ActorPKField", required=True, validate=False)]
+
+    governor_pk = field_utils.ActorField(label="Person to remove as governor", required=True)
 
     def __init__(self, governor_pk):
+        super().__init__()
         self.governor_pk = governor_pk
 
     @classmethod
@@ -225,7 +232,7 @@ class RemoveGovernorStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"removed {self.governor_pk} as governor"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.remove_governor(self.governor_pk)
         target.save()
         return target
@@ -233,12 +240,14 @@ class RemoveGovernorStateChange(BaseStateChange):
 
 class AddGovernorRoleStateChange(BaseStateChange):
     """State change to add governor role to Community."""
-    description = "Add role of governor to community"
+    change_description = "Add role of governor to community"
     is_foundational = True
     section = "Leadership"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to make governor role", required=True)
 
     def __init__(self, role_name):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -261,7 +270,7 @@ class AddGovernorRoleStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_governor_role(self.role_name)
         target.save()
         return target
@@ -269,13 +278,15 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
 class RemoveGovernorRoleStateChange(BaseStateChange):
     """State change to remove governor role from Community."""
-    description = "Remove role of governor from community"
+    change_description = "Remove role of governor from community"
     preposition = "from"
     section = "Leadership"
     is_foundational = True
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to remove from governor role", required=True)
 
     def __init__(self, role_name):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -288,7 +299,7 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"removed role {self.role_name} as governor"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.remove_governor_role(self.role_name)
         target.save()
         return target
@@ -296,12 +307,14 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
 class AddOwnerStateChange(BaseStateChange):
     """State change to add owner to Community."""
-    description = "Add owner to community"
+    change_description = "Add owner to community"
     is_foundational = True
     section = "Leadership"
-    input_fields = [InputField(name="owner_pk", type="ActorPKField", required=True, validate=False)]
+
+    owner_pk = field_utils.ActorField(label="Person to add as owner", required=True)
 
     def __init__(self, owner_pk):
+        super().__init__()
         self.owner_pk = owner_pk
 
     @classmethod
@@ -314,7 +327,7 @@ class AddOwnerStateChange(BaseStateChange):
     def description_past_tense(self):
         return f"added {self.owner_pk} as owner"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_owner(self.owner_pk)
         target.save()
         return target
@@ -322,13 +335,15 @@ class AddOwnerStateChange(BaseStateChange):
 
 class RemoveOwnerStateChange(BaseStateChange):
     """State change remove owner from Community."""
-    description = "Remove owner from community"
+    change_description = "Remove owner from community"
     preposition = "from"
     section = "Leadership"
     is_foundational = True
-    input_fields = [InputField(name="owner_pk", type="ActorPKField", required=True, validate=False)]
+
+    owner_pk = field_utils.ActorField(label="Person to remove as owner", required=True)
 
     def __init__(self, owner_pk):
+        super().__init__()
         self.owner_pk = owner_pk
 
     @classmethod
@@ -357,7 +372,7 @@ class RemoveOwnerStateChange(BaseStateChange):
         self.set_validation_error(message="Cannot remove owner as doing so would leave the community without an owner")
         return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.remove_owner(self.owner_pk)
         target.save()
         return target
@@ -365,12 +380,14 @@ class RemoveOwnerStateChange(BaseStateChange):
 
 class AddOwnerRoleStateChange(BaseStateChange):
     """State change to add owner role to Community."""
-    description = "Add role of owner to community"
+    change_description = "Add role of owner to community"
     is_foundational = True
     section = "Leadership"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to make owner role", required=True)
 
     def __init__(self, role_name):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -393,7 +410,7 @@ class AddOwnerRoleStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_owner_role(self.role_name)
         target.save()
         return target
@@ -401,13 +418,15 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
 class RemoveOwnerRoleStateChange(BaseStateChange):
     """State change to remove owner role from Community."""
-    description = "Remove role from owners of community"
+    change_description = "Remove role from owners of community"
     preposition = "from"
     section = "Leadership"
     is_foundational = True
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to remove as owner role", required=True)
 
     def __init__(self, role_name):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -442,7 +461,7 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
         self.set_validation_error(message="Cannot remove this role as doing so would leave the community " +
                                   "without an owner")
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.remove_owner_role(self.role_name)
         target.save()
         return target
@@ -450,11 +469,13 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
 class AddRoleStateChange(BaseStateChange):
     """State change to add role to Community."""
-    description = "Add role to community"
+    change_description = "Add role to community"
     section = "Community"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to add to community", required=True)
 
     def __init__(self, role_name):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -479,7 +500,7 @@ class AddRoleStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_role(self.role_name)
         target.save()
         return target
@@ -487,12 +508,14 @@ class AddRoleStateChange(BaseStateChange):
 
 class RemoveRoleStateChange(BaseStateChange):
     """State change to remove role from Community."""
-    description = "Remove role from community"
+    change_description = "Remove role from community"
     preposition = "from"
     section = "Community"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to remove from community", required=True)
 
     def __init__(self, role_name):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -542,7 +565,7 @@ class RemoveRoleStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.remove_role(self.role_name)
         target.save()
         return target
@@ -550,13 +573,16 @@ class RemoveRoleStateChange(BaseStateChange):
 
 class AddPeopleToRoleStateChange(BaseStateChange):
     """State change to add people to role in Community."""
-    description = "Add people to role in community"
+    change_description = "Add people to role in community"
     preposition = "in"
     section = "Community"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False),
-                    InputField(name="people_to_add", type="ActorListField", required=True, validate=False)]
+    configurable_fields = ["role_name"]
+
+    role_name = field_utils.RoleField(label="Role to add people to", required=True)
+    people_to_add = field_utils.ActorListField(label="People to add to role", required=True)
 
     def __init__(self, role_name, people_to_add):
+        super().__init__()
         self.role_name = role_name
         self.people_to_add = people_to_add
 
@@ -572,11 +598,6 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     @classmethod
     def get_allowable_targets(cls):
         return cls.get_community_models()
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"role_name": {"display": "Role people can be added to", "type": "RoleField",
-                              "other_data": {"multiple": False}}}
 
     @classmethod
     def get_uninstantiated_description(cls, **configuration_kwargs):
@@ -628,7 +649,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.add_people_to_role(self.role_name, self.people_to_add)
         target.save()
         return target
@@ -636,13 +657,15 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
 class RemovePeopleFromRoleStateChange(BaseStateChange):
     """State change to remove people from role in Community."""
-    description = "Remove people from role in community"
+    change_description = "Remove people from role in community"
     preposition = "in"
     section = "Community"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False),
-                    InputField(name="people_to_remove", type="ActorListField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to remove people from", required=True)
+    people_to_remove = field_utils.ActorListField(label="People to remove from role", required=True)
 
     def __init__(self, role_name, people_to_remove):
+        super().__init__()
         self.role_name = role_name
         self.people_to_remove = people_to_remove
 
@@ -693,7 +716,7 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
         return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)
         target.save()
         return target

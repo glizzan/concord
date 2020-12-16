@@ -9,7 +9,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 
 from concord.actions.models import Action, TemplateModel
-from concord.actions.utils import get_all_permissioned_models
+from concord.utils.lookups import get_all_permissioned_models
+from concord.utils.pipelines import action_pipeline
 from concord.actions import state_changes as sc
 
 
@@ -125,13 +126,13 @@ class BaseClient(object):
             return action, None
 
         if proposed:
-            action.resolution.meta_status = "proposed"
+            action.status = "proposed"
             return action, None
 
-        action.resolution.meta_status = "taken"
-        action, result = action.take_action()
+        action.status = "taken"
+        result = action_pipeline(action)
         if action.status == "rejected" and self.raise_error_if_failed:
-            raise ValueError(message=action.resolution.log)
+            raise ValueError(message=action.get_logs())
         return action, result
 
     def create_and_take_action(self, change, proposed=False):
@@ -247,14 +248,14 @@ class ActionClient(BaseClient):
         """Gets the action history of a target, filtered to only include actions resolved via the
         governing permission."""
         actions = self.get_action_history_given_target(target)
-        return [action for action in actions if action.resolution.resolved_through == "governing"]
+        return [action for action in actions if action.resolved_through == "governing"]
 
     def get_owning_actions_given_target(self, target=None) -> QuerySet:
         """Gets the action history of a target, filtered to only include actions resolved through
         foundational permission. Similar to filtering foundational_actions, but includes non-foundational
         actions taken on targets with the foundational permission enabled."""
         actions = self.get_action_history_given_target(target)
-        return [action for action in actions if action.resolution.resolved_through == "foundational"]
+        return [action for action in actions if action.resolved_through == "foundational"]
 
     # Indirect change of state
 
@@ -264,8 +265,8 @@ class ActionClient(BaseClient):
             logger.warn("Take_action called with neither action nor pk")
         action = action if action else self.get_action_given_pk(pk=pk)
         if action.status in ["created", "proposed"]:
-            action.resolution.meta_status = "taken"
-        action.take_action()
+            action.status = "taken"
+        action_pipeline(action)
 
 
 class TemplateClient(BaseClient):
@@ -317,6 +318,6 @@ class TemplateClient(BaseClient):
             return action, None
 
         description = template_model.get_template_breakdown(trigger_action=action, supplied_field_data=supplied_fields)
-        action.resolution.template_info = description
+        action.template_info = description
         action.save()
         return action, result

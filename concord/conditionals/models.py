@@ -10,10 +10,9 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from concord.actions.models import PermissionedModel
-from concord.actions.utils import Changes, Client, get_all_conditions, replacer, get_state_change_object
-from concord.conditionals import utils
+from concord.conditionals import utils, forms
+from concord.utils import helpers
 from concord.conditionals.management.commands.check_condition_status import retry_action_signal
-from concord.permission_resources.models import PermissionsItem
 
 
 ##################################
@@ -25,7 +24,6 @@ from concord.permission_resources.models import PermissionsItem
 class ConditionData:
     data: dict
     mode: str = "acceptance"
-    metadata: dict = None
 
 
 class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model here?
@@ -37,6 +35,7 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
     options:
 
         acceptance: {condition_type: X, condition_data: {}, permission_data: {}}
+        filter: {filter_type: X, filter_data: {}}
 
     For clarity's sake, any ConditionModel is refered to as an "instance" and the dictionaries/dataclass obj's
     corresponding to them are referred to as a "dataclass".
@@ -50,6 +49,8 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
     )
     set_on = models.CharField(max_length=10, choices=SET_ON_CHOICES)
 
+    # get methods
+
     def get_condition_dataclasses(self):
         if self.conditions:
             condition_dataclasses = json.loads(self.conditions)
@@ -60,6 +61,29 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
         condition_dataclasses = self.get_condition_dataclasses()
         return condition_dataclasses[element_id]
 
+    def get_element_ids(self):
+        condition_dataclasses = self.get_condition_dataclasses()
+        return [element_id for element_id, dataclass in condition_dataclasses.items()]
+
+    def get_condition_names(self):
+        names = []
+        for unique_id, condition_dataclass in self.get_condition_dataclasses().items():
+            names.append(condition_dataclass.data["condition_type"])
+        return ", ".join(names)
+
+    def get_name_given_element_id(self, element_id):
+        condition_dataclass = self.get_condition_dataclasses()
+        return condition_dataclass[element_id].data["condition_type"]
+
+    def get_condition_form_data(self):
+        return forms.condition_manager_form(self)
+
+    # edit methods
+
+    def set_conditions(self, condition_dataclasses):
+        conditions = {element_id: asdict(data) for element_id, data in condition_dataclasses.items()}
+        self.conditions = json.dumps(conditions)
+
     def clean_permission_data(self, permission_data):
         for perm in permission_data:
             if "permission_actors" in perm and perm["permission_actors"] is None:
@@ -68,19 +92,22 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
                 del(perm["permission_roles"])
         return permission_data
 
-    def set_conditions(self, condition_dataclasses):
-        conditions = {element_id: asdict(data) for element_id, data in condition_dataclasses.items()}
-        self.conditions = json.dumps(conditions)
+    def prep_condition(self, condition, mode):
+        if mode == "acceptance":
+            condition["permission_data"] = self.clean_permission_data(condition["permission_data"])
+            return ConditionData(data=condition)
+        if mode == "filter":
+            return ConditionData(data=condition, mode="filter")
 
-    def add_condition(self, condition):
-        condition["permission_data"] = self.clean_permission_data(condition["permission_data"])
+    def add_condition(self, condition, mode="acceptance"):
         condition_dataclasses = self.get_condition_dataclasses()
-        condition_dataclasses.update({random.getrandbits(20): ConditionData(data=condition)})
+        condition_dataclasses.update({random.getrandbits(20): self.prep_condition(condition, mode)})
         self.set_conditions(condition_dataclasses)
 
     def edit_condition(self, element_id, condition_data):
         condition_dataclasses = self.get_condition_dataclasses()
-        condition_data["permission_data"] = self.clean_permission_data(condition_data["permission_data"])
+        if condition_dataclasses[element_id].mode == "acceptance":
+            condition_data["permission_data"] = self.clean_permission_data(condition_data["permission_data"])
         condition_dataclasses[element_id].data = condition_data
         self.set_conditions(condition_dataclasses)
 
@@ -95,141 +122,6 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
         condition_dataclasses = self.get_condition_dataclasses()
         condition_dataclasses.pop(element_id)
         self.set_conditions(condition_dataclasses)
-
-    def get_element_ids(self):
-        condition_dataclasses = self.get_condition_dataclasses()
-        return [element_id for element_id, dataclass in condition_dataclasses.items()]
-
-    def get_condition_names(self):
-        names = []
-        for unique_id, condition_dataclass in self.get_condition_dataclasses().items():
-            names.append(condition_dataclass.data["condition_type"])
-        return ", ".join(names)
-
-    def get_condition_instances(self, action, create=False):
-        condition_instances = {}
-        for element_id, condition_dataclass in self.get_condition_dataclasses().items():
-            condition_instance = self.lookup_condition(element_id, condition_dataclass, action)
-            if not condition_instance and create:
-                condition_instance = self.create_condition(element_id, condition_dataclass, action)
-            condition_instances.update({element_id: condition_instance})
-        return condition_instances
-
-    def get_condition_model(self, condition_type):
-        for condition_model in get_all_conditions():
-            if condition_model.__name__.lower() == condition_type.lower():
-                return condition_model
-
-    def lookup_condition(self, element_id, condition_dataclass, action):
-        if condition_dataclass.mode == "acceptance":
-            condition_model = self.get_condition_model(condition_dataclass.data["condition_type"])
-            instances = condition_model.objects.filter(action=action.pk, source=self.pk, element_id=element_id)
-            return instances[0] if instances else None
-
-    def create_condition(self, element_id, condition_dataclass, action):
-
-        # replace fields in condition data
-        context = {"context": {"action": action}}
-        for field_name, field_value in condition_dataclass.data["condition_data"].items():
-            result = replacer(field_name, field_value, context)
-            condition_dataclass.data["condition_data"][field_name] = result if result != ... else field_value
-
-        # replace fields in permission data
-        for index, permission in enumerate(condition_dataclass.data["permission_data"]):
-            change_object = get_state_change_object(permission["permission_type"])
-            context = {"context": change_object.all_context_instances(action)}
-            for field_name, field_value in permission.items():
-                result = replacer(field_name, field_value, context)
-                result = result if result != ... else field_value
-                condition_dataclass.data["permission_data"][index][field_name] = result
-
-        if condition_dataclass.mode == "acceptance":
-
-            condition_model = self.get_condition_model(condition_dataclass.data["condition_type"])
-            condition_instance = condition_model(action=action.pk, source=self.pk, element_id=element_id,
-                                                 **condition_dataclass.data["condition_data"])
-            condition_instance.owner = self.get_owner()
-            condition_instance.initialize_condition(action.target, condition_dataclass, self.set_on)
-            condition_instance.save()
-
-            for permission in condition_dataclass.data["permission_data"]:
-                permission_item = PermissionsItem()
-                permission_item.set_fields(
-                    owner=self.get_owner(), permitted_object=condition_instance,
-                    change_type=permission["permission_type"], actors=permission.get("permission_actors", []),
-                    roles=permission.get("permission_roles", []),
-                    configuration=permission.get("permission_configuration", {}))
-                permission_item.save()
-
-            return condition_instance
-
-    def get_condition_statuses(self, action):
-        condition_statuses = []
-        condition_instances = self.get_condition_instances(action)
-        for element_id, condition_instance in condition_instances.items():
-            condition_statuses.append(condition_instance.condition_status() if condition_instance else "not created")
-        return condition_statuses
-
-    def condition_status(self, action):
-        condition_statuses = self.get_condition_statuses(action)
-        if "rejected" in condition_statuses:
-            return "rejected"
-        if "waiting" in condition_statuses or "not created" in condition_statuses:
-            return "waiting"
-        return "approved"
-
-    def create_uncreated_conditions(self, action):
-        return self.get_condition_instances(action, create=True)
-
-    def get_name_given_element_id(self, element_id):
-        condition_dataclass = self.get_condition_dataclasses()
-        return condition_dataclass[element_id].data["condition_type"]
-
-    def uncreated_conditions(self, action):
-        uncreated_conditions = []
-        for element_id, condition_instance in self.get_condition_instances(action).items():
-            if not condition_instance:
-                uncreated_conditions.append(self.get_name_given_element_id(element_id))
-        return ", ".join(uncreated_conditions)
-
-    def waiting_conditions(self, action):
-        waiting_conditions = []
-        for element_id, condition_instance in self.get_condition_instances(action).items():
-            if condition_instance and condition_instance.condition_status() == "waiting":
-                waiting_conditions.append(condition_instance)
-        return waiting_conditions
-
-    def waiting_condition_names(self, action):
-        waiting_conditions = self.waiting_conditions(action)
-        return ", ".join([condition.descriptive_name for condition in waiting_conditions])
-
-    def get_condition_form_data(self):
-
-        form = {}
-        how_to_pass_overall = []
-
-        for element_id, dc in self.get_condition_dataclasses().items():
-
-            condition_model = self.get_condition_model(dc.data["condition_type"])
-            condition_object = condition_model(**dc.data["condition_data"])
-            field_data = condition_object.get_configurable_fields_with_data(dc.data['permission_data'])
-            how_to_pass = condition_object.description_for_passing_condition(
-                permission_data=dc.data['permission_data'])
-            how_to_pass_overall.append(how_to_pass)
-
-            form.update({
-                element_id: {
-                    "type": condition_object.__class__.__name__,
-                    "display_name": condition_object.descriptive_name,
-                    "how_to_pass": how_to_pass,
-                    "fields": field_data,
-                    "element_id": element_id
-                }
-            })
-
-        form["how_to_pass_overall"] = ", and ".join(how_to_pass_overall)
-
-        return form
 
 
 class ConditionModel(PermissionedModel):
@@ -267,30 +159,11 @@ class ConditionModel(PermissionedModel):
 
     def get_action(self):
         """Get action associated with condition instance."""
-        return Client().Action.get_action_given_pk(pk=self.action)
+        return helpers.Client().Action.get_action_given_pk(pk=self.action)
 
     def get_configurable_fields_with_data(self, permission_data=None):
         """Returns form_dict with condition data set as value."""
-
-        form_dict = self.configurable_fields()
-
-        for field_name, field_dict in form_dict.items():
-
-            if field_dict["type"] in ["RoleField", "RoleListField"]:
-                permission = [perm for perm in permission_data if perm["permission_type"] == field_dict["full_name"]]
-                if permission and "permission_roles" in permission[0] and permission[0]["permission_roles"]:
-                    field_dict["value"] = permission[0]["permission_roles"]
-                continue
-
-            if field_dict["type"] in ["ActorField", "ActorListField"]:
-                permission = [perm for perm in permission_data if perm["permission_type"] == field_dict["full_name"]]
-                if permission and "permission_actors" in permission[0] and permission[0]["permission_actors"]:
-                    field_dict["value"] = permission[0]["permission_actors"]
-                continue
-
-            field_dict["value"] = getattr(self, field_name)
-
-        return form_dict
+        return forms.form_dict_for_fields_with_data(self, permission_data)
 
     def user_condition_status(self, user):
         """User condition status is a shortcut which helps us determine if a user can take an action on a condition
@@ -309,22 +182,7 @@ class ConditionModel(PermissionedModel):
     @classmethod
     def get_configurable_fields(cls):
         """Returns field values as list instead of dict"""
-        return [value for key, value in cls.configurable_fields().items()]
-
-    @classmethod
-    def get_configurable_field_names(cls):
-        """Return field names as list."""
-        return [key for key, value in cls.configurable_fields().items()]
-
-    @classmethod
-    def get_form_dict_for_field(cls, field):
-        """Get dictionary with form data for supplied field."""
-        return {
-            'field_name': field.name,
-            'type': field.__class__.__name__,
-            'required': "required" if field.blank else "",
-            'value': field.default
-        }
+        return [value for key, value in forms.form_dict_for_fields_with_data(cls).items()]
 
     # Methods models must implement themselves
 
@@ -379,30 +237,19 @@ class ApprovalCondition(ConditionModel):
     @classmethod
     def configurable_fields(cls):
         return {
-            "self_approval_allowed": {
-                "display": "Can individuals approve their own actions?", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("self_approval_allowed"))
-            },
-            "approve_roles": {
-                "display": "Roles who can approve", "type": "RoleListField", "required": False,
-                "can_depend": True, "value": None, "field_name": "approve_roles",
-                "full_name": Changes().Conditionals.Approve
-            },
-            "approve_actors": {
-                "display": "People who can approve", "type": "ActorListField", "required": False,
-                "can_depend": True, "value": None, "field_name": "approve_actors",
-                "full_name": Changes().Conditionals.Approve
-            },
-            "reject_roles": {
-                "display": "Roles who can reject", "type": "RoleListField", "required": False,
-                "can_depend": True, "value": None, "field_name": "reject_roles",
-                "full_name": Changes().Conditionals.Reject
-            },
-            "reject_actors": {
-                "display": "People who can reject", "type": "ActorListField", "required": False,
-                "can_depend": True, "value": None, "field_name": "reject_actors",
-                "full_name": Changes().Conditionals.Reject
-            }
+            "self_approval_allowed": {"display": "Can individuals approve their own actions?"},
+            "approve_roles":
+                {"display": "Roles who can approve", "type": "RoleListField",
+                 "full_name": helpers.Changes().Conditionals.Approve},
+            "approve_actors":
+                {"display": "People who can approve", "type": "ActorListField",
+                 "full_name": helpers.Changes().Conditionals.Approve},
+            "reject_roles":
+                {"display": "Roles who can reject", "type": "RoleListField",
+                 "full_name": helpers.Changes().Conditionals.Reject},
+            "reject_actors":
+                {"display": "People who can reject", "type": "ActorListField",
+                 "full_name": helpers.Changes().Conditionals.Reject}
         }
 
     def display_fields(self):
@@ -534,32 +381,16 @@ class VoteCondition(ConditionModel):
     def configurable_fields(cls):
         """Gets fields on condition which may be configured by user."""
         return {
-            "allow_abstain": {
-                "display": "Let people abstain from voting?", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("allow_abstain"))
-            },
-            "require_majority": {
-                "display": "Require a majority rather than a plurality to pass?", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("require_majority"))
-            },
-            "publicize_votes": {
-                "display": "Publicize peoples' votes?", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("publicize_votes"))
-            },
-            "voting_period": {
-                "display": "How long should the vote go on, in hours?", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("voting_period"))
-            },
-            "vote_roles": {
-                "display": "Roles who can vote", "type": "RoleListField", "can_depend": True,
-                "required": False, "value": None, "field_name": "vote_roles",
-                "full_name": Changes().Conditionals.AddVote
-            },
-            "vote_actors": {
-                "display": "People who can vote", "type": "ActorListField", "can_depend": True,
-                "required": False, "value": None, "field_name": "vote_actors",
-                "full_name": Changes().Conditionals.AddVote
-            },
+            "allow_abstain": {"display": "Let people abstain from voting?"},
+            "require_majority": {"display": "Require a majority rather than a plurality to pass?"},
+            "publicize_votes": {"display": "Publicize peoples' votes?"},
+            "voting_period": {"display": "How long should the vote go on, in hours?"},
+            "vote_roles":
+                {"display": "Roles who can vote", "type": "RoleListField",
+                 "full_name": helpers.Changes().Conditionals.AddVote},
+            "vote_actors":
+                {"display": "People who can vote", "type": "ActorListField",
+                 "full_name": helpers.Changes().Conditionals.AddVote}
         }
 
     def display_fields(self):
@@ -620,11 +451,11 @@ class ConsensusCondition(ConditionModel):
     def initialize_condition(self, target, condition_dataclass, set_on):
         """Called when creating the condition, and passed condition_data and permission data."""
 
-        client = Client(target=target.get_owner())
+        client = helpers.Client(target=target.get_owner())
         participants = set([])
 
         for permission in condition_dataclass.data.get("permission_data"):
-            if permission["permission_type"] == Changes().Conditionals.RespondConsensus:
+            if permission["permission_type"] == helpers.Changes().Conditionals.RespondConsensus:
                 if permission.get("permission_roles"):
                     for role in permission["permission_roles"]:
                         for user in client.Community.get_users_given_role(role_name=role):
@@ -745,34 +576,20 @@ class ConsensusCondition(ConditionModel):
     def configurable_fields(cls):
         """Gets fields on condition which may be configured by user."""
         return {
-            "is_strict": {
-                "display": "Use strict consensus mode? (Defaults to loose.)", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("is_strict"))
-            },
-            "minimum_duration": {
-                "display": "What is the minimum amount of time for discussion?", "can_depend": False,
-                **cls.get_form_dict_for_field(cls._meta.get_field("minimum_duration"))
-            },
-            "participant_roles": {
-                "display": "Roles who can participate in the discussion", "type": "RoleListField",
-                "can_depend": True, "required": False, "value": None, "field_name": "participant_roles",
-                "full_name": Changes().Conditionals.RespondConsensus
-            },
-            "participant_actors": {
-                "display": "People who can participate in the discussion", "type": "ActorListField",
-                "can_depend": True, "required": False, "value": None, "field_name": "participant_actors",
-                "full_name": Changes().Conditionals.RespondConsensus
-            },
-            "resolver_roles": {
-                "display": "Roles who can end discussion", "type": "RoleListField",
-                "can_depend": True, "required": False, "value": None, "field_name": "resolver_roles",
-                "full_name": Changes().Conditionals.ResolveConsensus
-            },
-            "resolver_actors": {
-                "display": "People who can end discussion", "type": "ActorListField", "can_depend": True,
-                "required": False, "value": None, "field_name": "resolver_actors",
-                "full_name": Changes().Conditionals.ResolveConsensus
-            }
+            "is_strict": {"display": "Use strict consensus mode? (Defaults to loose.)"},
+            "minimum_duration": {"display": "What is the minimum amount of time for discussion?"},
+            "participant_roles":
+                {"display": "Roles who can participate in the discussion", "type": "RoleListField",
+                 "full_name": helpers.Changes().Conditionals.RespondConsensus},
+            "participant_actors":
+                {"display": "People who can participate in the discussion", "type": "ActorListField",
+                 "full_name": helpers.Changes().Conditionals.RespondConsensus},
+            "resolver_roles":
+                {"display": "Roles who can end discussion", "type": "RoleListField",
+                 "full_name": helpers.Changes().Conditionals.ResolveConsensus},
+            "resolver_actors":
+                {"display": "People who can end discussion", "type": "ActorListField",
+                 "full_name": helpers.Changes().Conditionals.ResolveConsensus}
         }
 
 
@@ -782,7 +599,7 @@ class ConsensusCondition(ConditionModel):
 def retry_action(sender, instance, created, **kwargs):
     """Signal handler which retries the corresponding action or action container when condition has been updated."""
     if not created:
-        client = Client()
+        client = helpers.Client()
         action = client.Action.get_action_given_pk(pk=instance.action)
         client.Action.retake_action(action=action)
 

@@ -2,7 +2,7 @@ from django.utils import timezone
 from django.core.management.base import BaseCommand
 import django.dispatch
 
-from concord.actions.utils import get_all_conditions
+from concord.utils.lookups import get_all_conditions
 
 
 retry_action_signal = django.dispatch.Signal(providing_args=["instance"])

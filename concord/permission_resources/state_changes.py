@@ -4,12 +4,13 @@ import logging
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from concord.actions.state_changes import BaseStateChange, InputField
+from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
-from concord.actions.text_utils import get_verb_given_permission_type
-from concord.actions.utils import get_state_change_object
+from concord.utils.text_utils import get_verb_given_permission_type
+from concord.utils.lookups import get_state_change_object
 from concord.actions.models import TemplateModel
 from concord.permission_resources.utils import delete_permissions_on_target
+from concord.utils import field_utils
 
 
 logger = logging.getLogger(__name__)
@@ -22,19 +23,21 @@ logger = logging.getLogger(__name__)
 
 class AddPermissionStateChange(BaseStateChange):
     """State change to add a permission to something."""
-    description = "Add permission"
+    change_description = "Add permission"
     section = "Permissions"
-    input_fields = [InputField(name="change_type", type="CharField", required=True, validate=True),
-                    InputField(name="actors", type="ActorListField", required=True, validate=False),
-                    InputField(name="roles", type="RoleListField", required=True, validate=False),
-                    InputField(name="configuration", type="DictField", required=False, validate=True),
-                    InputField(name="anyone", type="BooleanField", required=False, validate=True),
-                    InputField(name="inverse", type="BooleanField", required=False, validate=True)]
-    input_target = PermissionsItem
+    model_based_validation = (PermissionsItem, ["change_type", "anyone", "inverse"])
+
+    change_type = field_utils.CharField(label="Type of action the permission covers", required=True)
+    actors = field_utils.ActorListField(label="Actors who have this permission", required=True)
+    roles = field_utils.RoleListField(label="Roles who have this permission", required=True)
+    configuration = field_utils.DictField(label="Configuration of the permission")
+    anyone = field_utils.BooleanField(label="Everyone has the permission")
+    inverse = field_utils.BooleanField(label="Do the inverse of this permission")
 
     def __init__(self, change_type, actors, roles, configuration=None, anyone=False, inverse=False):
         """Permission actors and permission role pairs MUST be a list of zero or more
         strings."""
+        super().__init__()
         self.change_type = change_type
         self.actors = actors if actors else []
         self.roles = roles if roles else []
@@ -53,7 +56,7 @@ class AddPermissionStateChange(BaseStateChange):
     def is_conditionally_foundational(self, action):
         """Some state changes are only foundational in certain conditions. Those state changes override this
         method to apply logic and determine whether a specific instance is foundational or not."""
-        from concord.actions.utils import get_state_change_object
+        from concord.utils.lookups import get_state_change_object
         change_object = get_state_change_object(self.change_type)
         return action.change.is_foundational
 
@@ -82,7 +85,7 @@ class AddPermissionStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         permission = PermissionsItem()
         permission.set_fields(
@@ -95,7 +98,7 @@ class AddPermissionStateChange(BaseStateChange):
 
 class RemovePermissionStateChange(BaseStateChange):
     """State change to remove a permission from something."""
-    description = "Remove permission"
+    change_description = "Remove permission"
     section = "Permissions"
     preposition = "from"
 
@@ -113,7 +116,7 @@ class RemovePermissionStateChange(BaseStateChange):
     def description_past_tense(self):
         return "removed permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         try:
             delete_permissions_on_target(target)
             target.delete()
@@ -126,12 +129,14 @@ class RemovePermissionStateChange(BaseStateChange):
 class AddActorToPermissionStateChange(BaseStateChange):
     """State change to add an actor to a permission."""
 
-    description = "Add actor to permission"
+    change_description = "Add actor to permission"
     preposition = "for"
     section = "Permissions"
-    input_fields = [InputField(name="actor_to_add", type="ActorPKField", required=True, validate=False)]
+
+    actor_to_add = field_utils.ActorField(label="Actor to add", required=True)
 
     def __init__(self, *, actor_to_add: str):
+        super().__init__()
         self.actor_to_add = actor_to_add
 
     @classmethod
@@ -156,7 +161,7 @@ class AddActorToPermissionStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.actors.add_actors(actors=[self.actor_to_add])
         target.save()
         return target
@@ -164,12 +169,14 @@ class AddActorToPermissionStateChange(BaseStateChange):
 
 class RemoveActorFromPermissionStateChange(BaseStateChange):
     """State change to remove an actor from a permission."""
-    description = "Remove actor from permission"
+    change_description = "Remove actor from permission"
     preposition = "for"
     section = "Permissions"
-    input_fields = [InputField(name="actor_to_remove", type="ActorPKField", required=True, validate=False)]
+
+    actor_to_remove = field_utils.ActorField(label="Actor to remove", required=True)
 
     def __init__(self, *, actor_to_remove: str):
+        super().__init__()
         self.actor_to_remove = actor_to_remove
 
     @classmethod
@@ -195,7 +202,7 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.actors.remove_actors(actors=[self.actor_to_remove])
         target.save()
         return target
@@ -204,12 +211,14 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
 class AddRoleToPermissionStateChange(BaseStateChange):
     """State change to add a role to a permission."""
 
-    description = "Add role to permission"
+    change_description = "Add role to permission"
     preposition = "for"
     section = "Permissions"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+
+    role_name = field_utils.RoleField(label="Role to add", required=True)
 
     def __init__(self, *, role_name: str):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -235,7 +244,7 @@ class AddRoleToPermissionStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.add_role_to_permission(role=self.role_name)
         target.save()
         return target
@@ -244,12 +253,15 @@ class AddRoleToPermissionStateChange(BaseStateChange):
 class RemoveRoleFromPermissionStateChange(BaseStateChange):
     """State change to remove a role from a permission."""
 
-    description = "Remove role from permission"
+    change_description = "Remove role from permission"
     preposition = "for"
     section = "Permissions"
-    input_fields = [InputField(name="role_name", type="RoleField", required=True, validate=False)]
+    configurable_fields = ["role_name"]
+
+    role_name = field_utils.RoleField(label="Role to remove", required=True)
 
     def __init__(self, *, role_name: str):
+        super().__init__()
         self.role_name = role_name
 
     @classmethod
@@ -259,11 +271,6 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
     @classmethod
     def get_settable_classes(cls):
         return cls.get_all_possible_targets()
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"role_name": {
-            "display": "Role that can be removed from the permission", "type": "RoleField"}}
 
     @classmethod
     def get_uninstantiated_description(cls, **configuration_kwargs):
@@ -303,7 +310,7 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.remove_role_from_permission(role=self.role_name)
         target.save()
         return target
@@ -312,13 +319,15 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
 class ChangePermissionConfigurationStateChange(BaseStateChange):
     """State change to change the configuration of a permission."""
 
-    description = "Change configuration of permission"
+    change_description = "Change configuration of permission"
     preposition = "for"
     section = "Permissions"
-    input_fields = [InputField(name="configurable_field_name", type="CharField", required=True, validate=False),
-                    InputField(name="configurable_field_value", type="CharField", required=True, validate=False)]
+
+    configurable_field_name = field_utils.CharField(label="Name of field to configure", required=True)
+    configurable_field_value = field_utils.CharField(label="Value to configure field to", required=True)
 
     def __init__(self, *, configurable_field_name: str, configurable_field_value: str):
+        super().__init__()
         self.configurable_field_name = configurable_field_name
         self.configurable_field_value = configurable_field_value
 
@@ -338,7 +347,7 @@ class ChangePermissionConfigurationStateChange(BaseStateChange):
         return f"changed configuration field {self.configurable_field_name} to value " + \
                f"{self.configurable_field_value} on permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         configuration = target.get_configuration()
 
@@ -352,12 +361,14 @@ class ChangePermissionConfigurationStateChange(BaseStateChange):
 class ChangeInverseStateChange(BaseStateChange):
     """State change to toggle the inverse field of a permission."""
 
-    description = "Toggle permission's inverse field"
+    change_description = "Toggle permission's inverse field"
     preposition = "for"
     section = "Permissions"
-    input_fields = [InputField(name="change_to", type="BooleanField", required=True, validate=False)]
+
+    change_to = field_utils.BooleanField(label="Change inverse field of permission to", required=True)
 
     def __init__(self, *, change_to: bool):
+        super().__init__()
         self.change_to = change_to
 
     @classmethod
@@ -382,7 +393,7 @@ class ChangeInverseStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.inverse = self.change_to
         target.save()
         return target
@@ -391,7 +402,7 @@ class ChangeInverseStateChange(BaseStateChange):
 class EnableAnyoneStateChange(BaseStateChange):
     """State change to set a permission so anyone can take it."""
 
-    description = "Give anyone permission"
+    change_description = "Give anyone permission"
     section = "Permissions"
     preposition = "for"
 
@@ -409,7 +420,7 @@ class EnableAnyoneStateChange(BaseStateChange):
     def description_past_tense(self):
         return "gave anyone permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.anyone = True
         target.save()
         return target
@@ -418,7 +429,7 @@ class EnableAnyoneStateChange(BaseStateChange):
 class DisableAnyoneStateChange(BaseStateChange):
     """State change which takes a permission that has 'anyone' enabled, so anyone can take it, and disables
     it so only the roles and actors specified can take it.."""
-    description = "Remove anyone from permission"
+    change_description = "Remove anyone from permission"
     section = "Permissions"
     preposition = "for"
 
@@ -436,7 +447,7 @@ class DisableAnyoneStateChange(BaseStateChange):
     def description_past_tense(self):
         return "removed anyone from permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.anyone = False
         target.save()
         return target
@@ -449,12 +460,14 @@ class DisableAnyoneStateChange(BaseStateChange):
 
 class EditTemplateStateChange(BaseStateChange):
     """State change to edit a template."""
-    description = "Edit Template"
-    input_fields = [InputField(name="template_object_id", type="ObjectIDField", required=True, validate=False),
-                    InputField(name="field_name", type="CharField", required=True, validate=False),
-                    InputField(name="new_field_data", type="DictField", required=True, validate=False)]
+    change_description = "Edit Template"
+
+    template_object_id = field_utils.IntegerField(label="ID of Template to edit", required=True)
+    field_name = field_utils.CharField(label="Field to edit", required=True)
+    new_field_data = field_utils.DictField(label="Data to edit", required=True)
 
     def __init__(self, template_object_id, field_name, new_field_data):
+        super().__init__()
         self.template_object_id = template_object_id
         self.field_name = field_name
         self.new_field_data = new_field_data
@@ -484,7 +497,7 @@ class EditTemplateStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
         target.save()

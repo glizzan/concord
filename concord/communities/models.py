@@ -29,7 +29,7 @@ class BaseCommunityModel(PermissionedModel):
         abstract = True
 
     def __str__(self):
-        return f"{self.name}"
+        return f"{self.name}" if self.name else "unnamed community"
 
     def __repr__(self):
         return f"CommunityModel(pk={self.pk}, name={self.name}, roles={self.roles}, " + \

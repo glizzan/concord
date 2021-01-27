@@ -17,6 +17,8 @@ from concord.actions.utils import MockAction
 from concord.utils.converters import ConcordConverterMixin
 from concord.utils import field_utils
 
+# NOTE!!!  This is the old version, new development should happen in core.base_classes.BaseStateChange
+# This should be deleted as part of refactoring.
 
 class BaseStateChange(ConcordConverterMixin):
     """The BaseStateChange object is the object which all other state change objects inherit from. It has a

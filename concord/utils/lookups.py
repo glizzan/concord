@@ -57,6 +57,17 @@ def get_all_community_models():
     return community_models
 
 
+def get_all_concord_models():
+    models = []
+    for app in get_all_apps():
+        module = app.get_concord_module("concord_models")
+        members = inspect.getmembers(module)  # get_members returns (name, value) tuple
+        for name, value in members:
+            if hasattr(value, "concord_object_mixin") and value.__name__ != "ConcordObjectMixin":
+                models.append(value)
+    return models
+
+
 def get_all_clients():
     """Gets all clients descended from Base Client in Concord and the app using it."""
     clients = []

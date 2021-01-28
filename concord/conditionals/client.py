@@ -6,8 +6,10 @@ import logging
 from django.db.models import Model
 
 from concord.actions.client import BaseClient
-from concord.actions.utils import Client, get_all_conditions
+from concord.utils.helpers import Client
+from concord.utils.lookups import get_all_conditions, get_acceptance_conditions
 from concord.conditionals import state_changes as sc
+from concord.conditionals import utils
 
 
 logger = logging.getLogger(__name__)
@@ -105,12 +107,8 @@ class ConditionalClient(BaseClient):
     def is_valid_condition_type(self, condition_type, lower=True):
         condition_models = get_all_conditions()
         for model_type in condition_models:
-            if lower:
-                if model_type.__name__.lower() == condition_type.lower():
-                    return True
-            else:
-                if model_type.__name__ == condition_type:
-                    return True
+            if lower and model_type.__name__.lower() == condition_type.lower(): return True
+            if model_type.__name__ == condition_type: return True
         return False
 
     def get_possible_conditions(self):
@@ -119,25 +117,21 @@ class ConditionalClient(BaseClient):
 
     def get_condition_class(self, *, condition_type):
         """Get condition class object given condition type."""
-        for condition in self.get_possible_conditions():
-            if condition.__name__.lower() == condition_type.lower():
-                return condition
+        for condition in get_all_conditions():
+            if condition.__name__.lower() == condition_type.lower(): return condition
 
-    def get_condition_manager(self, source, leadership_type) -> Model:
+    def get_condition_manager(self, source, leadership_type=None) -> Model:
         """Gets the condition manager for a source."""
-        if source.__class__.__name__ == "PermissionsItem":
-            return source.condition
-        elif leadership_type == "owner":
-            return source.owner_condition
-        elif leadership_type == "governor":
-            return source.governor_condition
+        if source.__class__.__name__ == "PermissionsItem": return source.condition
+        if leadership_type == "owner": return source.owner_condition
+        if leadership_type == "governor": return source.governor_condition
 
-    def create_conditions_for_action(self, action):
-        # note that action.resolution.conditions doesn't get saved to db so this only works if called directly after
-        # being run through permissions pipeline
-        if hasattr(action.resolution, "conditions"):
-            for condition_manager in action.resolution.conditions:
-                condition_manager.create_uncreated_conditions(action)
+    def check_condition_status(self, *, action, manager):
+        return utils.condition_status(manager=manager, action=action)
+
+    def create_conditions_for_action(self, action, condition_managers):
+        for manager in condition_managers:
+            utils.create_conditions(manager=manager, action=action)
 
     def get_condition_items_given_action_and_source(self, *, action, source, leadership_type=None) -> Model:
         """Given the action which triggered a condition, the source and the leadership type, get the item.
@@ -145,12 +139,12 @@ class ConditionalClient(BaseClient):
         possibly you could just check both?
         """
         manager = self.get_condition_manager(source, leadership_type)
-        return list(manager.get_condition_instances(action).values())
+        return list(utils.get_condition_instances(action=action, manager=manager).values())
 
     def get_condition_items_for_action(self, *, action_pk):
         """Get all condition items set on an action."""
         all_condition_items = []
-        for condition_class in self.get_possible_conditions():
+        for condition_class in get_acceptance_conditions():
             condition_items = condition_class.objects.filter(action=action_pk)
             if condition_items:
                 all_condition_items = all_condition_items + list(condition_items)
@@ -163,10 +157,11 @@ class ConditionalClient(BaseClient):
 
     # State changes
 
-    def add_condition(self, *, condition_type, condition_data=None, permission_data=None, leadership_type=None):
+    def add_condition(self, *, condition_type, condition_data=None, permission_data=None, leadership_type=None,
+                      mode="acceptance"):
         change = sc.AddConditionStateChange(
             condition_type=condition_type, condition_data=condition_data, permission_data=permission_data,
-            leadership_type=leadership_type)
+            leadership_type=leadership_type, mode=mode)
         return self.create_and_take_action(change)
 
     def edit_condition(self, *, element_id, condition_data=None, permission_data=None, leadership_type=None):

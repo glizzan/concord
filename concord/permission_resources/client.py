@@ -8,8 +8,8 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 from concord.permission_resources.models import PermissionsItem
 from concord.permission_resources import state_changes as sc
-from concord.actions.permissions import has_permission
-from concord.actions.utils import get_state_changes_settable_on_model
+from concord.utils.pipelines import mock_action_pipeline
+from concord.utils.lookups import get_state_changes_settable_on_model
 
 
 ################################
@@ -54,14 +54,8 @@ class PermissionResourceClient(BaseClient):
         """Checks results of running a given (mock) action through the permissions pipeline.  Note that this
         says nothing about whether the given action is valid, as the validate step is called separately."""
         client.mode = "mock"
-        mock_action = getattr(client, method_name)(**parameters)
-        mock_action.resolution.meta_status = "taken"
-        mock_action = has_permission(mock_action)
-        if mock_action.status == "approved":
-            return True
-        if not exclude_conditional and mock_action.status == "waiting":
-            return True
-        return False
+        mock_action = getattr(client, method_name)(**parameters)  # for check_configuration or just to instantiate change obj?
+        return mock_action_pipeline(mock_action, exclude_conditional)
 
     # Read methods which require target to be set
 
@@ -206,16 +200,18 @@ class PermissionResourceClient(BaseClient):
         self.target = permission
         action_list = []
 
-        old_roles = set(permission.get_role_names())
+        old_roles = set(permission.get_roles())
         new_roles = set(role_data)
         roles_to_add = new_roles.difference(old_roles)
         roles_to_remove = old_roles.difference(new_roles)
 
         for role in roles_to_add:
-            action_list.append(self.add_role_to_permission(role_name=role))
+            action, result = self.add_role_to_permission(role_name=role)
+            action_list.append(action)
 
         for role in roles_to_remove:
-            action_list.append(self.remove_role_from_permission(role_name=role))
+            action, result = self.remove_role_from_permission(role_name=role)
+            action_list.append(action)
 
         return action_list
 
@@ -232,9 +228,11 @@ class PermissionResourceClient(BaseClient):
         actors_to_remove = old_actors.difference(new_actors)
 
         for actor in actors_to_add:
-            action_list.append(self.add_actor_to_permission(actor=actor))
+            action, result = self.add_actor_to_permission(actor=actor)
+            action_list.append(action)
 
         for actor in actors_to_remove:
-            action_list.append(self.remove_actor_from_permission(actor=actor))
+            action, result = self.remove_actor_from_permission(actor=actor)
+            action_list.append(action)
 
         return action_list

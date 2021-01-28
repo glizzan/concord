@@ -3,7 +3,7 @@ descriptions."""
 
 import copy, logging
 
-from concord.actions.utils import get_state_change_object
+from concord.utils.lookups import get_state_change_object
 
 
 logger = logging.getLogger(__name__)
@@ -282,7 +282,7 @@ def foundational_actions_to_text(actions):
     foundational_actions = [action for action in actions if action.change.is_foundational]
     if foundational_actions:
         action_string = "Please note that the following actions are foundational, and require owner approval " + \
-                        f"to pass: {', '.join([action.change.description for action in foundational_actions])}"
+                        f"to pass: {', '.join([action.change.change_description for action in foundational_actions])}"
     else:
         action_string = "None of the actions are foundational, so they do not necessarily require owner " + \
                         "approval to pass."
@@ -309,7 +309,7 @@ def mock_action_to_text(action, trigger_action=None):
     try:
         description = action.change.description_present_tense()
     except:  # noqa: E722
-        description = action.change.description.lower()
+        description = action.change.change_description.lower()
 
     return f"{description} {action.change.get_preposition()} {target_name}"
 
@@ -320,14 +320,14 @@ def permission_change_to_text(permission):
     state_change_object = permission.get_state_change_object()
     if hasattr(state_change_object, "get_uninstantiated_description"):
         return state_change_object.get_uninstantiated_description(**permission.get_configuration())
-    return state_change_object.description.lower()
+    return state_change_object.change_description.lower()
 
 
 def permission_to_text(permission):
     """Gets the text description of a permission item."""
 
     change_obj = permission.get_state_change_object()
-    action_str = change_obj.description.lower() + change_obj.get_configured_field_text(permission.get_configuration())
+    action_str = change_obj.change_description.lower() + change_obj.get_configured_field_text(permission.get_configuration())
 
     if permission.anyone:
         return f"anyone has permission to {action_str}"
@@ -341,4 +341,4 @@ def permission_to_text(permission):
 def get_verb_given_permission_type(permission_type):
     """Given a permission type, get the verb specified by the corresponding change object."""
     state_change_object = get_state_change_object(permission_type)
-    return state_change_object.description.lower()
+    return state_change_object.change_description.lower()

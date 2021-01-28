@@ -1,11 +1,13 @@
 """State Changes for conditional models"""
 from django.core.exceptions import ValidationError
 
-from concord.actions.state_changes import BaseStateChange, InputField
-from concord.actions.utils import Client, get_state_change_object
+from concord.actions.state_changes import BaseStateChange
+from concord.utils.helpers import Client
+from concord.utils.lookups import get_state_change_object
 from concord.conditionals.models import VoteCondition, ApprovalCondition, ConsensusCondition
 from concord.actions.models import Action
 from concord.permission_resources.models import PermissionsItem
+from concord.utils import field_utils
 
 
 ##########################################
@@ -15,18 +17,22 @@ from concord.permission_resources.models import PermissionsItem
 
 class AddConditionStateChange(BaseStateChange):
     """State change to add condition to permission or leadership role."""
-    description = "Add condition"
+    change_description = "Add condition"
     section = "Permissions"
-    input_fields = [InputField(name="condition_type", type="CharField", required=True, validate=False),
-                    InputField(name="condition_data", type="DictField", required=True, validate=False),
-                    InputField(name="permission_data", type="DictField", required=True, validate=False),
-                    InputField(name="leadership_type", type="CharField", required=True, validate=False)]
 
-    def __init__(self, *, condition_type, condition_data, permission_data, leadership_type):
+    condition_type = field_utils.CharField(label="Type of condition to add", required=True)
+    condition_data = field_utils.DictField(label="Data for condition", required=True)
+    permission_data = field_utils.DictField(label="Data for permissions set on condition", required=True)
+    leadership_type = field_utils.CharField(label="Type of leadership condition is set on", required=True)
+    mode = field_utils.CharField(label="Condition mode", required=True)
+
+    def __init__(self, *, condition_type, condition_data, permission_data, leadership_type, mode):
+        super().__init__()
         self.condition_type = condition_type
         self.condition_data = condition_data if condition_data else {}
         self.permission_data = permission_data if permission_data else []
         self.leadership_type = leadership_type
+        self.mode = mode
 
     @classmethod
     def get_allowable_targets(cls):
@@ -75,13 +81,17 @@ class AddConditionStateChange(BaseStateChange):
                 continue  # don't validate if it's a replaced field
 
             try:
-                field_instance = model_instance._meta.get_field(field_name)
+                if hasattr(model_instance, "_meta") and hasattr(model_instance._meta, "get_field"):
+                    field_instance = model_instance._meta.get_field(field_name)
+                else:
+                    field_instance = getattr(model_instance, field_name)
             except AttributeError:
                 self.set_validation_error(message=f"There is no field {field_name} on condition {self.condition_type}")
                 return False
 
             try:
-                field_instance.clean(field_value, model_instance)
+                if hasattr(field_instance, "clean"):
+                    field_instance.clean(field_value, model_instance)
             except ValidationError:
                 self.set_validation_error(message=f"{field_value} is not valid value for {field_name}")
                 return False
@@ -111,7 +121,7 @@ class AddConditionStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
         manager = getattr(target, attr_name)
@@ -126,7 +136,7 @@ class AddConditionStateChange(BaseStateChange):
 
         condition_data = {"condition_type": self.condition_type, "condition_data": self.condition_data,
                           "permission_data": self.permission_data}
-        manager.add_condition(condition_data)
+        manager.add_condition(condition_data, mode=self.mode)
         manager.save()
 
         return manager
@@ -134,14 +144,16 @@ class AddConditionStateChange(BaseStateChange):
 
 class EditConditionStateChange(BaseStateChange):
     """State change to add condition to permission or leadership role."""
-    description = "Add condition"
+    change_description = "Add condition"
     section = "Permissions"
-    input_fields = [InputField(name="element_id", type="IntegerField", required=True, validate=False),
-                    InputField(name="condition_data", type="DictField", required=False, validate=False),
-                    InputField(name="permission_data", type="DictField", required=False, validate=False),
-                    InputField(name="leadership_type", type="CharField", required=False, validate=False)]
+
+    element_id = field_utils.IntegerField(label="Element ID", required=True)
+    condition_data = field_utils.DictField(label="New condition data")
+    permission_data = field_utils.DictField(label="New permission data")
+    leadership_type = field_utils.CharField(label="Leadership type to set condition on")
 
     def __init__(self, *, element_id, condition_data=None, permission_data=None, leadership_type=None):
+        super().__init__()
         self.element_id = element_id
         self.condition_data = condition_data if condition_data else {}
         self.permission_data = permission_data if permission_data else []
@@ -227,7 +239,7 @@ class EditConditionStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
         manager = getattr(target, attr_name)
@@ -244,13 +256,15 @@ class EditConditionStateChange(BaseStateChange):
 
 class RemoveConditionStateChange(BaseStateChange):
     """State change to remove condition from Community."""
-    description = "Remove condition"
+    change_description = "Remove condition"
     is_foundational = True
     section = "Leadership"
-    input_fields = [InputField(name="leadership_type", type="CharField", required=True, validate=False),
-                    InputField(name="element_id", type="IntegerField", required=False, validate=False)]
+
+    element_id = field_utils.IntegerField(label="Element ID to remove")
+    leadership_type = field_utils.CharField(label="Leadership type to remove condition from", required=True)
 
     def __init__(self, *, leadership_type, element_id=None):
+        super().__init__()
         self.leadership_type = leadership_type
         self.element_id = element_id
 
@@ -277,7 +291,7 @@ class RemoveConditionStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
 
         attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
         manager = getattr(target, attr_name)
@@ -297,12 +311,14 @@ class RemoveConditionStateChange(BaseStateChange):
 
 class AddVoteStateChange(BaseStateChange):
     """State change for adding a vote."""
-    description = "Add vote"
+    change_description = "Add vote"
     verb_name = "vote"
     section = "Vote"
-    input_fields = [InputField(name="vote", type="CharField", required=True, validate=False)]
+
+    vote = field_utils.CharField(label="Vote", required=True)
 
     def __init__(self, vote):
+        super().__init__()
         self.vote = vote
 
     @classmethod
@@ -336,7 +352,7 @@ class AddVoteStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.add_vote(self.vote)
         target.add_vote_record(actor)
         target.save()
@@ -350,7 +366,7 @@ class AddVoteStateChange(BaseStateChange):
 
 class ApproveStateChange(BaseStateChange):
     """State change for approving a condition."""
-    description = "Approve"
+    change_description = "Approve"
     preposition = ""
     section = "Approval"
     verb_name = "approve"
@@ -380,7 +396,7 @@ class ApproveStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.approve()
         target.save()
         return True
@@ -388,7 +404,7 @@ class ApproveStateChange(BaseStateChange):
 
 class RejectStateChange(BaseStateChange):
     """State change for rejecting a condition.."""
-    description = "Reject"
+    change_description = "Reject"
     preposition = ""
     section = "Approval"
     verb_name = "reject"
@@ -421,7 +437,7 @@ class RejectStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.reject()
         target.save()
         return True
@@ -433,13 +449,15 @@ class RejectStateChange(BaseStateChange):
 
 class RespondConsensusStateChange(BaseStateChange):
     """State change for responding to a consensus condition"""
-    description = "Respond"
+    change_description = "Respond"
     preposition = ""
     section = "Consensus"
     verb_name = "respond"
-    input_fields = [InputField(name="response", type="CharField", required=True, validate=False)]
+
+    response = field_utils.CharField(label="Response", required=True)
 
     def __init__(self, response):
+        super().__init__()
         self.response = response
 
     @classmethod
@@ -464,7 +482,7 @@ class RespondConsensusStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.add_response(actor, self.response)
         target.save()
         return self.response
@@ -472,7 +490,7 @@ class RespondConsensusStateChange(BaseStateChange):
 
 class ResolveConsensusStateChange(BaseStateChange):
     """State change for resolving a consensus condition."""
-    description = "Resolve"
+    change_description = "Resolve"
     preposition = ""
     section = "Consensus"
     verb_name = "resolve"
@@ -498,7 +516,7 @@ class ResolveConsensusStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.resolved = True
         target.save()
         return target

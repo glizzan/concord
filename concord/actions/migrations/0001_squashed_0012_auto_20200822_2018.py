@@ -42,7 +42,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
                 ('change', concord.actions.customfields.StateChangeField()),
-                ('resolution', concord.actions.customfields.ResolutionField(default=concord.actions.customfields.Resolution)),
+                ('resolution', models.BooleanField(default=False)),  # Replaced no longer existent resolution field
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('actor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),

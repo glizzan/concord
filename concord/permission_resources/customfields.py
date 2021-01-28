@@ -7,6 +7,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
+from concord.utils.converters import ConcordConverterMixin
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 ################################
 
 
-class ActorList(object):
+class ActorList(ConcordConverterMixin):
     """This custom object allows us to preferentially manipulate our actors as a list of
     PKs, so we don't have to constantly query the DB.  If pks and instances are not
     identical, the pk_list is assumed authoritative."""
@@ -39,6 +41,12 @@ class ActorList(object):
                 self.pk_list = actor_list
             else:
                 raise ValidationError(message="actor_list must be User objects or pks, not " + str(type(first_item)))
+
+    def serialize(self, to_json=False):
+        data_dict = {"class": "ActorList", "concord_dict": True, "actor_list": self.as_pks()}
+        if to_json:
+            return json.dumps(data_dict)
+        return data_dict
 
     def as_pks(self):
         """Get actors as pk."""
@@ -131,21 +139,18 @@ class ActorList(object):
         raise ValueError("Must remove actors from actorlist as User or Int, not ", type(actors[0]))
 
 
-def parse_actor_list_string(actor_list_string):
-    """Helps deserialize actor list."""
-    try:
-        pk_list = json.loads(actor_list_string)
-    except json.decoder.JSONDecodeError:
-        raise ValidationError("ActorListField was formatted wrongly and raised a JSONDecodeError")
-    return ActorList(actor_list=pk_list)
-
-
 class ActorListField(models.Field):
     """This custom field allows us to access a list of user objects or a list of user
     pks, depending on our needs."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def serialize(self, to_json=False):
+        data_dict = {"class": "ActorList", "actor_list": self.as_pks()}
+        if to_json:
+            return json.dumps(data_dict)
+        return data_dict
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
@@ -157,7 +162,7 @@ class ActorListField(models.Field):
     def from_db_value(self, value, expression, connection):
         if value is None:
             return ActorList()
-        return parse_actor_list_string(value)
+        return ActorList.deserialize(value)
 
     def to_python(self, value):
         if isinstance(value, ActorList):
@@ -166,12 +171,12 @@ class ActorListField(models.Field):
             return ActorList()
         if isinstance(value, list) and all([isinstance(x, int) for x in value]):
             return ActorList(value)
-        return parse_actor_list_string(value)
+        return ActorList.deserialize(value)
 
     def get_prep_value(self, value):
         if isinstance(value, ActorList):
-            return json.dumps(value.as_pks())
-        if value in [None, 'null', '[]']:
+            return value.serialize(to_json=True)
+        if value in [[], None, 'null', '[]']:
             return '[]'
 
 
@@ -180,7 +185,7 @@ class ActorListField(models.Field):
 ###############################
 
 
-class RoleList(object):
+class RoleList(ConcordConverterMixin):
     """Helper object to manage roles set in permission."""
 
     role_list: List[str] = []
@@ -219,15 +224,6 @@ class RoleList(object):
         self.role_list = list(role_set)
 
 
-def parse_role_list_string(role_list_string):
-    """Helper method to deserialize role list object."""
-    try:
-        role_list = json.loads(role_list_string)
-    except json.decoder.JSONDecodeError:
-        raise ValidationError("RoleListField was formatted wrongly and raised a JSONDecodeError")
-    return RoleList(role_list=role_list)
-
-
 class RoleListField(models.Field):
     """This custom field allows us to access our list of role pairs."""
 
@@ -244,7 +240,7 @@ class RoleListField(models.Field):
     def from_db_value(self, value, expression, connection):
         if value is None:
             return RoleList()
-        return parse_role_list_string(value)
+        return RoleList.deserialize(value)
 
     def to_python(self, value):
         if isinstance(value, RoleList):
@@ -253,10 +249,10 @@ class RoleListField(models.Field):
             return RoleList()
         if isinstance(value, list) and all([isinstance(x, str) for x in value]):
             return RoleList(value)
-        return parse_role_list_string(value)
+        return RoleList.deserialize(value)
 
     def get_prep_value(self, value):
         if isinstance(value, RoleList):
-            return json.dumps(value.role_list)
+            return value.serialize(to_json=True)
         if value in [None, 'null', '[]']:
             return '[]'

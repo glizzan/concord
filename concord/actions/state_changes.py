@@ -3,45 +3,68 @@ state change objects inherit."""
 
 from typing import List, Any
 import json, warnings
+import copy
 from collections import namedtuple
+from contextlib import suppress
 
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 
 from concord.actions.models import TemplateModel
-from concord.actions.utils import get_all_permissioned_models, get_all_community_models, MockAction
+from concord.utils.lookups import get_all_permissioned_models, get_all_community_models
+from concord.actions.utils import MockAction
+from concord.utils.converters import ConcordConverterMixin
+from concord.utils import field_utils
 
+# NOTE!!!  This is the old version, new development should happen in core.base_classes.BaseStateChange
+# This should be deleted as part of refactoring.
 
-InputField = namedtuple("InputField", ['name', 'type', 'required', 'validate'])
-
-
-class BaseStateChange(object):
+class BaseStateChange(ConcordConverterMixin):
     """The BaseStateChange object is the object which all other state change objects inherit from. It has a
     variety of methods which must be implemented by those that inherit it."""
 
-    instantiated_fields: List[str] = []
-    input_fields: List[InputField] = []
+    instantiated_fields: List[str] = list()
     input_target: Any = None
-    context_keys: List[str] = []
+    context_keys: List[str] = list()
     is_foundational = False
     section: str = "Miscellaneous"
+    configurable_fields = list()
+
+    def __init__(self):
+        super().__init__()
+        self._initialize_fields()
+
+    def __setattr__(self, attribute_name, attribute_value):
+        with suppress(AttributeError):
+            field = super().__getattribute__(attribute_name)
+            if field and hasattr(field, "value"):
+                field.value = attribute_value
+                return
+        super().__setattr__(attribute_name, attribute_value)
+
+    def __getattribute__(self, attribute_name):
+        """If the attribute is a Concord field, returns the value when referenced."""
+        field = super().__getattribute__(attribute_name)
+        if field and hasattr(field, "value"):
+            return field.value
+        return field
+
+    def _initialize_fields(self):
+        """This is a workaround to handle the fact that instances declared on classes are shared between
+        classes.
+
+        FIXME: doesn't work because of __setattr__ I think
+        """
+
+        for field_name, field in self.get_concord_fields_with_names().items():
+            new_field = copy.deepcopy(field)
+            self.__dict__[field_name] = new_field
 
     @classmethod
     def get_change_type(cls):
         """Gets the full type of the change object in format 'concord.package.state_changes.SpecificStateChange'"""
         return cls.__module__ + "." + cls.__name__
-
-    def get_change_data(self):
-        """Given the python Change object, generates a json list of field names and values.  Does not include
-        instantiated fields."""
-        new_vars = vars(self)
-        for field in self.instantiated_fields:
-            if field in new_vars:
-                del(new_vars)[field]
-        if "validation_error" in new_vars:
-            del(new_vars)["validation_error"]
-        return json.dumps(new_vars)
 
     def is_conditionally_foundational(self, action):
         """Some state changes are only foundational in certain conditions. Those state changes override this
@@ -50,7 +73,7 @@ class BaseStateChange(object):
 
     @classmethod
     def can_set_on_model(cls, model_name):
-        """Tests whether a given model, passed in as a string, is in allowable target."""
+        """Tests whether a given model, passed in as a string, is an allowable target."""
         target_names = [model.__name__ for model in cls.get_settable_classes()]
         return True if model_name in target_names else False
 
@@ -85,42 +108,51 @@ class BaseStateChange(object):
     # Field methods
 
     @classmethod
-    def get_configurable_fields(cls):
-        """Gets the fields of a change object which may be configured when used in a Permission model."""
-        if hasattr(cls, 'check_configuration'):
-            warnings.warn("You have added check_configuration method to state change without specifying "
-                          + "any configurable fields.")
-        return {}
-
-    @classmethod
     def get_configurable_form_fields(cls):
         """Gets the configurable fields of a change object as form fields."""
-        fields = {}
-        for field_name, field_data in cls.get_configurable_fields().items():
-            fields.update({
-                field_name: {
-                    "field_name": field_name,
-                    "display": field_data["display"],
-                    "type": field_data["type"] if "type" in field_data else "CharField",
-                    "required": field_data["required"] if "required" in field_data else False,
-                    "other_data": field_data["other_data"] if "other_data" in field_data else None,
-                    "value": None
-                }
-            })
-        return fields
+        return {field_name: {**field.to_form_field(), **{"field_name": field_name}} for field_name, field
+                in cls.get_concord_fields_with_names().items() if field_name in cls.configurable_fields}
 
     @classmethod
     def get_change_field_options(cls):
         """Gets a list of required parameters passed in to init, used by templates. Does not include optional
         parameters, as this may break the template referencing them if they're not there."""
-        return [{"value": field.name, "text": field.name, "type": field.type}
-                for field in cls.input_fields if field.required]
+        return [{"value": field_name, "text": field_name, "type": field.__class__.__name__}
+                for field_name, field in cls.get_concord_fields_with_names().items() if field.required]
 
     # validation & implementation methods
 
     def set_validation_error(self, message):
         """Helper method so all state changes don't have to import ValidationError"""
         self.validation_error = ValidationError(message)
+
+    def validate_against_model(self, target):
+
+        if hasattr(self, "model_based_validation"):
+
+            try:
+
+                model_to_test = target if self.model_based_validation[0] == "target" else self.model_based_validation[0]
+
+                for field in self.model_based_validation[1]:
+
+                    full_field = super().__getattribute__(field)
+                    model_field = model_to_test._meta.get_field(field)
+
+                    if not full_field.value and not full_field.required:   # if no value but target field can be null
+                        continue
+
+                    model_field.clean(full_field.value, model_to_test)
+
+                return True
+
+            except ValidationError as error:
+
+                message = f"Error validating value {full_field.value} for field {field}: " + str(error)
+                self.set_validation_error(message=message)
+                return False
+
+        return True
 
     def validate(self, actor, target):
         """Method to check whether the data provided to a change object in an action is valid for the
@@ -131,20 +163,7 @@ class BaseStateChange(object):
                 message=f"Object {str(target)} of type {target._meta.model} is not an allowable target")
             return False
 
-        try:
-            target = self.input_target if self.input_target else target
-            for field in self.input_fields:
-                if field.validate:
-                    field_value = getattr(self, field.name)
-                    if not field_value and not field.required:
-                        continue
-                    target_field = target._meta.get_field(field.name)
-                    target_field.clean(field_value, target)
-            return True
-        except ValidationError as error:
-            message = f"Error validating value {field_value} for field {field.name}: " + str(error)
-            self.set_validation_error(message=message)
-            return False
+        return self.validate_against_model(target)
 
     def implement(self, actor, target):
         """Method that carries out the change of state."""
@@ -211,14 +230,17 @@ class BaseStateChange(object):
 class ChangeOwnerStateChange(BaseStateChange):
     """State change for changing which community owns the object. Not to be confused with state changes which
     change who the owners are within a community."""
-    description = "Change owner"
+    change_description = "Change owner"
     preposition = "for"
     is_foundational = True
     section = "Leadership"
-    input_fields = [InputField(name="new_owner_content_type", type="ContentTypeField", required=True, validate=False),
-                    InputField(name="new_owner_id", type="ObjectIDField", required=True, validate=False)]
+
+    # Fields
+    new_owner_content_type = field_utils.IntegerField(label="New owner's content type id", required=True)
+    new_owner_id = field_utils.IntegerField(label="New owner's ID", required=True)
 
     def __init__(self, new_owner_content_type, new_owner_id):
+        super().__init__()
         self.new_owner_content_type = new_owner_content_type
         self.new_owner_id = new_owner_id
 
@@ -236,8 +258,7 @@ class ChangeOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        if not super().validate(actor=actor, target=target):
-            return False
+        if not super().validate(actor=actor, target=target): return False
 
         try:
             new_owner = self.get_new_owner()
@@ -251,7 +272,7 @@ class ChangeOwnerStateChange(BaseStateChange):
             return False
         return True
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.owner = self.get_new_owner()
         target.save()
         return target
@@ -259,7 +280,7 @@ class ChangeOwnerStateChange(BaseStateChange):
 
 class EnableFoundationalPermissionStateChange(BaseStateChange):
     """State change object for enabling the foundational permission of a permissioned model."""
-    description = "Enable the foundational permission"
+    change_description = "Enable the foundational permission"
     preposition = "for"
     section = "Permissions"
     is_foundational = True
@@ -270,7 +291,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
     def description_past_tense(self):
         return "enabled the foundational permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.foundational_permission_enabled = True
         target.save()
         return target
@@ -278,7 +299,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
 class DisableFoundationalPermissionStateChange(BaseStateChange):
     """State change object for disabling the foundational permission of a permissioned model."""
-    description = "Disable foundational permission"
+    change_description = "Disable foundational permission"
     preposition = "for"
     section = "Permissions"
     is_foundational = True
@@ -289,7 +310,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
     def description_past_tense(self):
         return "disabled the foundational permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.foundational_permission_enabled = False
         target.save()
         return target
@@ -297,7 +318,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
 class EnableGoverningPermissionStateChange(BaseStateChange):
     """State change object for enabling the governing permission of a permissioned model."""
-    description = "Enable the governing permission"
+    change_description = "Enable the governing permission"
     preposition = "for"
     section = "Permissions"
     is_foundational = True
@@ -308,7 +329,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
     def description_past_tense(self):
         return "enabled the governing permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.governing_permission_enabled = True
         target.save()
         return target
@@ -316,7 +337,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
 class DisableGoverningPermissionStateChange(BaseStateChange):
     """State change object for disabling the governing permission of a permissioned model."""
-    description = "Disable governing permission"
+    change_description = "Disable governing permission"
     preposition = "for"
     section = "Permissions"
     is_foundational = True
@@ -327,7 +348,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
     def description_past_tense(self):
         return "disabled the governing permission"
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         target.governing_permission_enabled = False
         target.save()
         return target
@@ -336,16 +357,16 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
 class ViewStateChange(BaseStateChange):
     """ViewStateChange is a state change which doesn't actually change state. Instead, it returns the specified
     fields. It exists so we can wrap view permissions in the same model as all the other permissions."""
-    description = "View"
+    change_description = "View"
     preposition = "for"
-    input_fields = [InputField(name="fields_to_include", type="ListField", required=False, validate=False)]
+    configurable_fields = ["fields_to_include"]
+
+    # Fields
+    fields_to_include = field_utils.ListField(label="Fields that can be viewed")
 
     def __init__(self, fields_to_include=None):
+        super().__init__()
         self.fields_to_include = fields_to_include
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"fields_to_include": {"display": "Fields that can be viewed"}}
 
     def description_present_tense(self):
         return f"view {', '.join(self.fields_to_include) if self.fields_to_include else 'all fields'}"
@@ -392,7 +413,7 @@ class ViewStateChange(BaseStateChange):
         self.set_validation_error(f"Attempting to view field(s) {', '.join(missing_fields)} not on target {target}")
         return False
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         """Gets data from specified fields, or from all fields, and returns as dictionary."""
 
         target_data = target.get_serialized_field_data()
@@ -409,15 +430,19 @@ class ViewStateChange(BaseStateChange):
 
 class ApplyTemplateStateChange(BaseStateChange):
     """State change object for applying a template."""
-    description = "Apply template"
+    change_description = "Apply template"
     preposition = "to"
     pass_action = True
-    input_fields = [InputField(name="template_model_pk", type="ObjectIDField", required=True, validate=False),
-                    InputField(name="supplied_fields", type="DictField", required=False, validate=False),
-                    InputField(name="is_foundational", type="BooleanField", required=False, validate=False),
-                    InputField(name="original_creator_only", type="BooleanField", required=False, validate=False)]
+    configurable_fields = ["original_creator_only"]
+
+    # Fields
+    template_model_pk = field_utils.IntegerField(label="PK of Template to apply", required=True)
+    supplied_fields = field_utils.DictField(label="Fields to supply when applying template")
+    is_foundational = field_utils.BooleanField(label="Template makes foundational changes")
+    original_creator_only = field_utils.BooleanField(label="Only allow original creator")
 
     def __init__(self, template_model_pk, supplied_fields=None, is_foundational=False, original_creator_only=False):
+        super().__init__()
         self.template_model_pk = template_model_pk
         self.supplied_fields = supplied_fields if supplied_fields else {}
         self.is_foundational = is_foundational
@@ -428,12 +453,6 @@ class ApplyTemplateStateChange(BaseStateChange):
 
     def description_past_tense(self):
         return "applied template"
-
-    @classmethod
-    def get_configurable_fields(cls):
-        return {"original_creator_only":
-                {"display": "Only allow the creator of the target of the template to apply template",
-                 "type": "BooleanField"}}
 
     @classmethod
     def get_configured_field_text(cls, configuration):
@@ -492,8 +511,9 @@ class ApplyTemplateStateChange(BaseStateChange):
 
         return True
 
-    def implement(self, actor, target, action=None):
+    def implement(self, actor, target, **kwargs):
         """Implements the given template, relies on logic in apply_template."""
+        action = kwargs.get("action", None)
         template_model = TemplateModel.objects.get(pk=self.template_model_pk)
         return template_model.template_data.apply_template(actor=actor, target=target, trigger_action=action,
                                                            supplied_fields=self.supplied_fields)

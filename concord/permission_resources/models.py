@@ -9,8 +9,9 @@ from django.db.models.signals import post_save
 
 from concord.actions.models import PermissionedModel
 from concord.permission_resources.customfields import ActorList, ActorListField, RoleList, RoleListField
-from concord.actions.text_utils import permission_to_text, permission_change_to_text
-from concord.actions.utils import Client, get_state_change_object
+from concord.utils.text_utils import permission_to_text, permission_change_to_text
+from concord.utils.helpers import Client
+from concord.utils.lookups import get_state_change_object
 
 
 class PermissionsItem(PermissionedModel):

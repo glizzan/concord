@@ -2,21 +2,23 @@
 
 import json
 import logging
+from collections import deque
 
 from django.db import models, DatabaseError
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import User
 
-from concord.actions.utils import get_state_changes_settable_on_model
-from concord.actions.text_utils import action_to_text
-from concord.actions.customfields import ResolutionField, Resolution, StateChangeField, Template, TemplateField
+from concord.utils.lookups import get_state_changes_settable_on_model
+from concord.utils.text_utils import action_to_text
+from concord.actions.customfields import StateChangeField, Template, TemplateField
+from concord.utils.converters import ConcordConverterMixin
 
 
 logger = logging.getLogger(__name__)
 
 
-class Action(models.Model):
+class Action(ConcordConverterMixin, models.Model):
     """Represents an action between an actor and a target.
 
     All changes of state that go through the permissions system must do so via
@@ -34,24 +36,19 @@ class Action(models.Model):
     # Change field
     change = StateChangeField()
 
-    # Resolution field stores status & log info as well as details of how the action has been processed
-    resolution = ResolutionField(default=Resolution)
+    # Status etc
+    status = models.CharField(max_length=15, default="default")
+    template_info = models.CharField(max_length=2000, blank=True, null=True)
+    logs = models.CharField(max_length=800, blank=True, null=True)
 
     # Regular old attributes
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_draft = models.BooleanField(default=False)
 
-    # Basics
-
     def __str__(self):
         target = self.target if self.target else "deleted target"
-        return f"Action {self.pk} '{self.change.description}' by {self.actor} on {target} ({self.status})"
-
-    @property
-    def status(self):
-        """Gets status of Action from Resolution field."""
-        return self.resolution.generate_status()
+        return f"Action {self.pk} '{self.change.change_description}' by {self.actor} on {target} ({self.status})"
 
     def save(self, *args, **kwargs):
         """If action is live (is_draft is False) check that target and actor are set."""
@@ -64,49 +61,58 @@ class Action(models.Model):
         """Gets description of the action by reference to `change_types` set via change field, including the target."""
         return action_to_text(self, with_actor, with_target)
 
-    # Steps of action execution
+    def add_log(self, log):
+        logs = self.get_logs_as_deque()
+        logs.appendleft(log)
+        to_save = json.dumps(list(logs))
+        while (len(to_save) > 800):
+            logs.pop()
+            to_save = json.dumps(list(logs))
+        self.logs = to_save
 
-    def implement_action(self):
-        """Perform an action defined by the Change object. Carries out its custom implementation using the actor
-        and target."""
-        if hasattr(self.change, "pass_action") and self.change.pass_action:
-            result = self.change.implement(actor=self.actor, target=self.target, action=self)
-        else:
-            result = self.change.implement(actor=self.actor, target=self.target)
-        self.resolution.meta_status = "implemented"
-        logger.debug(f"{self} implemented")
-        return result
+    def get_logs_as_deque(self):
+        if self.logs:
+            return deque(json.loads(self.logs))
+        return deque()
 
-    def take_action(self):
-        """Runs the action through the permissions pipeline.  If waiting on a condition,
-        triggers that condition.  If approved, implements action.
+    def get_logs(self):
+        if self.logs:
+            return json.loads(self.logs)
+        return []
 
-        Returns itself and, optionally, the result of implementing the action."""
+    def approved_through(self):
+        for log in self.get_logs():
+            if log["approved_through"]: return log["approved_through"]
+        return "not approved"
 
-        logger.info(f"Taking action {self.pk}: ({self.actor} {self.change.description} on {self.target})")
+    def rejection_reason(self):
+        if self.status == "rejected":
+            for log in self.get_logs():
+                if log["rejection_reason"]: return log["rejection_reason"]
+        return "not rejected"
 
-        if self.status in ["taken", "waiting"]:
+    @property
+    def is_resolved(self):
+        """Property method returning True if status is a 'final' state, False if otherwise."""
+        return self.status in ["approved", "rejected", "implemented"]
 
-            from concord.actions.permissions import has_permission
-            self.resolution.refresh_pipeline_status()
-            has_permission(action=self)
+    @property
+    def is_approved(self):
+        """Property method returning True if status is approved."""
+        return self.status == "approved"
 
-            if self.status == "waiting":
-                from concord.actions.utils import Client
-                client = Client()
-                client.Conditional.create_conditions_for_action(action=self)
-
-        if self.status == "approved":
-            result = self.implement_action()
-            logger.debug(f"Result of action implementation {result}")
-
-        logger.debug(f"Saving action {self.pk} with status {self.status}")
-        self.save()
-
-        return self, result if 'result' in locals() else None
+    def get_template_info(self):
+        if not self.template_info: return {}
+        if isinstance(self.template_info, dict): return self.template_info
+        if isinstance(self.template_info, str):
+            try:
+                return json.loads(self.template_info)
+            except json.decoder.JSONDecodeError:
+                import ast
+                return ast.literal_eval(self.template_info)  # FIXME: we shouldn't need to do this
 
 
-class PermissionedModel(models.Model):
+class PermissionedModel(ConcordConverterMixin, models.Model):
     """An abstract base class that represents permissions.
 
     `PermissionedModel` is an abstract base class from which all models using the permissions system
@@ -160,13 +166,13 @@ class PermissionedModel(models.Model):
 
         Returns all actions targeting the instance of the subclass which has inherited from
         `PermissionedModel`."""
-        from concord.actions.utils import Client
+        from concord.utils.helpers import Client
         client = Client()
         return client.Action.get_action_history_given_target(target=self)
 
     def get_permissions(self):
         """Helper method to get permissions set on model."""
-        from concord.actions.utils import Client
+        from concord.utils.helpers import Client
         client = Client()
         return client.PermissionResource.get_permissions_on_object(self)
 
@@ -319,25 +325,27 @@ class TemplateModel(PermissionedModel):
             return json.loads(self.supplied_fields)
         return {}
 
-    def get_supplied_form_fields(self):  # NOTE: field_util?
-        """Loads template supplied fields and gets their forms, using field_helper.  Supplied
-        fields typically have format like:
+    def get_supplied_form_fields(self):
+        """Loads template supplied fields and gets their forms. Typical format:
 
             "field_x": ["RoleListField", None]
-            "field_y": ["IntegerField", { "maximum": 2 }]
+            "field_y": ["IntegerField", { "required": True }]
         """
 
-        from concord.actions.field_utils import field_helper
+        from concord.utils.field_utils import get_field
 
         form_fields = []
 
         for field_name, field_info in self.get_supplied_fields().items():
 
-            overrides = {"field_name": field_name}
-            if field_info[1] is not None:
-                overrides.update(field_info[1])
+            field = get_field(field_info[0])
+            form_dict = field(label=None).to_form_field()
+            form_dict["field_name"] = field_name
 
-            form_field = field_helper(field_info[0], overrides)
-            form_fields.append(form_field)
+            if field_info[1]:
+                for key_name, key_value in field_info[1].items():
+                    form_dict[key_name] = key_value
+
+            form_fields.append(form_dict)
 
         return form_fields

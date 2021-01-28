@@ -22,6 +22,14 @@ Concord has been released under a custom license, the [Concord Cooperative Licen
 1. Change into subdirectory where tests are: `cd concord`
 1. Run the tests: `python manage.py test`
 
+## Testing
+
+There are two types of tests to run.
+
+Testing of the core module is done via pytest. Make sure you are in the core directory and run `python -m pytest`.
+
+Otherwise testing is run as you would expect in a Django project, by cding into the project (Concord) and running `python manage.py test`.
+
 ## Contributing to Concord
 
 It is emphatically recommended that you join the community before trying to make a contribution. Concord is still in an early stage of development and contains many hacks and quirks that you will likely need to ask questions about.

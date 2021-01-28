@@ -23,7 +23,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         from concord.actions.models import TemplateModel
-        from concord.actions.utils import get_all_templates
+        from concord.utils.lookups import get_all_templates
 
         if options['recreate']:
             for template in TemplateModel.objects.all():

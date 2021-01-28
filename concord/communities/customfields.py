@@ -5,11 +5,13 @@ import json, logging
 
 from django.db import models
 
+from concord.utils.converters import ConcordConverterMixin
+
 
 logger = logging.getLogger(__name__)
 
 
-class RoleHandler(object):
+class RoleHandler(ConcordConverterMixin):
     """Every community has a list of roles, which are set community-wide.  People with the relevant permissions
     can add and remove roles, and add or remove people from roles.
 
@@ -406,16 +408,6 @@ class RoleHandler(object):
             logger.warning(f"Role {role_name} not in roles")
 
 
-def parse_role_handler_data(role_handler_data):
-    """Parse role handler data when de-serializing."""
-    role_data = json.loads(role_handler_data)
-    return RoleHandler(
-        members=role_data['members'],
-        owners=role_data['owners'],
-        governors=role_data['governors'],
-        custom_roles=role_data['custom_roles'])
-
-
 class RoleField(models.Field):
     """This custom field allows us to access the methods and validation of the RoleHandler
     object."""
@@ -433,7 +425,7 @@ class RoleField(models.Field):
     def from_db_value(self, value, expression, connection):
         if value is None:
             return RoleHandler()
-        return parse_role_handler_data(value)
+        return RoleHandler.deserialize(value)
 
     def to_python(self, value):
         if isinstance(value, RoleHandler):
@@ -442,13 +434,8 @@ class RoleField(models.Field):
             return RoleHandler()
         if type(value) == dict and all(k in value.keys() for k in ["members", "owners", "governors", "custom_roles"]):
             return RoleHandler(**value)
-        return parse_role_handler_data(value)
+        return RoleHandler.deserialize(value)
 
     def get_prep_value(self, value):
         if isinstance(value, RoleHandler):
-            return json.dumps({
-                'members': value.members,
-                'owners': value.owners,
-                'governors': value.governors,
-                'custom_roles': value.custom_roles
-            })
+            return value.serialize(to_json=True)

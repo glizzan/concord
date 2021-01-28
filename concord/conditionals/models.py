@@ -35,7 +35,6 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
     options:
 
         acceptance: {condition_type: X, condition_data: {}, permission_data: {}}
-        filter: {filter_type: X, filter_data: {}}
 
     For clarity's sake, any ConditionModel is refered to as an "instance" and the dictionaries/dataclass obj's
     corresponding to them are referred to as a "dataclass".
@@ -96,8 +95,6 @@ class ConditionManager(PermissionedModel):  # NOTE: can maybe just be a model he
         if mode == "acceptance":
             condition["permission_data"] = self.clean_permission_data(condition["permission_data"])
             return ConditionData(data=condition)
-        if mode == "filter":
-            return ConditionData(data=condition, mode="filter")
 
     def add_condition(self, condition, mode="acceptance"):
         condition_dataclasses = self.get_condition_dataclasses()

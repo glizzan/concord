@@ -1,4 +1,3 @@
-
 def crawl_objects(crawl_tokens, base):
     """
     Examples passed in:

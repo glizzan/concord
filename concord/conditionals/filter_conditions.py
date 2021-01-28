@@ -233,4 +233,3 @@ class ActorMemberCondition(FilterCondition):
         if datetime.datetime.now() - date_joined > self.duration:
             return True
         return False
-

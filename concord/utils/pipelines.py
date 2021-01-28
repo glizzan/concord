@@ -9,6 +9,47 @@ import json
 from concord.utils.helpers import Client
 
 
+class Match:
+    """Match is a helper class to manage info from each match. The Specific pipeline makes use of nested matches (for
+    specific permissions that matched)."""
+
+    def __init__(self, *args, **kwargs):
+        for key, value in kwargs.items():
+            # if key == "matches":
+            #     value = [Match(**match) for match in value]
+            setattr(self, key, value)
+
+    @property
+    def unresolved(self):
+        return self.status in ["not created", "waiting"]
+
+    def rejection_message(self):
+        if hasattr(self, "matches"):
+            rejections = [match.rejection for match in self.matches if match.rejection]
+            return rejections[0] if rejections else None
+        return self.rejection if hasattr(self, "rejection") else f"does not have {self.pipeline} permission"
+
+    def get_condition_manager(self, unresolved_only=True):
+        if hasattr(self, "condition_manager") and (self.unresolved or not unresolved_only):
+            return self.condition_manager
+
+    def get_condition_managers(self, unresolved_only=True):
+        if hasattr(self, "matches"):
+            responses = [match.get_condition_manager(unresolved_only) for match in self.matches]
+            return list(filter(None, responses))
+        return [self.get_condition_manager(unresolved_only)]
+
+    def serialize(self):
+        data = {}
+        for key, value in self.__dict__.items():
+            data.update({key: value})
+            if key == "matches":
+                data[key] = [match.serialize() for match in value]
+            if key == "condition_manager" and value is not None and not isinstance(value, int):
+                data[key] = value.pk
+        return data
+
+
 ############################
 ### Permissions Pipeline ###
 ############################
@@ -40,10 +81,8 @@ def foundational_permission_pipeline(action, client, community):
     manager = client.Conditional.get_condition_manager(community, "owner") if has_authority and has_condition else None
     status = determine_status(action, has_authority, has_condition, manager)
 
-    return {
-        "pipeline": "foundational", "has_authority": has_authority, "matched_role": matched_role,
-        "has_condition": has_condition, "condition_manager": manager, "status": status
-    }
+    return Match(pipeline="foundational", has_authority=has_authority, matched_role=matched_role,
+                 has_condition=has_condition, condition_manager=manager, status=status)
 
 
 def governing_permission_pipeline(action, client, community):
@@ -54,10 +93,8 @@ def governing_permission_pipeline(action, client, community):
     manager = client.Conditional.get_condition_manager(community, "governor") if has_authority and has_condition else None
     status = determine_status(action, has_authority, has_condition, manager)
 
-    return {
-        "pipeline": "governing", "has_authority": has_authority, "matched_role": matched_role,
-        "has_condition": has_condition, "condition_manager": manager, "status": status
-    }
+    return Match(pipeline="governing", has_authority=has_authority, matched_role=matched_role,
+                 has_condition=has_condition, condition_manager=manager, status=status)
 
 
 def check_specific_permission(action, client, permission):
@@ -77,10 +114,8 @@ def check_specific_permission(action, client, permission):
 
         has_authority, matched_role, has_condition, manager, status = False, None, None, None, None
 
-    return {
-        "pipeline": "specific", "has_authority": has_authority, "matched_role": matched_role,
-        "has_condition": has_condition, "condition_manager": manager, "status": status, "rejection": rejection_message
-    }
+    return Match(pipeline="specific", has_authority=has_authority, matched_role=matched_role,
+                 has_condition=has_condition, condition_manager=manager, status=status, rejection=rejection_message)
 
 
 def specific_permission_pipeline(action, client):
@@ -97,7 +132,7 @@ def specific_permission_pipeline(action, client):
     # Get and check target level permissions
     for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
         permission_dict = check_specific_permission(action, client, permission)
-        if permission_dict["status"] == "approved": return permission_dict
+        if permission_dict.status == "approved": return permission_dict
         matches.append(permission_dict)
 
     # If we're still here, that means nothing matched without a condition, so now we look for nested permissions
@@ -105,12 +140,12 @@ def specific_permission_pipeline(action, client):
         client.PermissionResource.set_target(target=nested_object)
         for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
             permission_dict = check_specific_permission(action, client, permission)
-            if permission_dict["status"] == "approved": return permission_dict
+            if permission_dict.status == "approved": return permission_dict
             matches.append(permission_dict)
 
     # If after all of this, we've only got waiting options, return them
-    status = "waiting" if "waiting" in [match["status"] for match in matches] else "rejected"
-    return {"pipeline": "specific", "status": status, "matches": matches}
+    status = "waiting" if "waiting" in [match.status for match in matches] else "rejected"
+    return Match(pipeline="specific", status=status, matches=matches)
 
 
 def is_foundational(action):
@@ -135,7 +170,7 @@ def has_permission(action):
 
     if action.target.governing_permission_enabled:
         governing_dict = governing_permission_pipeline(action, client, community)
-        if governing_dict["status"] == "approved": return [governing_dict]
+        if governing_dict.status == "approved": return [governing_dict]
 
     return [governing_dict, specific_permission_pipeline(action, client)]
 
@@ -145,30 +180,27 @@ def has_permission(action):
 #######################
 
 
-def save_logs(info, action):
+def save_logs(matches, action):
 
-    approved_through, matched_role, rejection_reason = None, None, None
+    approved_through, matched_role, rejection_reason, serialized_info = None, None, None, []
 
-    for item in info:
+    for match in matches:
 
-        if item["status"] == "approved":
-            approved_through = item["pipeline"]
-            matched_role = item["matched_role"]
+        if match.status == "approved":
+            approved_through, matched_role = match.pipeline, match.matched_role
 
-        if item.get("rejection", None): rejection_reason = item["rejection"]
+        if match.status == "rejected":
+            rejection_reason = match.rejection_message()
 
-        item["condition_manager"] = item["condition_manager"].pk if item.get("condition_manager", None) else None
-        for match in item.get("matches", []):
-            if match.get("rejection", None): rejection_reason = match["rejection"]
-            match["condition_manager"] = match["condition_manager"].pk if match.get("condition_manager", None) else None
+        serialized_info.append(match.serialize())
 
     action.add_log(log={"approved_through": approved_through, "matched_role": matched_role,
-                        "rejection_reason": rejection_reason, "info": info})
+                        "rejection_reason": rejection_reason, "info": serialized_info})
 
 
-def determine_action_status(info):
+def determine_action_status(matches):
 
-    status_list = [item["status"] for item in info]
+    status_list = [match.status for match in matches]
 
     if "approved" in status_list: return "approved"  # only needs to be approved by one pipeline
     if "waiting" in status_list: return "waiting"  # if any pipeline is waiting, status is waiting
@@ -177,16 +209,12 @@ def determine_action_status(info):
     raise Exception(f"Unexpected contents for status list: {status_list}")
 
 
-def create_conditions(action, info):
+def create_conditions(action, matches):
 
     managers = []
-    for info_dict in info:
-        if info_dict["pipeline"] in ["foundational", "governing"] and info_dict["status"] in ["not created", "waiting"]:
-            managers.append(info_dict["condition_manager"])
-        if info_dict["pipeline"] == "specific" and info_dict["status"] in ["not created", "waiting"]:
-            for item in info_dict["matches"]:
-                if item["pipeline"] == "specific" and item["status"] in ["not created", "waiting"]:
-                    managers.append(item["condition_manager"])
+    for match in matches:
+        if match.unresolved:
+            managers += match.get_condition_managers()
 
     Client().Conditional.create_conditions_for_action(action=action, condition_managers=managers)
 
@@ -195,11 +223,11 @@ def action_pipeline(action, do_create_conditions=True):
 
     if action.status in ["taken", "waiting"]:
 
-        info = has_permission(action)
+        matches = has_permission(action)
         if do_create_conditions:
-            create_conditions(action, info)
-        action.status = determine_action_status(info)
-        save_logs(info, action)
+            create_conditions(action, matches)
+        action.status = determine_action_status(matches)
+        save_logs(matches, action)
 
     if action.status == "approved":
         result = action.change.implement(actor=action.actor, target=action.target, action=action)
@@ -213,8 +241,8 @@ def action_pipeline(action, do_create_conditions=True):
 def mock_action_pipeline(mock_action, exclude_conditional=False):
 
     mock_action.status = "taken"
-    info = has_permission(mock_action)
-    status = determine_action_status(info)
+    matches = has_permission(mock_action)
+    status = determine_action_status(matches)
 
     if status == "approved": return True
     if status == "waiting" and not exclude_conditional: return True

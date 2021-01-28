@@ -2535,6 +2535,7 @@ class DefaultPermissionsTest(DataTestCase):
         #      Changes().Resources.EditRow, Changes().Resources.MoveRow, Changes().Resources.DeleteRow])
 
 
+@skip
 class FilterConditionTest(DataTestCase):
 
     def setUp(self):

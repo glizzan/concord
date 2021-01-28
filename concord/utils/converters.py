@@ -101,7 +101,6 @@ class ConcordConverterMixin(object):
     def serialize(self, **kwargs):
         """Takes in an object and returns all data from it in json-seraliazable form. Used in conjunction with
         deserialize.
-
         Determines what fields to serialize by checking, in order: if a serializable_fields keyword arg is passed
         in; if "serializable_fields" attribute exists on the instance; checking if the instance is a Django model and
         getting the list of field names, and, finally, if it's a regular Python object, gets the non-self parametters
@@ -145,13 +144,10 @@ class ConcordConverterMixin(object):
     def deserialize(cls, serialized_value=None, **kwargs):
         """Takes in a serialized dict and returns an instantiated Python object.  Used in conjunction with
         serialize.
-
         Determines what Python class to deserialize into based on, first, the class kwarg passed in via serialized
         dict. This should almost always be passed in, however if it's not we can try to see what class is calling it, and
         if it's a non-mixin class we assume this is the class we want to instantiate.  Otherwise we raise an exception.
-
         If a given field is itself a concord_dict, calls deserialize on it.
-
         # FIXME: does this create a new target in the DB every time we deserialize an action with the same target?
         # or create a new user?
         """
@@ -207,9 +203,7 @@ class ConcordConverterMixin(object):
     def concord_fields(self):
         """If the object is a Django model, gets the map of Django model fields to Concord fields for the object.
         This system facilitates transferring model fields.
-
         eg on a Django model:
-
         @classmethod
         def concord_fields(cls):
             return {cls.commented_object: 'PermissionedModelField', cls.text: 'CharField', cls.created_at: 'DateTimeField'}
@@ -265,12 +259,9 @@ class ConcordConverterMixin(object):
 
 """
 Potential extensions:
-
 - creating this in DB, updating them in DB
-
 - validating?
 """
 
 def deserialize_convertible(data):
     return ConcordConverterMixin.deserialize(data)
-

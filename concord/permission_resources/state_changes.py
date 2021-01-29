@@ -101,14 +101,8 @@ class RemovePermissionStateChange(BaseStateChange):
     change_description = "Remove permission"
     section = "Permissions"
     preposition = "from"
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     def description_present_tense(self):
         return "remove permission"
@@ -128,24 +122,17 @@ class RemovePermissionStateChange(BaseStateChange):
 
 class AddActorToPermissionStateChange(BaseStateChange):
     """State change to add an actor to a permission."""
-
     change_description = "Add actor to permission"
     preposition = "for"
     section = "Permissions"
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     actor_to_add = field_utils.ActorField(label="Actor to add", required=True)
 
     def __init__(self, *, actor_to_add: str):
         super().__init__()
         self.actor_to_add = actor_to_add
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"add actor {self.actor_to_add} to permission"
@@ -172,20 +159,14 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
     change_description = "Remove actor from permission"
     preposition = "for"
     section = "Permissions"
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     actor_to_remove = field_utils.ActorField(label="Actor to remove", required=True)
 
     def __init__(self, *, actor_to_remove: str):
         super().__init__()
         self.actor_to_remove = actor_to_remove
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"remove actor {self.actor_to_remove} from permission"
@@ -214,20 +195,14 @@ class AddRoleToPermissionStateChange(BaseStateChange):
     change_description = "Add role to permission"
     preposition = "for"
     section = "Permissions"
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     role_name = field_utils.RoleField(label="Role to add", required=True)
 
     def __init__(self, *, role_name: str):
         super().__init__()
         self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"add role {self.role_name} to permission"
@@ -252,25 +227,18 @@ class AddRoleToPermissionStateChange(BaseStateChange):
 
 class RemoveRoleFromPermissionStateChange(BaseStateChange):
     """State change to remove a role from a permission."""
-
     change_description = "Remove role from permission"
     preposition = "for"
     section = "Permissions"
     configurable_fields = ["role_name"]
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     role_name = field_utils.RoleField(label="Role to remove", required=True)
 
     def __init__(self, *, role_name: str):
         super().__init__()
         self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     @classmethod
     def get_uninstantiated_description(cls, **configuration_kwargs):
@@ -318,10 +286,11 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
 
 class ChangePermissionConfigurationStateChange(BaseStateChange):
     """State change to change the configuration of a permission."""
-
     change_description = "Change configuration of permission"
     preposition = "for"
     section = "Permissions"
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     configurable_field_name = field_utils.CharField(label="Name of field to configure", required=True)
     configurable_field_value = field_utils.CharField(label="Value to configure field to", required=True)
@@ -330,14 +299,6 @@ class ChangePermissionConfigurationStateChange(BaseStateChange):
         super().__init__()
         self.configurable_field_name = configurable_field_name
         self.configurable_field_value = configurable_field_value
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"change configuration field {self.configurable_field_name} to value " + \
@@ -364,20 +325,14 @@ class ChangeInverseStateChange(BaseStateChange):
     change_description = "Toggle permission's inverse field"
     preposition = "for"
     section = "Permissions"
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     change_to = field_utils.BooleanField(label="Change inverse field of permission to", required=True)
 
     def __init__(self, *, change_to: bool):
         super().__init__()
         self.change_to = change_to
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"change inverse field to value {self.change_to} on permission"
@@ -401,18 +356,11 @@ class ChangeInverseStateChange(BaseStateChange):
 
 class EnableAnyoneStateChange(BaseStateChange):
     """State change to set a permission so anyone can take it."""
-
     change_description = "Give anyone permission"
     section = "Permissions"
     preposition = "for"
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     def description_present_tense(self):
         return "give anyone permission"
@@ -432,14 +380,8 @@ class DisableAnyoneStateChange(BaseStateChange):
     change_description = "Remove anyone from permission"
     section = "Permissions"
     preposition = "for"
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [PermissionsItem]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
 
     def description_present_tense(self):
         return "remove anyone from permission"
@@ -461,6 +403,8 @@ class DisableAnyoneStateChange(BaseStateChange):
 class EditTemplateStateChange(BaseStateChange):
     """State change to edit a template."""
     change_description = "Edit Template"
+    allowable_targets = [TemplateModel]
+    settable_classes = ["all_models"]
 
     template_object_id = field_utils.IntegerField(label="ID of Template to edit", required=True)
     field_name = field_utils.CharField(label="Field to edit", required=True)
@@ -471,14 +415,6 @@ class EditTemplateStateChange(BaseStateChange):
         self.template_object_id = template_object_id
         self.field_name = field_name
         self.new_field_data = new_field_data
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [TemplateModel]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"edit template field {self.field_name} to {self.new_field_data}"

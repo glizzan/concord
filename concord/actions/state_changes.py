@@ -17,8 +17,6 @@ from concord.actions.utils import MockAction
 from concord.utils.converters import ConcordConverterMixin
 from concord.utils import field_utils
 
-# NOTE!!!  This is the old version, new development should happen in core.base_classes.BaseStateChange
-# This should be deleted as part of refactoring.
 
 class BaseStateChange(ConcordConverterMixin):
     """The BaseStateChange object is the object which all other state change objects inherit from. It has a
@@ -30,6 +28,7 @@ class BaseStateChange(ConcordConverterMixin):
     is_foundational = False
     section: str = "Miscellaneous"
     configurable_fields = list()
+    allowable_targets = ["all_models"]
 
     def __init__(self):
         super().__init__()
@@ -78,26 +77,30 @@ class BaseStateChange(ConcordConverterMixin):
         return True if model_name in target_names else False
 
     @classmethod
+    def get_models(cls, models):
+        model_list = []
+        for model in models:
+            if model == "all_community_models":
+                model_list += get_all_community_models()
+            elif model == "all_models":
+                model_list += get_all_permissioned_models()
+            else:
+                model_list.append(model)
+        return model_list
+
+    @classmethod
     def get_allowable_targets(cls):
         """Returns the classes that an action of this type may target."""
-        return cls.get_all_possible_targets()
+        return cls.get_models(cls.allowable_targets)
 
     @classmethod
     def get_settable_classes(cls):
-        """Returns the classes that a permission with this change type may be set on.  This overlaps with
-        allowable targets, but also includes classes that allowable targets may be nested on.  Most likely
-        called by the validate method in AddPermissionStateChange."""
+        """Returns the classes that a permission with this change type may be set on. By default, this is the same as
+        allowable_targets, but may be overridden by the settable_classes attribute, usually to add classes that an
+        allowable target is nested on. Most likely called by the validate method in AddPermissionStateChange."""
+        if hasattr(cls, "settable_classes"):
+            return cls.get_models(cls.settable_classes)
         return cls.get_allowable_targets()
-
-    @classmethod
-    def get_all_possible_targets(cls):
-        """Helper method, gets all permissioned models in system that are not abstract."""
-        return get_all_permissioned_models()
-
-    @classmethod
-    def get_community_models(cls):
-        """Helper method which lets us use alternative community models as targets for community actions."""
-        return get_all_community_models()
 
     def set_default_permissions(self, actor, instance):
         """Helper method to easily set default permissions on an object, called

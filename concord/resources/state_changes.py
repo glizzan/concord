@@ -28,14 +28,8 @@ class AddCommentStateChange(BaseStateChange):
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment")
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
     target_type = field_utils.CharField(label="Add comments only to this type of target")
-
-    def __init__(self, text, original_creator_only=False, target_type=None):
-        super().__init__()
-        self.text = text
-        self.original_creator_only = original_creator_only
-        self.target_type = target_type
 
     def description_present_tense(self):
         return "add comment"
@@ -126,14 +120,8 @@ class EditCommentStateChange(BaseStateChange):
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment")
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment")
-
-    def __init__(self, text, commenter_only=False, original_creator_only=False):
-        super().__init__()
-        self.text = text
-        self.commenter_only = commenter_only
-        self.original_creator_only = original_creator_only
+    commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -210,13 +198,8 @@ class DeleteCommentStateChange(BaseStateChange):
     settable_classes = ["all_models"]
 
     # Fields
-    commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment")
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can delete comment")
-
-    def __init__(self, commenter_only=False, original_creator_only=False):
-        super().__init__()
-        self.commenter_only = commenter_only
-        self.original_creator_only = original_creator_only
+    commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can delete comment", null_value=False)
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -301,10 +284,6 @@ class ChangeResourceNameStateChange(BaseStateChange):
     # Fields
     name = field_utils.CharField(label="New name", required=True)
 
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
-
     def description_present_tense(self):
         return f"change name of resource to {self.name}"
 
@@ -326,10 +305,6 @@ class AddItemStateChange(BaseStateChange):
 
     # Fields
     name = field_utils.CharField(label="New name", required=True)
-
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
 
     def description_present_tense(self):
         return f"add item {self.name}"
@@ -384,12 +359,6 @@ class AddListStateChange(BaseStateChange):
     configuration = field_utils.DictField(label="Configuration", required=True)
     description = field_utils.CharField(label="Description")
 
-    def __init__(self, name, configuration, description=None):
-        super().__init__()
-        self.name = name
-        self.configuration = configuration
-        self.description = description if description else ""
-
     def description_present_tense(self):
         return f"add list with name {self.name}"
 
@@ -426,12 +395,6 @@ class EditListStateChange(BaseStateChange):
     name = field_utils.CharField(label="Name")
     configuration = field_utils.DictField(label="Configuration")
     description = field_utils.CharField(label="Description")
-
-    def __init__(self, name=None, configuration=None, description=None):
-        super().__init__()
-        self.name = name
-        self.configuration = configuration
-        self.description = description
 
     def description_present_tense(self):
         return f"edit list with new name {self.name} and new description {self.description}"
@@ -494,11 +457,6 @@ class AddRowStateChange(BaseStateChange):
     row_content = field_utils.CharField(label="Content of row", required=True)
     index = field_utils.IntegerField(label="Index of row")
 
-    def __init__(self, row_content, index=None):
-        super().__init__()
-        self.row_content = row_content
-        self.index = index
-
     def description_present_tense(self):
         return f"add row with content {self.row_content}"
 
@@ -528,15 +486,11 @@ class EditRowStateChange(BaseStateChange):
     """State Change to edit a row in a list."""
     change_description = "Edit row in list"
     section = "List"
-    row_content = field_utils.CharField(label="Content of row", required=True)
-    index = field_utils.IntegerField(label="Index of row", required=True)
     allowable_targets = [SimpleList]
     settable_classes = ["all_community_models", SimpleList]
 
-    def __init__(self, row_content, index):
-        super().__init__()
-        self.row_content = row_content
-        self.index = index
+    row_content = field_utils.CharField(label="Content of row", required=True)
+    index = field_utils.IntegerField(label="Index of row", required=True)
 
     def description_present_tense(self):
         return f"edit row with index {self.index} to have new content {self.row_content}"
@@ -574,14 +528,8 @@ class MoveRowStateChange(BaseStateChange):
     settable_classes = ["all_community_models", SimpleList]
 
     # Fields
-
     old_index = field_utils.IntegerField(label="Old index of row", required=True)
     new_index = field_utils.IntegerField(label="New index of row", required=True)
-
-    def __init__(self, old_index, new_index):
-        super().__init__()
-        self.old_index = old_index
-        self.new_index = new_index
 
     def description_present_tense(self):
         return f"move row with current index {self.old_index} to {self.new_index}"
@@ -629,10 +577,6 @@ class DeleteRowStateChange(BaseStateChange):
 
     # Fields
     index = field_utils.IntegerField(label="Index of row to delete", required=True)
-
-    def __init__(self, index):
-        super().__init__()
-        self.index = index
 
     def description_present_tense(self):
         return f"delete row with index {self.index}"

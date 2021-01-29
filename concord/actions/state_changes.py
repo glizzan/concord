@@ -30,35 +30,26 @@ class BaseStateChange(ConcordConverterMixin):
     configurable_fields = list()
     allowable_targets = ["all_models"]
 
-    def __init__(self):
-        super().__init__()
-        self._initialize_fields()
-
-    def __setattr__(self, attribute_name, attribute_value):
-        with suppress(AttributeError):
-            field = super().__getattribute__(attribute_name)
-            if field and hasattr(field, "value"):
-                field.value = attribute_value
-                return
-        super().__setattr__(attribute_name, attribute_value)
-
-    def __getattribute__(self, attribute_name):
-        """If the attribute is a Concord field, returns the value when referenced."""
-        field = super().__getattribute__(attribute_name)
-        if field and hasattr(field, "value"):
-            return field.value
-        return field
-
-    def _initialize_fields(self):
-        """This is a workaround to handle the fact that instances declared on classes are shared between
-        classes.
-
-        FIXME: doesn't work because of __setattr__ I think
-        """
-
+    def serialize_fields(self):
+        fields = {}
         for field_name, field in self.get_concord_fields_with_names().items():
-            new_field = copy.deepcopy(field)
-            self.__dict__[field_name] = new_field
+            fields.update({field_name: getattr(self, field_name)})
+        return fields
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        for field_name, field in self.get_concord_fields_with_names().items():
+            value = kwargs.pop(field_name, None)
+            if value is not None:
+                setattr(self, field_name, value)
+                continue
+            if field.required:
+                raise Exception(f"Field {field_name} is required")
+            if field.null_value:
+                value = field.null_value
+                value = {} if value == dict else value
+                value = [] if value == list else value
+            setattr(self, field_name, value)
 
     @classmethod
     def get_change_type(cls):
@@ -136,22 +127,24 @@ class BaseStateChange(ConcordConverterMixin):
             try:
 
                 model_to_test = target if self.model_based_validation[0] == "target" else self.model_based_validation[0]
+                field_dict = self.get_concord_field_instances()
 
-                for field in self.model_based_validation[1]:
+                for field_name in self.model_based_validation[1]:
 
-                    full_field = super().__getattribute__(field)
-                    model_field = model_to_test._meta.get_field(field)
+                    full_field = field_dict[field_name]
+                    model_field = model_to_test._meta.get_field(field_name)
+                    field_value = getattr(self, field_name)
 
-                    if not full_field.value and not full_field.required:   # if no value but target field can be null
+                    if not field_value and not full_field.required:   # if no value but target field can be null
                         continue
 
-                    model_field.clean(full_field.value, model_to_test)
+                    model_field.clean(field_value, model_to_test)
 
                 return True
 
             except ValidationError as error:
 
-                message = f"Error validating value {full_field.value} for field {field}: " + str(error)
+                message = f"Error validating value {field_value} for field {field_name}: " + str(error)
                 self.set_validation_error(message=message)
                 return False
 
@@ -241,11 +234,6 @@ class ChangeOwnerStateChange(BaseStateChange):
     # Fields
     new_owner_content_type = field_utils.IntegerField(label="New owner's content type id", required=True)
     new_owner_id = field_utils.IntegerField(label="New owner's ID", required=True)
-
-    def __init__(self, new_owner_content_type, new_owner_id):
-        super().__init__()
-        self.new_owner_content_type = new_owner_content_type
-        self.new_owner_id = new_owner_id
 
     def description_present_tense(self):
         return f"change owner of community to {self.new_owner_id}"
@@ -367,10 +355,6 @@ class ViewStateChange(BaseStateChange):
     # Fields
     fields_to_include = field_utils.ListField(label="Fields that can be viewed")
 
-    def __init__(self, fields_to_include=None):
-        super().__init__()
-        self.fields_to_include = fields_to_include
-
     def description_present_tense(self):
         return f"view {', '.join(self.fields_to_include) if self.fields_to_include else 'all fields'}"
 
@@ -440,16 +424,9 @@ class ApplyTemplateStateChange(BaseStateChange):
 
     # Fields
     template_model_pk = field_utils.IntegerField(label="PK of Template to apply", required=True)
-    supplied_fields = field_utils.DictField(label="Fields to supply when applying template")
+    supplied_fields = field_utils.DictField(label="Fields to supply when applying template", null_value=dict)
     is_foundational = field_utils.BooleanField(label="Template makes foundational changes")
     original_creator_only = field_utils.BooleanField(label="Only allow original creator")
-
-    def __init__(self, template_model_pk, supplied_fields=None, is_foundational=False, original_creator_only=False):
-        super().__init__()
-        self.template_model_pk = template_model_pk
-        self.supplied_fields = supplied_fields if supplied_fields else {}
-        self.is_foundational = is_foundational
-        self.original_creator_only = original_creator_only
 
     def description_present_tense(self):
         return "apply template"

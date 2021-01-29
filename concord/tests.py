@@ -2225,26 +2225,6 @@ class SimpleListTest(DataTestCase):
             {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
 
 
-class StateChangeTest(DataTestCase):
-
-    def test_state_changes_have_valid_construction(self):
-
-        for state_change in get_all_state_changes():
-
-            sig = inspect.signature(state_change)
-            concord_field_dict = state_change.get_concord_fields_with_names()
-
-            # check same number and name of ConcordFields and signature parameters in init method
-            self.assertEquals(len(sig.parameters), len(state_change.get_concord_fields()))
-            self.assertEquals(set([name for name in sig.parameters]), set(concord_field_dict.keys()))
-
-            # check that required attribute of field matches __init__
-            for name, parameter in sig.parameters.items():
-                field_required = concord_field_dict[name].required
-                parameter_required = True if parameter.default == inspect._empty else False
-                self.assertEquals(parameter_required, field_required, msg=f"check {state_change.__name__} {parameter}")
-
-
 class ConsensusConditionTest(DataTestCase):
 
     def setUp(self):

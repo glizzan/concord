@@ -28,22 +28,11 @@ class AddPermissionStateChange(BaseStateChange):
     model_based_validation = (PermissionsItem, ["change_type", "anyone", "inverse"])
 
     change_type = field_utils.CharField(label="Type of action the permission covers", required=True)
-    actors = field_utils.ActorListField(label="Actors who have this permission", required=True)
-    roles = field_utils.RoleListField(label="Roles who have this permission", required=True)
-    configuration = field_utils.DictField(label="Configuration of the permission")
-    anyone = field_utils.BooleanField(label="Everyone has the permission")
-    inverse = field_utils.BooleanField(label="Do the inverse of this permission")
-
-    def __init__(self, change_type, actors, roles, configuration=None, anyone=False, inverse=False):
-        """Permission actors and permission role pairs MUST be a list of zero or more
-        strings."""
-        super().__init__()
-        self.change_type = change_type
-        self.actors = actors if actors else []
-        self.roles = roles if roles else []
-        self.configuration = configuration if configuration else {}
-        self.inverse = inverse
-        self.anyone = anyone
+    actors = field_utils.ActorListField(label="Actors who have this permission", null_value=list)
+    roles = field_utils.RoleListField(label="Roles who have this permission", null_value=list)
+    configuration = field_utils.DictField(label="Configuration of the permission", null_value=dict)
+    anyone = field_utils.BooleanField(label="Everyone has the permission", null_value=False)
+    inverse = field_utils.BooleanField(label="Do the inverse of this permission", null_value=False)
 
     def description_present_tense(self):
         config_str = f" (configuration: {str(self.configuration)})" if self.configuration else ""
@@ -130,10 +119,6 @@ class AddActorToPermissionStateChange(BaseStateChange):
 
     actor_to_add = field_utils.ActorField(label="Actor to add", required=True)
 
-    def __init__(self, *, actor_to_add: str):
-        super().__init__()
-        self.actor_to_add = actor_to_add
-
     def description_present_tense(self):
         return f"add actor {self.actor_to_add} to permission"
 
@@ -163,10 +148,6 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
     settable_classes = ["all_models"]
 
     actor_to_remove = field_utils.ActorField(label="Actor to remove", required=True)
-
-    def __init__(self, *, actor_to_remove: str):
-        super().__init__()
-        self.actor_to_remove = actor_to_remove
 
     def description_present_tense(self):
         return f"remove actor {self.actor_to_remove} from permission"
@@ -200,10 +181,6 @@ class AddRoleToPermissionStateChange(BaseStateChange):
 
     role_name = field_utils.RoleField(label="Role to add", required=True)
 
-    def __init__(self, *, role_name: str):
-        super().__init__()
-        self.role_name = role_name
-
     def description_present_tense(self):
         return f"add role {self.role_name} to permission"
 
@@ -235,10 +212,6 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
     settable_classes = ["all_models"]
 
     role_name = field_utils.RoleField(label="Role to remove", required=True)
-
-    def __init__(self, *, role_name: str):
-        super().__init__()
-        self.role_name = role_name
 
     @classmethod
     def get_uninstantiated_description(cls, **configuration_kwargs):
@@ -295,11 +268,6 @@ class ChangePermissionConfigurationStateChange(BaseStateChange):
     configurable_field_name = field_utils.CharField(label="Name of field to configure", required=True)
     configurable_field_value = field_utils.CharField(label="Value to configure field to", required=True)
 
-    def __init__(self, *, configurable_field_name: str, configurable_field_value: str):
-        super().__init__()
-        self.configurable_field_name = configurable_field_name
-        self.configurable_field_value = configurable_field_value
-
     def description_present_tense(self):
         return f"change configuration field {self.configurable_field_name} to value " + \
                f"{self.configurable_field_value} on permission"
@@ -329,10 +297,6 @@ class ChangeInverseStateChange(BaseStateChange):
     settable_classes = ["all_models"]
 
     change_to = field_utils.BooleanField(label="Change inverse field of permission to", required=True)
-
-    def __init__(self, *, change_to: bool):
-        super().__init__()
-        self.change_to = change_to
 
     def description_present_tense(self):
         return f"change inverse field to value {self.change_to} on permission"
@@ -409,12 +373,6 @@ class EditTemplateStateChange(BaseStateChange):
     template_object_id = field_utils.IntegerField(label="ID of Template to edit", required=True)
     field_name = field_utils.CharField(label="Field to edit", required=True)
     new_field_data = field_utils.DictField(label="Data to edit", required=True)
-
-    def __init__(self, template_object_id, field_name, new_field_data):
-        super().__init__()
-        self.template_object_id = template_object_id
-        self.field_name = field_name
-        self.new_field_data = new_field_data
 
     def description_present_tense(self):
         return f"edit template field {self.field_name} to {self.new_field_data}"

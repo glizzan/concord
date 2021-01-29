@@ -22,18 +22,10 @@ class AddConditionStateChange(BaseStateChange):
     allowable_targets = ["all_community_models", PermissionsItem]
 
     condition_type = field_utils.CharField(label="Type of condition to add", required=True)
-    condition_data = field_utils.DictField(label="Data for condition", required=True)
-    permission_data = field_utils.DictField(label="Data for permissions set on condition", required=True)
-    leadership_type = field_utils.CharField(label="Type of leadership condition is set on", required=True)
+    condition_data = field_utils.DictField(label="Data for condition", null_value=dict)
+    permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
+    leadership_type = field_utils.CharField(label="Type of leadership condition is set on")
     mode = field_utils.CharField(label="Condition mode", required=True)
-
-    def __init__(self, *, condition_type, condition_data, permission_data, leadership_type, mode):
-        super().__init__()
-        self.condition_type = condition_type
-        self.condition_data = condition_data if condition_data else {}
-        self.permission_data = permission_data if permission_data else []
-        self.leadership_type = leadership_type
-        self.mode = mode
 
     def description_present_tense(self):
         target_string = self.leadership_type if self.leadership_type else "permission"
@@ -146,16 +138,9 @@ class EditConditionStateChange(BaseStateChange):
     allowable_targets = ["all_community_models", PermissionsItem]
 
     element_id = field_utils.IntegerField(label="Element ID", required=True)
-    condition_data = field_utils.DictField(label="New condition data")
-    permission_data = field_utils.DictField(label="New permission data")
+    condition_data = field_utils.DictField(label="New condition data", null_value=dict)
+    permission_data = field_utils.DictField(label="New permission data", null_value=list)
     leadership_type = field_utils.CharField(label="Leadership type to set condition on")
-
-    def __init__(self, *, element_id, condition_data=None, permission_data=None, leadership_type=None):
-        super().__init__()
-        self.element_id = element_id
-        self.condition_data = condition_data if condition_data else {}
-        self.permission_data = permission_data if permission_data else []
-        self.leadership_type = leadership_type
 
     def description_present_tense(self):
         target_string = self.leadership_type if self.leadership_type else "permission"
@@ -256,12 +241,7 @@ class RemoveConditionStateChange(BaseStateChange):
     allowable_targets = ["all_community_models", PermissionsItem]
 
     element_id = field_utils.IntegerField(label="Element ID to remove")
-    leadership_type = field_utils.CharField(label="Leadership type to remove condition from", required=True)
-
-    def __init__(self, *, leadership_type, element_id=None):
-        super().__init__()
-        self.leadership_type = leadership_type
-        self.element_id = element_id
+    leadership_type = field_utils.CharField(label="Leadership type to remove condition from")
 
     def description_present_tense(self):
         target_string = self.leadership_type if self.leadership_type else "permission"
@@ -308,10 +288,6 @@ class AddVoteStateChange(BaseStateChange):
     allowable_targets = [VoteCondition]
 
     vote = field_utils.CharField(label="Vote", required=True)
-
-    def __init__(self, vote):
-        super().__init__()
-        self.vote = vote
 
     def description_present_tense(self):
         return f"add vote {self.vote}"
@@ -438,10 +414,6 @@ class RespondConsensusStateChange(BaseStateChange):
     allowable_targets = [ConsensusCondition]
 
     response = field_utils.CharField(label="Response", required=True)
-
-    def __init__(self, response):
-        super().__init__()
-        self.response = response
 
     def description_present_tense(self):
         return f"respond with {self.response}"

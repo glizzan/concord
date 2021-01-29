@@ -120,17 +120,19 @@ def replace_fields(*, action, mock_action, context):
 
             for change_field_name, change_field in value.get_concord_field_instances().items():
 
-                new_value = replacer(change_field.value, context)
+                change_field_value = getattr(value, change_field_name)
+                new_value = replacer(change_field_value, context)
+
                 if new_value is not ...:
                     action.replace_value(obj=action.change, field_name=change_field_name, value=new_value)
 
                 if change_field_name == "condition_data":
-                    for dict_key, dict_value in change_field.value.items():
+                    for dict_key, dict_value in change_field_value.items():
                         new_value = replacer(dict_value, context)
                         if new_value is not ...: action.change.condition_data[dict_key] = new_value
 
                 if change_field_name == "permission_data":
-                    for index, permission_dict in enumerate(change_field.value):
+                    for index, permission_dict in enumerate(change_field_value):
                         for dict_key, dict_value in permission_dict.items():
                             new_value = replacer(dict_value, context)
                             if new_value is not ...:

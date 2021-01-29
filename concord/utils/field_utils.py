@@ -3,6 +3,8 @@ from contextlib import suppress
 from collections import namedtuple
 
 
+# TODO: fields shouldn't be storing values, need to remove once no longer depended on
+
 class BaseConcordField(object):
     converts_to = list()
     label = None
@@ -11,13 +13,15 @@ class BaseConcordField(object):
     value = None
     field_name = None
     full_name = None
+    null_value = None
 
-    def __init__(self, label, required=None, default=None, value=None, full_name=None, **kwargs):
+    def __init__(self, label, required=None, default=None, value=None, full_name=None, null_value=None, **kwargs):
         self.label = label
         self.required = required if required else self.required
         self.default = default if default else self.default
         self.value = value if value else self.value
         self.full_name = full_name if full_name else self.full_name
+        self.null_value = null_value if null_value else self.null_value
 
     def to_form_field(self):
         return {"label": self.label, "required": self.required, "default": self.default, "value": self.value,

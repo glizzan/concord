@@ -28,14 +28,8 @@ class AddCommentStateChange(BaseStateChange):
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment")
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
     target_type = field_utils.CharField(label="Add comments only to this type of target")
-
-    def __init__(self, text, original_creator_only=False, target_type=None):
-        super().__init__()
-        self.text = text
-        self.original_creator_only = original_creator_only
-        self.target_type = target_type
 
     def description_present_tense(self):
         return "add comment"
@@ -121,27 +115,13 @@ class EditCommentStateChange(BaseStateChange):
     context_keys = ["comment", "commented_object"]
     model_based_validation = (Comment, ["text"])
     configurable_fields = ["original_creator_only", "commenter_only"]
+    allowable_targets = [Comment]
+    settable_classes = ["all_models"]
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment")
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment")
-
-    def __init__(self, text, commenter_only=False, original_creator_only=False):
-        super().__init__()
-        self.text = text
-        self.commenter_only = commenter_only
-        self.original_creator_only = original_creator_only
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [Comment]
-
-    @classmethod
-    def get_settable_classes(cls):
-        """Comments may be made on any target - it's up to the front end to decide what comment functionality to
-        expose to the user."""
-        return cls.get_all_possible_targets()
+    commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -214,25 +194,12 @@ class DeleteCommentStateChange(BaseStateChange):
     section = "Comment"
     context_keys = ["comment", "commented_object"]
     configurable_fields = ["original_creator_only", "commenter_only"]
+    allowable_targets = [Comment]
+    settable_classes = ["all_models"]
 
     # Fields
-    commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment")
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can delete comment")
-
-    def __init__(self, commenter_only=False, original_creator_only=False):
-        super().__init__()
-        self.commenter_only = commenter_only
-        self.original_creator_only = original_creator_only
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [Comment]
-
-    @classmethod
-    def get_settable_classes(cls):
-        """Comments may be made on any target - it's up to the front end to decide what comment functionality to
-        expose to the user."""
-        return cls.get_all_possible_targets()
+    commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can delete comment", null_value=False)
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -305,26 +272,17 @@ class DeleteCommentStateChange(BaseStateChange):
 ### Resource & Item State Changes ###
 #####################################
 
+
 class ChangeResourceNameStateChange(BaseStateChange):
     """State Change to change a resource name."""
     change_description = "Change name of resource"
     preposition = "for"
     model_based_validation = ("target", ["name"])
+    allowable_targets = [Resource, Item]
+    settable_classes = ["all_models"]
 
     # Fields
     name = field_utils.CharField(label="New name", required=True)
-
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [Resource, Item]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_all_possible_targets()
 
     def description_present_tense(self):
         return f"change name of resource to {self.name}"
@@ -342,23 +300,11 @@ class AddItemStateChange(BaseStateChange):
     """State Change to add item to a resource."""
     change_description = "Add item to resource"
     model_based_validation = (Item, ["name"])
+    allowable_targets = [Resource]
+    settable_classes = ["all_community_models", Resource]
 
     # Fields
     name = field_utils.CharField(label="New name", required=True)
-
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [Resource]
-
-    @classmethod
-    def get_settable_classes(cls):
-        """An AddItem permission can be set on an item, a resource, or on the community that owns the
-        item or resource."""
-        return [Resource] + cls.get_community_models()
 
     def description_present_tense(self):
         return f"add item {self.name}"
@@ -376,14 +322,8 @@ class RemoveItemStateChange(BaseStateChange):
     """State Change to remove item from a resource."""
     change_description = "Remove item from resource"
     preposition = "from"
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [Item]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return [Resource, Item] + cls.get_community_models()
+    allowable_targets = [Item]
+    settable_classes = ["all_community_models", Resource, Item]
 
     def description_present_tense(self):
         return "remove item"
@@ -412,21 +352,12 @@ class AddListStateChange(BaseStateChange):
     change_description = "Add list"
     section = "List"
     model_based_validation = (SimpleList, ["name", "description"])
+    allowable_targets = ["all_community_models"]
 
     # Fields
     name = field_utils.CharField(label="Name", required=True)
     configuration = field_utils.DictField(label="Configuration", required=True)
     description = field_utils.CharField(label="Description")
-
-    def __init__(self, name, configuration, description=None):
-        super().__init__()
-        self.name = name
-        self.configuration = configuration
-        self.description = description if description else ""
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"add list with name {self.name}"
@@ -457,25 +388,13 @@ class EditListStateChange(BaseStateChange):
     change_description = "Edit list"
     section = "List"
     model_based_validation = ("target", ["name", "description"])
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
 
     # Fields
     name = field_utils.CharField(label="Name")
     configuration = field_utils.DictField(label="Configuration")
     description = field_utils.CharField(label="Description")
-
-    def __init__(self, name=None, configuration=None, description=None):
-        super().__init__()
-        self.name = name
-        self.configuration = configuration
-        self.description = description
-
-    @classmethod
-    def get_allowable_targets(self):
-        return [SimpleList]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_community_models() + [SimpleList]
 
     def description_present_tense(self):
         return f"edit list with new name {self.name} and new description {self.description}"
@@ -512,14 +431,8 @@ class DeleteListStateChange(BaseStateChange):
     """State Change to delete an existing list."""
     change_description = "Delete list"
     section = "List"
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [SimpleList]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_community_models() + [SimpleList]
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
 
     def description_present_tense(self):
         return "delete list"
@@ -537,23 +450,12 @@ class AddRowStateChange(BaseStateChange):
     """State Change to add a row to a list."""
     change_description = "Add row to list"
     section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
 
     # Fields
     row_content = field_utils.CharField(label="Content of row", required=True)
     index = field_utils.IntegerField(label="Index of row")
-
-    def __init__(self, row_content, index=None):
-        super().__init__()
-        self.row_content = row_content
-        self.index = index
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [SimpleList]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_community_models() + [SimpleList]
 
     def description_present_tense(self):
         return f"add row with content {self.row_content}"
@@ -584,21 +486,11 @@ class EditRowStateChange(BaseStateChange):
     """State Change to edit a row in a list."""
     change_description = "Edit row in list"
     section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
+
     row_content = field_utils.CharField(label="Content of row", required=True)
     index = field_utils.IntegerField(label="Index of row", required=True)
-
-    def __init__(self, row_content, index):
-        super().__init__()
-        self.row_content = row_content
-        self.index = index
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [SimpleList]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_community_models() + [SimpleList]
 
     def description_present_tense(self):
         return f"edit row with index {self.index} to have new content {self.row_content}"
@@ -632,24 +524,12 @@ class MoveRowStateChange(BaseStateChange):
     """State Change to move a row in a list."""
     change_description = "Move row in list"
     section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
 
     # Fields
-
     old_index = field_utils.IntegerField(label="Old index of row", required=True)
     new_index = field_utils.IntegerField(label="New index of row", required=True)
-
-    def __init__(self, old_index, new_index):
-        super().__init__()
-        self.old_index = old_index
-        self.new_index = new_index
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [SimpleList]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_community_models() + [SimpleList]
 
     def description_present_tense(self):
         return f"move row with current index {self.old_index} to {self.new_index}"
@@ -692,21 +572,11 @@ class DeleteRowStateChange(BaseStateChange):
     """State Change to delete a row in a list."""
     change_description = "Delete row in list"
     section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
 
     # Fields
     index = field_utils.IntegerField(label="Index of row to delete", required=True)
-
-    def __init__(self, index):
-        super().__init__()
-        self.index = index
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return [SimpleList]
-
-    @classmethod
-    def get_settable_classes(cls):
-        return cls.get_community_models() + [SimpleList]
 
     def description_present_tense(self):
         return f"delete row with index {self.index}"

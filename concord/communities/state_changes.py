@@ -18,16 +18,9 @@ class ChangeNameStateChange(BaseStateChange):
     preposition = "for"
     section = "Community"
     model_based_validation = ("target", ["name"])
+    allowable_targets = ["all_community_models"]
 
     name = field_utils.CharField(label="New name", required=True)
-
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"change name of community to {self.name}"
@@ -46,18 +39,10 @@ class AddMembersStateChange(BaseStateChange):
     change_description = "Add members to community"
     section = "Community"
     configurable_fields = ["self_only"]
+    allowable_targets = ["all_community_models"]
 
     member_pk_list = field_utils.ActorListField(label="People to add as members", required=True)
-    self_only = field_utils.BooleanField(label="Only allow actor to add self as member")
-
-    def __init__(self, member_pk_list, self_only=False):
-        super().__init__()
-        self.member_pk_list = member_pk_list
-        self.self_only = self_only
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
+    self_only = field_utils.BooleanField(label="Only allow actor to add self as member", null_value=False)
 
     @classmethod
     def get_configured_field_text(cls, configuration):
@@ -112,18 +97,10 @@ class RemoveMembersStateChange(BaseStateChange):
     preposition = "from"
     section = "Community"
     configurable_fields = ["self_only"]
+    allowable_targets = ["all_community_models"]
 
     member_pk_list = field_utils.ActorListField(label="People to remove as members", required=True)
-    self_only = field_utils.BooleanField(label="Only allow actor to remove self as member")
-
-    def __init__(self, member_pk_list, self_only=False):
-        super().__init__()
-        self.member_pk_list = member_pk_list
-        self.self_only = self_only
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
+    self_only = field_utils.BooleanField(label="Only allow actor to remove self as member", null_value=False)
 
     def description_present_tense(self):
         return f"remove members {list_to_text(self.member_pk_list)}"
@@ -186,16 +163,9 @@ class AddGovernorStateChange(BaseStateChange):
     change_description = "Add governor of community"
     is_foundational = True
     section = "Leadership"
+    allowable_targets = ["all_community_models"]
 
     governor_pk = field_utils.ActorField(label="Person to add as governor", required=True)
-
-    def __init__(self, governor_pk):
-        super().__init__()
-        self.governor_pk = governor_pk
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"add {self.governor_pk} as governor"
@@ -215,16 +185,9 @@ class RemoveGovernorStateChange(BaseStateChange):
     preposition = "from"
     section = "Leadership"
     is_foundational = True
+    allowable_targets = ["all_community_models"]
 
     governor_pk = field_utils.ActorField(label="Person to remove as governor", required=True)
-
-    def __init__(self, governor_pk):
-        super().__init__()
-        self.governor_pk = governor_pk
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"remove {self.governor_pk} as governor"
@@ -243,16 +206,9 @@ class AddGovernorRoleStateChange(BaseStateChange):
     change_description = "Add role of governor to community"
     is_foundational = True
     section = "Leadership"
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to make governor role", required=True)
-
-    def __init__(self, role_name):
-        super().__init__()
-        self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"add role {self.role_name} as governor"
@@ -282,16 +238,9 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
     preposition = "from"
     section = "Leadership"
     is_foundational = True
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove from governor role", required=True)
-
-    def __init__(self, role_name):
-        super().__init__()
-        self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"remove role {self.role_name} as governor"
@@ -310,16 +259,9 @@ class AddOwnerStateChange(BaseStateChange):
     change_description = "Add owner to community"
     is_foundational = True
     section = "Leadership"
+    allowable_targets = ["all_community_models"]
 
     owner_pk = field_utils.ActorField(label="Person to add as owner", required=True)
-
-    def __init__(self, owner_pk):
-        super().__init__()
-        self.owner_pk = owner_pk
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"add {self.owner_pk} as owner"
@@ -339,16 +281,9 @@ class RemoveOwnerStateChange(BaseStateChange):
     preposition = "from"
     section = "Leadership"
     is_foundational = True
+    allowable_targets = ["all_community_models"]
 
     owner_pk = field_utils.ActorField(label="Person to remove as owner", required=True)
-
-    def __init__(self, owner_pk):
-        super().__init__()
-        self.owner_pk = owner_pk
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"remove {self.owner_pk} as owner"
@@ -383,16 +318,9 @@ class AddOwnerRoleStateChange(BaseStateChange):
     change_description = "Add role of owner to community"
     is_foundational = True
     section = "Leadership"
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to make owner role", required=True)
-
-    def __init__(self, role_name):
-        super().__init__()
-        self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"add role {self.role_name} as owner"
@@ -422,16 +350,9 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
     preposition = "from"
     section = "Leadership"
     is_foundational = True
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove as owner role", required=True)
-
-    def __init__(self, role_name):
-        super().__init__()
-        self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"remove role {self.role_name} as owner"
@@ -471,16 +392,9 @@ class AddRoleStateChange(BaseStateChange):
     """State change to add role to Community."""
     change_description = "Add role to community"
     section = "Community"
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to add to community", required=True)
-
-    def __init__(self, role_name):
-        super().__init__()
-        self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"add role {self.role_name}"
@@ -511,16 +425,9 @@ class RemoveRoleStateChange(BaseStateChange):
     change_description = "Remove role from community"
     preposition = "from"
     section = "Community"
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove from community", required=True)
-
-    def __init__(self, role_name):
-        super().__init__()
-        self.role_name = role_name
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"remove role {self.role_name}"
@@ -577,14 +484,10 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     preposition = "in"
     section = "Community"
     configurable_fields = ["role_name"]
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to add people to", required=True)
     people_to_add = field_utils.ActorListField(label="People to add to role", required=True)
-
-    def __init__(self, role_name, people_to_add):
-        super().__init__()
-        self.role_name = role_name
-        self.people_to_add = people_to_add
 
     def is_conditionally_foundational(self, action):
         """If role_name is owner or governor role, should should be treated as a conditional
@@ -594,10 +497,6 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         if self.role_name in action.target.roles.get_governors()["roles"]:
             return True
         return False
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     @classmethod
     def get_uninstantiated_description(cls, **configuration_kwargs):
@@ -660,14 +559,10 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
     change_description = "Remove people from role in community"
     preposition = "in"
     section = "Community"
+    allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove people from", required=True)
     people_to_remove = field_utils.ActorListField(label="People to remove from role", required=True)
-
-    def __init__(self, role_name, people_to_remove):
-        super().__init__()
-        self.role_name = role_name
-        self.people_to_remove = people_to_remove
 
     def is_conditionally_foundational(self, action):
         """If role_name is owner or governor role, should should be treated as a conditional
@@ -677,10 +572,6 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         if self.role_name in action.target.roles.get_governors()["roles"]:
             return True
         return False
-
-    @classmethod
-    def get_allowable_targets(cls):
-        return cls.get_community_models()
 
     def description_present_tense(self):
         return f"remove {list_to_text(self.people_to_remove)} from role {self.role_name}"

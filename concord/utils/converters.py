@@ -108,15 +108,22 @@ class ConcordConverterMixin(object):
 
         serializable_fields = kwargs.get("serializable_fields", None)
 
+        if hasattr(self, "serialize_fields"):  # if it's a state change
+            serializable_fields = self.serialize_fields()
+
         if not serializable_fields:
             serializable_fields = getattr(self, "serializable_fields", None)
 
         if not serializable_fields and hasattr(self, "DoesNotExist"):
             serializable_fields = [f.name for f in self._meta.fields]
 
+        # FIXME: get rid of serializable fields logic, no one is using it
+
         if not serializable_fields and not hasattr(self, "DoesNotExist"):
             params = dict(inspect.signature(self.__init__).parameters)
             params.pop("self", None)
+            params.pop("args", None)
+            params.pop("kwargs", None)
             serializable_fields = [param_name for param_name, value in params.items()]
 
         if kwargs.pop("to_json", None):
@@ -197,8 +204,10 @@ class ConcordConverterMixin(object):
     def get_concord_fields_with_names(cls):
         return {field_name: field for field_name, field in cls.__dict__.items() if hasattr(field, "value")}
 
-    def get_concord_field_instances(self):
-        return {field_name: field for field_name, field in self.__dict__.items() if hasattr(field, "value")}
+    @classmethod
+    def get_concord_field_instances(cls):
+        return {field_name: field for field_name, field in cls.__dict__.items() if hasattr(field, "converts_to")}
+        # return {field_name: field for field_name, field in self.__dict__.items() if hasattr(field, "value")}
 
     def concord_fields(self):
         """If the object is a Django model, gets the map of Django model fields to Concord fields for the object.

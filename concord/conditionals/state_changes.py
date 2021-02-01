@@ -17,7 +17,13 @@ from concord.utils import field_utils
 
 class AddConditionStateChange(BaseStateChange):
     """State change to add condition to permission or leadership role."""
-    change_description = "Add condition"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "condition",
+        "detail_string": "condition {condition_type}"
+    }
+
     section = "Permissions"
     allowable_targets = ["all_community_models", PermissionsItem]
 
@@ -26,14 +32,6 @@ class AddConditionStateChange(BaseStateChange):
     permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
     leadership_type = field_utils.CharField(label="Type of leadership condition is set on")
     mode = field_utils.CharField(label="Condition mode", required=True)
-
-    def description_present_tense(self):
-        target_string = self.leadership_type if self.leadership_type else "permission"
-        return f"add condition {self.condition_type} to {target_string}"
-
-    def description_past_tense(self):
-        target_string = self.leadership_type if self.leadership_type else "permission"
-        return f"added condition {self.condition_type} to {target_string}"
 
     def validate(self, actor, target):
 
@@ -133,7 +131,13 @@ class AddConditionStateChange(BaseStateChange):
 
 class EditConditionStateChange(BaseStateChange):
     """State change to add condition to permission or leadership role."""
-    change_description = "Add condition"
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "condition",
+        "detail_string": "condition with {element_id}"
+    }
+
     section = "Permissions"
     allowable_targets = ["all_community_models", PermissionsItem]
 
@@ -141,14 +145,6 @@ class EditConditionStateChange(BaseStateChange):
     condition_data = field_utils.DictField(label="New condition data", null_value=dict)
     permission_data = field_utils.DictField(label="New permission data", null_value=list)
     leadership_type = field_utils.CharField(label="Leadership type to set condition on")
-
-    def description_present_tense(self):
-        target_string = self.leadership_type if self.leadership_type else "permission"
-        return f"edit {target_string} condition {self.element_id}"
-
-    def description_past_tense(self):
-        target_string = self.leadership_type if self.leadership_type else "permission"
-        return f"edited {target_string} condition {self.element_id}"
 
     def validate(self, actor, target):
 
@@ -235,21 +231,19 @@ class EditConditionStateChange(BaseStateChange):
 
 class RemoveConditionStateChange(BaseStateChange):
     """State change to remove condition from Community."""
-    change_description = "Remove condition"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "condition",
+        "detail_string": "condition with {element_id}"
+    }
+
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models", PermissionsItem]
 
     element_id = field_utils.IntegerField(label="Element ID to remove")
     leadership_type = field_utils.CharField(label="Leadership type to remove condition from")
-
-    def description_present_tense(self):
-        target_string = self.leadership_type if self.leadership_type else "permission"
-        return f"remove condition from {target_string}"
-
-    def description_past_tense(self):
-        target_string = self.leadership_type if self.leadership_type else "permission"
-        return f"removed condition from {target_string}"
 
     def validate(self, actor, target):
 
@@ -282,18 +276,17 @@ class RemoveConditionStateChange(BaseStateChange):
 
 class AddVoteStateChange(BaseStateChange):
     """State change for adding a vote."""
-    change_description = "Add vote"
-    verb_name = "vote"
+
+    descriptive_text = {
+        "verb": "vote",
+        "default_string": "",
+        "detail_string": "{vote}"
+    }
+
     section = "Vote"
     allowable_targets = [VoteCondition]
 
     vote = field_utils.CharField(label="Vote", required=True)
-
-    def description_present_tense(self):
-        return f"add vote {self.vote}"
-
-    def description_past_tense(self):
-        return f"added vote {self.vote}"
 
     def validate(self, actor, target):
         """
@@ -330,17 +323,15 @@ class AddVoteStateChange(BaseStateChange):
 
 class ApproveStateChange(BaseStateChange):
     """State change for approving a condition."""
-    change_description = "Approve"
-    preposition = ""
+
+    descriptive_text = {
+        "verb": "approve",
+        "default_string": "",
+        "preposition": ""
+    }
+
     section = "Approval"
-    verb_name = "approve"
     allowable_targets = [ApprovalCondition]
-
-    def description_present_tense(self):
-        return "approve"
-
-    def description_past_tense(self):
-        return "approved"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -365,18 +356,16 @@ class ApproveStateChange(BaseStateChange):
 
 class RejectStateChange(BaseStateChange):
     """State change for rejecting a condition.."""
-    change_description = "Reject"
-    preposition = ""
+
+    descriptive_text = {
+        "verb": "reject",
+        "default_string": "",
+        "preposition": ""
+    }
+
     section = "Approval"
-    verb_name = "reject"
     rejects_condition = True
     allowable_targets = [ApprovalCondition]
-
-    def description_present_tense(self):
-        return "reject"
-
-    def description_past_tense(self):
-        return "rejected"
 
     def validate(self, actor, target):
         """Checks if actor is the same user who sent the action that triggered the condition
@@ -407,19 +396,18 @@ class RejectStateChange(BaseStateChange):
 
 class RespondConsensusStateChange(BaseStateChange):
     """State change for responding to a consensus condition"""
-    change_description = "Respond"
-    preposition = ""
+
+    descriptive_text = {
+        "verb": "respond",
+        "default_string": "",
+        "detail_string": "with {response}",
+        "preposition": ""
+    }
+
     section = "Consensus"
-    verb_name = "respond"
     allowable_targets = [ConsensusCondition]
 
     response = field_utils.CharField(label="Response", required=True)
-
-    def description_present_tense(self):
-        return f"respond with {self.response}"
-
-    def description_past_tense(self):
-        return f"responded with {self.response}"
 
     def validate(self, actor, target):
         """Checks that the actor is a participant."""
@@ -441,17 +429,15 @@ class RespondConsensusStateChange(BaseStateChange):
 
 class ResolveConsensusStateChange(BaseStateChange):
     """State change for resolving a consensus condition."""
-    change_description = "Resolve"
-    preposition = ""
+
+    descriptive_text = {
+        "verb": "resolve",
+        "default_string": "",
+        "preposition": ""
+    }
+
     section = "Consensus"
-    verb_name = "resolve"
     allowable_targets = [ConsensusCondition]
-
-    def description_present_tense(self):
-        return "resolve"
-
-    def description_past_tense(self):
-        return "resolved"
 
     def validate(self, actor, target):
         """Checks that the actor is a participant."""

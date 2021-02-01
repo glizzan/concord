@@ -48,7 +48,7 @@ class Action(ConcordConverterMixin, models.Model):
 
     def __str__(self):
         target = self.target if self.target else "deleted target"
-        return f"Action {self.pk} '{self.change.change_description}' by {self.actor} on {target} ({self.status})"
+        return f"Action {self.pk} '{self.change.change_description()}' by {self.actor} on {target} ({self.status})"
 
     def save(self, *args, **kwargs):
         """If action is live (is_draft is False) check that target and actor are set."""

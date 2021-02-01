@@ -20,7 +20,15 @@ logger = logging.getLogger(__name__)
 class AddCommentStateChange(BaseStateChange):
     """State Change to add a comment."""
 
-    change_description = "Add comment"
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "comment",
+        "configurations": [
+            ("original_creator_only", "if the user is the creator of the object commented on"),
+            ("target_type", "if the target is of type {target_type}")
+        ]
+    }
+
     section = "Comment"
     model_based_validation = (Comment, ["text"])
     context_keys = ["commented_object"]
@@ -31,12 +39,6 @@ class AddCommentStateChange(BaseStateChange):
     original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
     target_type = field_utils.CharField(label="Add comments only to this type of target")
 
-    def description_present_tense(self):
-        return "add comment"
-
-    def description_past_tense(self):
-        return "added comment"
-
     @classmethod
     def get_context_instances(cls, action):
         """Returns the commented object by its model name, to handle cases where the referer knows the model type
@@ -44,24 +46,6 @@ class AddCommentStateChange(BaseStateChange):
         commented_object = action.target
         model_name = commented_object.__class__.__name__.lower()
         return {"commented_object": commented_object, model_name: commented_object}
-
-    @classmethod
-    def get_configured_field_text(cls, conf):
-        target_type = conf["target_type"] if "target_type" in conf and conf["target_type"] else None
-        creator_only = conf["original_creator_only"] if "original_creator_only" in conf and  \
-            conf['original_creator_only'] else None
-
-        if target_type and creator_only:
-            return f", but only if the target is of type {conf['target_type']} and the user is " + \
-                   "the creator of the object commented on"
-
-        if target_type:
-            return f", but only if the target is of type {conf['target_type']}"
-
-        if creator_only:
-            return ", but only if the user is the creator of the object commented on"
-
-        return ""
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -110,7 +94,16 @@ class AddCommentStateChange(BaseStateChange):
 
 class EditCommentStateChange(BaseStateChange):
     """State Change to edit a comment."""
-    change_description = "Edit comment"
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "comment",
+        "configurations": [
+            ("commenter_only", "if the user is the commenter"),
+            ("original_creator_only", "if the user is the creator of the object commented on")
+        ]
+    }
+
     section = "Comment"
     context_keys = ["comment", "commented_object"]
     model_based_validation = (Comment, ["text"])
@@ -130,15 +123,6 @@ class EditCommentStateChange(BaseStateChange):
         return commenter_only, original_creator_only
 
     @classmethod
-    def get_configured_field_text(cls, configuration):
-        commenter_only, original_creator_only = cls.return_configured_settings(configuration)
-        if commenter_only:
-            return ", but only if the user is the commenter"
-        if original_creator_only:
-            return ", but only if the user is the creator of the thing being commented on"
-        return ""
-
-    @classmethod
     def check_configuration_is_valid(cls, configuration):
         """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
         By contrast, check_configuration checks a specific action against an already-validated configuration."""
@@ -176,12 +160,6 @@ class EditCommentStateChange(BaseStateChange):
         model_name = commented_object.__class__.__name__.lower()
         return {"comment": comment, "commented_object": commented_object, model_name: commented_object}
 
-    def description_present_tense(self):
-        return "edit comment"
-
-    def description_past_tense(self):
-        return "edited comment"
-
     def implement(self, actor, target, **kwargs):
         target.text = self.text
         target.save()
@@ -190,7 +168,16 @@ class EditCommentStateChange(BaseStateChange):
 
 class DeleteCommentStateChange(BaseStateChange):
     """State Change to delete a comment."""
-    change_description = "Delete comment"
+
+    descriptive_text = {
+        "verb": "delete",
+        "default_string": "comment",
+        "configurations": [
+            ("commentor_only", "if the user is the commenter"),
+            ("original_creator_only", "if the user is the creator of the object commented on")
+        ]
+    }
+
     section = "Comment"
     context_keys = ["comment", "commented_object"]
     configurable_fields = ["original_creator_only", "commenter_only"]
@@ -208,15 +195,6 @@ class DeleteCommentStateChange(BaseStateChange):
         return commenter_only, original_creator_only
 
     @classmethod
-    def get_configured_field_text(cls, configuration):
-        commenter_only, original_creator_only = cls.return_configured_settings(configuration)
-        if commenter_only:
-            return ", but only if the user is the commenter"
-        if original_creator_only:
-            return ", but only if the user is the creator of the thing being commented on"
-        return ""
-
-    @classmethod
     def check_configuration_is_valid(cls, configuration):
         """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
         By contrast, check_configuration checks a specific action against an already-validated configuration."""
@@ -254,12 +232,6 @@ class DeleteCommentStateChange(BaseStateChange):
         model_name = commented_object.__class__.__name__.lower()
         return {"comment": comment, "commented_object": commented_object, model_name: commented_object}
 
-    def description_present_tense(self):
-        return "delete comment"
-
-    def description_past_tense(self):
-        return "deleted comment"
-
     def implement(self, actor, target, **kwargs):
         from concord.permission_resources.utils import delete_permissions_on_target
         pk = target.pk
@@ -275,20 +247,20 @@ class DeleteCommentStateChange(BaseStateChange):
 
 class ChangeResourceNameStateChange(BaseStateChange):
     """State Change to change a resource name."""
-    change_description = "Change name of resource"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "change",
+        "default_string": "name of resource",
+        "detail_string": "name of resource to {name}",
+        "preposition": "for"
+    }
+
     model_based_validation = ("target", ["name"])
     allowable_targets = [Resource, Item]
     settable_classes = ["all_models"]
 
     # Fields
     name = field_utils.CharField(label="New name", required=True)
-
-    def description_present_tense(self):
-        return f"change name of resource to {self.name}"
-
-    def description_past_tense(self):
-        return f"changed name of resource to {self.name}"
 
     def implement(self, actor, target, **kwargs):
         target.name = self.name
@@ -298,19 +270,19 @@ class ChangeResourceNameStateChange(BaseStateChange):
 
 class AddItemStateChange(BaseStateChange):
     """State Change to add item to a resource."""
-    change_description = "Add item to resource"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "item to resource",
+        "detail_string": "item {name} to resource"
+    }
+
     model_based_validation = (Item, ["name"])
     allowable_targets = [Resource]
     settable_classes = ["all_community_models", Resource]
 
     # Fields
     name = field_utils.CharField(label="New name", required=True)
-
-    def description_present_tense(self):
-        return f"add item {self.name}"
-
-    def description_past_tense(self):
-        return f"added item {self.name}"
 
     def implement(self, actor, target, **kwargs):
         item = Item.objects.create(name=self.name, resource=target, owner=actor.default_community)
@@ -320,16 +292,16 @@ class AddItemStateChange(BaseStateChange):
 
 class RemoveItemStateChange(BaseStateChange):
     """State Change to remove item from a resource."""
-    change_description = "Remove item from resource"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "item from resource",
+        "detail_string": "item {name} from resource",
+        "preposition": "from"
+    }
+
     allowable_targets = [Item]
     settable_classes = ["all_community_models", Resource, Item]
-
-    def description_present_tense(self):
-        return "remove item"
-
-    def description_past_tense(self):
-        return "removed item"
 
     def implement(self, actor, target, **kwargs):
         try:
@@ -349,7 +321,13 @@ class RemoveItemStateChange(BaseStateChange):
 
 class AddListStateChange(BaseStateChange):
     """State Change to create a list in a community (or other target)."""
-    change_description = "Add list"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "list",
+        "detail_string": "list with {name}"
+    }
+
     section = "List"
     model_based_validation = (SimpleList, ["name", "description"])
     allowable_targets = ["all_community_models"]
@@ -358,12 +336,6 @@ class AddListStateChange(BaseStateChange):
     name = field_utils.CharField(label="Name", required=True)
     configuration = field_utils.DictField(label="Configuration", required=True)
     description = field_utils.CharField(label="Description")
-
-    def description_present_tense(self):
-        return f"add list with name {self.name}"
-
-    def description_past_tense(self):
-        return f"added list with name {self.name}"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -385,7 +357,13 @@ class AddListStateChange(BaseStateChange):
 
 class EditListStateChange(BaseStateChange):
     """State Change to edit an existing list."""
-    change_description = "Edit list"
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "list",
+        "detail_string": "list to have name '{name}' and description '{description}'"
+    }
+
     section = "List"
     model_based_validation = ("target", ["name", "description"])
     allowable_targets = [SimpleList]
@@ -395,12 +373,6 @@ class EditListStateChange(BaseStateChange):
     name = field_utils.CharField(label="Name")
     configuration = field_utils.DictField(label="Configuration")
     description = field_utils.CharField(label="Description")
-
-    def description_present_tense(self):
-        return f"edit list with new name {self.name} and new description {self.description}"
-
-    def description_past_tense(self):
-        return f"edited list with new name {self.name} and new description {self.description}"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -429,16 +401,15 @@ class EditListStateChange(BaseStateChange):
 
 class DeleteListStateChange(BaseStateChange):
     """State Change to delete an existing list."""
-    change_description = "Delete list"
+
+    descriptive_text = {
+        "verb": "delete",
+        "default_string": "list"
+    }
+
     section = "List"
     allowable_targets = [SimpleList]
     settable_classes = ["all_community_models", SimpleList]
-
-    def description_present_tense(self):
-        return "delete list"
-
-    def description_past_tense(self):
-        return "deleted list"
 
     def implement(self, actor, target, **kwargs):
         pk = target.pk
@@ -448,7 +419,13 @@ class DeleteListStateChange(BaseStateChange):
 
 class AddRowStateChange(BaseStateChange):
     """State Change to add a row to a list."""
-    change_description = "Add row to list"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "row to list",
+        "detail_string": "row with content {row_content} to list"
+    }
+
     section = "List"
     allowable_targets = [SimpleList]
     settable_classes = ["all_community_models", SimpleList]
@@ -456,12 +433,6 @@ class AddRowStateChange(BaseStateChange):
     # Fields
     row_content = field_utils.CharField(label="Content of row", required=True)
     index = field_utils.IntegerField(label="Index of row")
-
-    def description_present_tense(self):
-        return f"add row with content {self.row_content}"
-
-    def description_past_tense(self):
-        return f"added row with content {self.row_content}"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -484,19 +455,19 @@ class AddRowStateChange(BaseStateChange):
 
 class EditRowStateChange(BaseStateChange):
     """State Change to edit a row in a list."""
-    change_description = "Edit row in list"
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "row in list",
+        "detail_string": "row with index {index} to have new content {row_content}"
+    }
+
     section = "List"
     allowable_targets = [SimpleList]
     settable_classes = ["all_community_models", SimpleList]
 
     row_content = field_utils.CharField(label="Content of row", required=True)
     index = field_utils.IntegerField(label="Index of row", required=True)
-
-    def description_present_tense(self):
-        return f"edit row with index {self.index} to have new content {self.row_content}"
-
-    def description_past_tense(self):
-        return f"edited row with index {self.index} to have new content {self.row_content}"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -522,7 +493,13 @@ class EditRowStateChange(BaseStateChange):
 
 class MoveRowStateChange(BaseStateChange):
     """State Change to move a row in a list."""
-    change_description = "Move row in list"
+
+    descriptive_text = {
+        "verb": "move",
+        "default_string": "row in list",
+        "detail_string": "row with current index {old_index} to new index {new_index}"
+    }
+
     section = "List"
     allowable_targets = [SimpleList]
     settable_classes = ["all_community_models", SimpleList]
@@ -530,12 +507,6 @@ class MoveRowStateChange(BaseStateChange):
     # Fields
     old_index = field_utils.IntegerField(label="Old index of row", required=True)
     new_index = field_utils.IntegerField(label="New index of row", required=True)
-
-    def description_present_tense(self):
-        return f"move row with current index {self.old_index} to {self.new_index}"
-
-    def description_past_tense(self):
-        return f"moved row with current index {self.old_index} to {self.new_index}"
 
     def validate(self, actor, target):
 
@@ -570,19 +541,19 @@ class MoveRowStateChange(BaseStateChange):
 
 class DeleteRowStateChange(BaseStateChange):
     """State Change to delete a row in a list."""
-    change_description = "Delete row in list"
+
+    descriptive_text = {
+        "verb": "delete",
+        "default_string": "row in list",
+        "detail_string": "row with index {index}"
+    }
+
     section = "List"
     allowable_targets = [SimpleList]
     settable_classes = ["all_community_models", SimpleList]
 
     # Fields
     index = field_utils.IntegerField(label="Index of row to delete", required=True)
-
-    def description_present_tense(self):
-        return f"delete row with index {self.index}"
-
-    def description_past_tense(self):
-        return f"deleted row with index {self.index}"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):

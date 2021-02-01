@@ -59,6 +59,9 @@ class PermissionsItem(PermissionedModel):
         """Helper method for displaying the change element of permissions."""
         return permission_change_to_text(self)
 
+    def change_name(self):
+        return self.get_state_change_object().change_description(capitalize=False)
+
     def get_change_type(self):
         """Get the ChangeType (short version) of the permission."""
         return self.change_type.split(".")[-1]

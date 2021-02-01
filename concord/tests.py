@@ -1735,11 +1735,36 @@ class ConfigurablePermissionTest(DataTestCase):
         Request = namedtuple('Request', 'user')
         self.request = Request(user=self.users.pinoe)
 
+    def test_state_change_text_fields(self):
+
+        # change 1 - add people to role
+
+        # test permission form
+        action, result = self.client.PermissionResource.add_permission(
+            permission_type=Changes().Communities.AddPeopleToRole,
+            permission_actors=[self.users.rose.pk],
+            permission_configuration={"role_name": "spirit players"})
+
+        created_change_obj = result.get_state_change_object()
+        self.assertEquals(created_change_obj.change_description(), "Add people to role")
+        self.assertEquals(created_change_obj.change_description(capitalize=False), "add people to role")
+        self.assertEquals(created_change_obj.get_uninstantiated_description(result.get_configuration()),
+            "add people to role, but only if the role is 'spirit players'")
+        self.assertEquals(created_change_obj.get_preposition(), "in")
+        self.assertEquals(created_change_obj.get_configured_field_text(result.get_configuration()),
+            ", but only if the role is 'spirit players'")
+
+        # test action form
+        action, result = self.roseClient.Community.add_people_to_role(role_name="spirit players",
+            people_to_add=[self.users.aubrey.pk])
+        self.assertEquals(action.change.description_present_tense(), "add people with IDs (10) to role 'spirit players'")
+        self.assertEquals(action.change.description_past_tense(), "added people with IDs (10) to role 'spirit players'")
+
     def test_configurable_permission(self):
 
         # Pinoe configures a position so that only Rose can add people to the Spirit Players role
         # and not the Forwards role
-        self.client.PermissionResource.add_permission(
+        action, result = self.client.PermissionResource.add_permission(
             permission_type=Changes().Communities.AddPeopleToRole,
             permission_actors=[self.users.rose.pk],
             permission_configuration={"role_name": "spirit players"})
@@ -1917,7 +1942,7 @@ class TemplateTest(DataTestCase):
         self.assertEquals(actions_and_results[0]["result"].__class__.__name__, "PermissionsItem")
         self.assertEquals(action.get_template_info(),
             {'actions': ["add permission 'add members to community' to USWNT",
-                         "add condition approvalcondition to permission to the result of action number 1 in this template"],
+                         "add condition approvalcondition to the result of action number 1 in this template"],
              'name': 'Invite Only',
              'supplied_fields': {'has_data': True, 'fields': ["What roles can invite new members? ['forwards']",
                                                               'What actors can invite new members? []']},

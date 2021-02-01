@@ -14,19 +14,19 @@ from concord.utils import field_utils
 
 class ChangeNameStateChange(BaseStateChange):
     """State change to change name of Community."""
-    change_description = "Change name of community"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "change",
+        "default_string": "name of community",
+        "detail_string": "nameof community to {name}",
+        "preposition": "for"
+    }
+
     section = "Community"
     model_based_validation = ("target", ["name"])
     allowable_targets = ["all_community_models"]
 
     name = field_utils.CharField(label="New name", required=True)
-
-    def description_present_tense(self):
-        return f"change name of community to {self.name}"
-
-    def description_past_tense(self):
-        return f"changed name of community to {self.name}"
 
     def implement(self, actor, target, **kwargs):
         target.name = self.name
@@ -36,19 +36,20 @@ class ChangeNameStateChange(BaseStateChange):
 
 class AddMembersStateChange(BaseStateChange):
     """State change to add members to Community."""
-    change_description = "Add members to community"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "members to community",
+        "detail_string": "{member_pk_list} as members",
+        "configurations": [("self_only", "if the user is adding themselves")]
+    }
+
     section = "Community"
     configurable_fields = ["self_only"]
     allowable_targets = ["all_community_models"]
 
     member_pk_list = field_utils.ActorListField(label="People to add as members", required=True)
     self_only = field_utils.BooleanField(label="Only allow actor to add self as member", null_value=False)
-
-    @classmethod
-    def get_configured_field_text(cls, configuration):
-        if "self_only" in configuration and configuration['self_only']:
-            return ", but a user can only add themselves"
-        return ""
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -65,12 +66,6 @@ class AddMembersStateChange(BaseStateChange):
             if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
                 return False, "self_only is set to true, so member_pk_list can contain only the pk of the actor"
         return True, None
-
-    def description_present_tense(self):
-        return f"add {list_to_text(self.member_pk_list)} as members"
-
-    def description_past_tense(self):
-        return f"added {list_to_text(self.member_pk_list)} as members"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -93,20 +88,21 @@ class AddMembersStateChange(BaseStateChange):
 
 class RemoveMembersStateChange(BaseStateChange):
     """State change to remove members from Community."""
-    change_description = "Remove members from community"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "members from community",
+        "detail_string": "members {member_pk_list} from community",
+        "configurations": [("self_only", "if the user is removing themselves")],
+        "preposition": "from"
+    }
+
     section = "Community"
     configurable_fields = ["self_only"]
     allowable_targets = ["all_community_models"]
 
     member_pk_list = field_utils.ActorListField(label="People to remove as members", required=True)
     self_only = field_utils.BooleanField(label="Only allow actor to remove self as member", null_value=False)
-
-    def description_present_tense(self):
-        return f"remove members {list_to_text(self.member_pk_list)}"
-
-    def description_past_tense(self):
-        return f"removed members {list_to_text(self.member_pk_list)}"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -160,18 +156,18 @@ class RemoveMembersStateChange(BaseStateChange):
 
 class AddGovernorStateChange(BaseStateChange):
     """State change to add governor to Community."""
-    change_description = "Add governor of community"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "governor to community",
+        "detail_string": "{governor_pk} as governor of community"
+    }
+
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models"]
 
     governor_pk = field_utils.ActorField(label="Person to add as governor", required=True)
-
-    def description_present_tense(self):
-        return f"add {self.governor_pk} as governor"
-
-    def description_past_tense(self):
-        return f"added {self.governor_pk} as governor"
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_governor(self.governor_pk)
@@ -181,19 +177,19 @@ class AddGovernorStateChange(BaseStateChange):
 
 class RemoveGovernorStateChange(BaseStateChange):
     """State change to remove governor from Community."""
-    change_description = "Remove governor from community"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "governor from community",
+        "detail_string": "{governor_pk} as governor of community",
+        "preposition": "from"
+    }
+
     section = "Leadership"
     is_foundational = True
     allowable_targets = ["all_community_models"]
 
     governor_pk = field_utils.ActorField(label="Person to remove as governor", required=True)
-
-    def description_present_tense(self):
-        return f"remove {self.governor_pk} as governor"
-
-    def description_past_tense(self):
-        return f"removed {self.governor_pk} as governor"
 
     def implement(self, actor, target, **kwargs):
         target.roles.remove_governor(self.governor_pk)
@@ -203,18 +199,18 @@ class RemoveGovernorStateChange(BaseStateChange):
 
 class AddGovernorRoleStateChange(BaseStateChange):
     """State change to add governor role to Community."""
-    change_description = "Add role of governor to community"
+
+    descriptive_text = {
+        "verb": "grant",
+        "default_string": "role governing permissions in community",
+        "detail_string": "role {role_name} governing permissions in community",
+    }
+
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to make governor role", required=True)
-
-    def description_present_tense(self):
-        return f"add role {self.role_name} as governor"
-
-    def description_past_tense(self):
-        return f"added role {self.role_name} as governor"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -234,19 +230,18 @@ class AddGovernorRoleStateChange(BaseStateChange):
 
 class RemoveGovernorRoleStateChange(BaseStateChange):
     """State change to remove governor role from Community."""
-    change_description = "Remove role of governor from community"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "governing permissions from role in community",
+        "detail_string": "governing permissions from role {role_name} in community",
+    }
+
     section = "Leadership"
     is_foundational = True
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove from governor role", required=True)
-
-    def description_present_tense(self):
-        return f"remove role {self.role_name} as governor"
-
-    def description_past_tense(self):
-        return f"removed role {self.role_name} as governor"
 
     def implement(self, actor, target, **kwargs):
         target.roles.remove_governor_role(self.role_name)
@@ -256,18 +251,18 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
 class AddOwnerStateChange(BaseStateChange):
     """State change to add owner to Community."""
-    change_description = "Add owner to community"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "owner to community",
+        "detail_string": "{owner_pk} as owner of community"
+    }
+
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models"]
 
     owner_pk = field_utils.ActorField(label="Person to add as owner", required=True)
-
-    def description_present_tense(self):
-        return f"add {self.owner_pk} as owner"
-
-    def description_past_tense(self):
-        return f"added {self.owner_pk} as owner"
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_owner(self.owner_pk)
@@ -277,19 +272,19 @@ class AddOwnerStateChange(BaseStateChange):
 
 class RemoveOwnerStateChange(BaseStateChange):
     """State change remove owner from Community."""
-    change_description = "Remove owner from community"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "owner from community",
+        "detail_string": "{owner_pk} as owner of community",
+        "preposition": "from"
+    }
+
     section = "Leadership"
     is_foundational = True
     allowable_targets = ["all_community_models"]
 
     owner_pk = field_utils.ActorField(label="Person to remove as owner", required=True)
-
-    def description_present_tense(self):
-        return f"remove {self.owner_pk} as owner"
-
-    def description_past_tense(self):
-        return f"removed {self.owner_pk} as owner"
 
     def validate(self, actor, target):
         """If removing the owner would leave the group with no owners, the action is invalid."""
@@ -315,18 +310,18 @@ class RemoveOwnerStateChange(BaseStateChange):
 
 class AddOwnerRoleStateChange(BaseStateChange):
     """State change to add owner role to Community."""
-    change_description = "Add role of owner to community"
+
+    descriptive_text = {
+        "verb": "grant",
+        "default_string": "role ownership permissions in community",
+        "detail_string": "role {role_name} ownership permissions in community",
+    }
+
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to make owner role", required=True)
-
-    def description_present_tense(self):
-        return f"add role {self.role_name} as owner"
-
-    def description_past_tense(self):
-        return f"added role {self.role_name} as owner"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -346,19 +341,19 @@ class AddOwnerRoleStateChange(BaseStateChange):
 
 class RemoveOwnerRoleStateChange(BaseStateChange):
     """State change to remove owner role from Community."""
-    change_description = "Remove role from owners of community"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "role's ownership permissions in community",
+        "detail_string": "role {role_name}'s ownership permissions in community",
+        "preposition": "from"
+    }
+
     section = "Leadership"
     is_foundational = True
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove as owner role", required=True)
-
-    def description_present_tense(self):
-        return f"remove role {self.role_name} as owner"
-
-    def description_past_tense(self):
-        return f"removed role {self.role_name} as owner"
 
     def validate(self, actor, target):
         """If removing the owner role would leave the group with no owners, the action is invalid."""
@@ -390,17 +385,17 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
 class AddRoleStateChange(BaseStateChange):
     """State change to add role to Community."""
-    change_description = "Add role to community"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "role to community",
+        "detail_string": "role {role_name} to community",
+    }
+
     section = "Community"
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to add to community", required=True)
-
-    def description_present_tense(self):
-        return f"add role {self.role_name}"
-
-    def description_past_tense(self):
-        return f"added role {self.role_name}"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -422,18 +417,18 @@ class AddRoleStateChange(BaseStateChange):
 
 class RemoveRoleStateChange(BaseStateChange):
     """State change to remove role from Community."""
-    change_description = "Remove role from community"
-    preposition = "from"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "role from community",
+        "detail_string": "role {role_name} from community",
+        "preposition": "from"
+    }
+
     section = "Community"
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to remove from community", required=True)
-
-    def description_present_tense(self):
-        return f"remove role {self.role_name}"
-
-    def description_past_tense(self):
-        return f"removed role {self.role_name}"
 
     def role_in_permissions(self, permission, actor):
         """Checks for role in permission and returns True if it exists.  Checks in permissions
@@ -480,8 +475,15 @@ class RemoveRoleStateChange(BaseStateChange):
 
 class AddPeopleToRoleStateChange(BaseStateChange):
     """State change to add people to role in Community."""
-    change_description = "Add people to role in community"
-    preposition = "in"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "people to role",
+        "detail_string": "people with IDs ({people_to_add}) to role '{role_name}'",
+        "configurations": [("role_name", "if the role is '{role_name}'")],
+        "preposition": "in"
+    }
+
     section = "Community"
     configurable_fields = ["role_name"]
     allowable_targets = ["all_community_models"]
@@ -490,26 +492,12 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     people_to_add = field_utils.ActorListField(label="People to add to role", required=True)
 
     def is_conditionally_foundational(self, action):
-        """If role_name is owner or governor role, should should be treated as a conditional
-        change."""
+        """If role_name is owner or governor role, should should be treated as a conditional change."""
         if self.role_name in action.target.roles.get_owners()["roles"]:
             return True
         if self.role_name in action.target.roles.get_governors()["roles"]:
             return True
         return False
-
-    @classmethod
-    def get_uninstantiated_description(cls, **configuration_kwargs):
-        """Takes in an arbitrary number of configuration kwargs and uses them to
-        create a description.  Does not reference fields passed on init."""
-        role_name = configuration_kwargs.get("role_name", None)
-        return "add people to role" + f" '{role_name}'" if role_name else ""
-
-    def description_present_tense(self):
-        return f"add {list_to_text(self.people_to_add)} to role {self.role_name}"
-
-    def description_past_tense(self):
-        return f"added {list_to_text(self.people_to_add)} to role {self.role_name}"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -556,8 +544,14 @@ class AddPeopleToRoleStateChange(BaseStateChange):
 
 class RemovePeopleFromRoleStateChange(BaseStateChange):
     """State change to remove people from role in Community."""
-    change_description = "Remove people from role in community"
-    preposition = "in"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "people from role in community",
+        "detail_string": "people {people_to_remove} from role '{role_name}' in community",
+        "preposition": "in"
+    }
+
     section = "Community"
     allowable_targets = ["all_community_models"]
 
@@ -572,12 +566,6 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         if self.role_name in action.target.roles.get_governors()["roles"]:
             return True
         return False
-
-    def description_present_tense(self):
-        return f"remove {list_to_text(self.people_to_remove)} from role {self.role_name}"
-
-    def description_past_tense(self):
-        return f"removed {list_to_text(self.people_to_remove)} from role {self.role_name}"
 
     def validate(self, actor, target):
         """When removing people from a role, we must check that doing so does not leave us

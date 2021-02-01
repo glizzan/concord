@@ -23,7 +23,12 @@ logger = logging.getLogger(__name__)
 
 class AddPermissionStateChange(BaseStateChange):
     """State change to add a permission to something."""
-    change_description = "Add permission"
+
+    descriptive_text = {            # note that description_present_tense and past tense are overridden below
+        "verb": "add",
+        "default_string": "permission"
+    }
+
     section = "Permissions"
     model_based_validation = (PermissionsItem, ["change_type", "anyone", "inverse"])
 
@@ -87,17 +92,16 @@ class AddPermissionStateChange(BaseStateChange):
 
 class RemovePermissionStateChange(BaseStateChange):
     """State change to remove a permission from something."""
-    change_description = "Remove permission"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "condition",
+        "preposition": "from"
+    }
+
     section = "Permissions"
-    preposition = "from"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
-
-    def description_present_tense(self):
-        return "remove permission"
-
-    def description_past_tense(self):
-        return "removed permission"
 
     def implement(self, actor, target, **kwargs):
         try:
@@ -111,19 +115,19 @@ class RemovePermissionStateChange(BaseStateChange):
 
 class AddActorToPermissionStateChange(BaseStateChange):
     """State change to add an actor to a permission."""
-    change_description = "Add actor to permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "actor to permission",
+        "detail_string": "actor {actor_to_add} to permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     actor_to_add = field_utils.ActorField(label="Actor to add", required=True)
-
-    def description_present_tense(self):
-        return f"add actor {self.actor_to_add} to permission"
-
-    def description_past_tense(self):
-        return f"added actor {self.actor_to_add} to permission"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -141,19 +145,19 @@ class AddActorToPermissionStateChange(BaseStateChange):
 
 class RemoveActorFromPermissionStateChange(BaseStateChange):
     """State change to remove an actor from a permission."""
-    change_description = "Remove actor from permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "actor from permission",
+        "detail_string": "actor {actor_to_remove} from permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     actor_to_remove = field_utils.ActorField(label="Actor to remove", required=True)
-
-    def description_present_tense(self):
-        return f"remove actor {self.actor_to_remove} from permission"
-
-    def description_past_tense(self):
-        return f"removed actor {self.actor_to_remove} from permission"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -173,19 +177,18 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
 class AddRoleToPermissionStateChange(BaseStateChange):
     """State change to add a role to a permission."""
 
-    change_description = "Add role to permission"
-    preposition = "for"
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "role to permission",
+        "detail_string": "role {role_name} to permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     role_name = field_utils.RoleField(label="Role to add", required=True)
-
-    def description_present_tense(self):
-        return f"add role {self.role_name} to permission"
-
-    def description_past_tense(self):
-        return f"added role {self.role_name} to permission"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -204,26 +207,20 @@ class AddRoleToPermissionStateChange(BaseStateChange):
 
 class RemoveRoleFromPermissionStateChange(BaseStateChange):
     """State change to remove a role from a permission."""
-    change_description = "Remove role from permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "role from permission",
+        "detail_string": "role {role_name} from permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     configurable_fields = ["role_name"]
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     role_name = field_utils.RoleField(label="Role to remove", required=True)
-
-    @classmethod
-    def get_uninstantiated_description(cls, **configuration_kwargs):
-        """Takes in an arbitrary number of configuration kwargs and uses them to
-        create a description.  Does not reference fields passed on init."""
-        return f"remove role {configuration_kwargs.get('role_name', '')} from permission"
-
-    def description_present_tense(self):
-        return f"remove role {self.role_name} from permission"
-
-    def description_past_tense(self):
-        return f"removed role {self.role_name} from permission"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -259,22 +256,20 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
 
 class ChangePermissionConfigurationStateChange(BaseStateChange):
     """State change to change the configuration of a permission."""
-    change_description = "Change configuration of permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "change",
+        "default_string": "configuration of permission",
+        "detail_string": "field {configurable_field_name} to value {configurable_field_value} on permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     configurable_field_name = field_utils.CharField(label="Name of field to configure", required=True)
     configurable_field_value = field_utils.CharField(label="Value to configure field to", required=True)
-
-    def description_present_tense(self):
-        return f"change configuration field {self.configurable_field_name} to value " + \
-               f"{self.configurable_field_value} on permission"
-
-    def description_past_tense(self):
-        return f"changed configuration field {self.configurable_field_name} to value " + \
-               f"{self.configurable_field_value} on permission"
 
     def implement(self, actor, target, **kwargs):
 
@@ -290,19 +285,18 @@ class ChangePermissionConfigurationStateChange(BaseStateChange):
 class ChangeInverseStateChange(BaseStateChange):
     """State change to toggle the inverse field of a permission."""
 
-    change_description = "Toggle permission's inverse field"
-    preposition = "for"
+    descriptive_text = {
+        "verb": "toggle",
+        "default_string": "inverse field on permission",
+        "detail_string": "inverse field on permission to {change_to}",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     change_to = field_utils.BooleanField(label="Change inverse field of permission to", required=True)
-
-    def description_present_tense(self):
-        return f"change inverse field to value {self.change_to} on permission"
-
-    def description_past_tense(self):
-        return f"changed inverse field to value {self.change_to} on permission"
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -320,17 +314,16 @@ class ChangeInverseStateChange(BaseStateChange):
 
 class EnableAnyoneStateChange(BaseStateChange):
     """State change to set a permission so anyone can take it."""
-    change_description = "Give anyone permission"
+
+    descriptive_text = {
+        "verb": "give",
+        "default_string": "anyone permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
-    preposition = "for"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
-
-    def description_present_tense(self):
-        return "give anyone permission"
-
-    def description_past_tense(self):
-        return "gave anyone permission"
 
     def implement(self, actor, target, **kwargs):
         target.anyone = True
@@ -341,17 +334,16 @@ class EnableAnyoneStateChange(BaseStateChange):
 class DisableAnyoneStateChange(BaseStateChange):
     """State change which takes a permission that has 'anyone' enabled, so anyone can take it, and disables
     it so only the roles and actors specified can take it.."""
-    change_description = "Remove anyone from permission"
+
+    descriptive_text = {
+        "verb": "remove",
+        "default_string": "anyone permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
-    preposition = "for"
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
-
-    def description_present_tense(self):
-        return "remove anyone from permission"
-
-    def description_past_tense(self):
-        return "removed anyone from permission"
 
     def implement(self, actor, target, **kwargs):
         target.anyone = False
@@ -366,19 +358,19 @@ class DisableAnyoneStateChange(BaseStateChange):
 
 class EditTemplateStateChange(BaseStateChange):
     """State change to edit a template."""
-    change_description = "Edit Template"
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "template",
+        "detail_string": "template field {field_name} to new value {new_field_data}"
+    }
+
     allowable_targets = [TemplateModel]
     settable_classes = ["all_models"]
 
     template_object_id = field_utils.IntegerField(label="ID of Template to edit", required=True)
     field_name = field_utils.CharField(label="Field to edit", required=True)
     new_field_data = field_utils.DictField(label="Data to edit", required=True)
-
-    def description_present_tense(self):
-        return f"edit template field {self.field_name} to {self.new_field_data}"
-
-    def description_past_tense(self):
-        return f"edited template field {self.field_name} to {self.new_field_data}"
 
     def validate(self, actor, target):
 

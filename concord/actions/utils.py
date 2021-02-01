@@ -1,8 +1,81 @@
 """Utility methods/classes for actions package."""
 
-
 import random
 from concord.utils.converters import ConcordConverterMixin
+
+
+class AutoDescription:
+
+    def __init__(self, verb, default_string, detail_string="", past_tense=None, configurations=None, preposition="to"):
+        self.verb = verb
+        self.past_tense = past_tense
+        self.default_string = default_string
+        self.detail_string = detail_string if detail_string else ""
+        self.configurations = configurations if configurations else []
+        self.preposition = preposition if preposition else "to"
+
+    def __str__(self):
+        return self.shortname
+
+    # Helper methods
+
+    @property
+    def shortname(self):
+        return f"{self.verb} {self.default_string}"
+
+    @property
+    def past_verb(self):
+        if self.past_tense:
+            return self.past_tense
+        if self.verb[-1] == "e":
+            return self.verb + "d"
+        return self.verb + "ed"
+
+    def capitalize(self, string):
+        return string[:1].upper() + string[1:]
+
+    def process_dict(self, data_dict):
+        new_dict = {}
+        for key, value in data_dict.items():
+            if isinstance(value, list):
+                value = ", ".join([str(item) for item in value])
+            new_dict.update({key: value})
+        return new_dict
+
+    def details_as_text(self, change_obj):
+        """Gets names and values for fields on the change object to feed to the detail_string."""
+        data_dict = {}
+        for field_name, field in change_obj.get_concord_fields_with_names().items():
+            data_dict.update({field_name: getattr(change_obj, field_name)})
+        return self.detail_string.format(**self.process_dict(data_dict))
+
+    def get_configured_field_text(self, configuration):
+        config_text = []
+        for config in self.configurations:
+            if config[0] in configuration:
+                config_text.append(config[1].format(**configuration))
+        if len(config_text) == 1:
+            return f", but only {config_text[0]}"
+        elif len(config_text) > 1:
+            return f", but only {' and '.join(config_text)}"
+        return ""
+
+    # calls that return user-facing strings
+
+    def basic_description(self, capitalize=True):
+        response = self.verb + " " + self.default_string
+        return self.capitalize(response) if capitalize else response
+
+    def description_present_tense(self, change_obj=None):
+        additional_text = self.details_as_text(change_obj) if change_obj else self.default_string
+        return f"{self.verb} {additional_text}"
+
+    def description_past_tense(self, change_obj=None):
+        additional_text = self.details_as_text(change_obj) if change_obj else self.default_string
+        return f"{self.past_verb} {additional_text}"
+
+    def description_with_configuration(self, configuration):
+        return self.description_present_tense() + self.get_configured_field_text(configuration)
 
 
 class MockAction(ConcordConverterMixin):

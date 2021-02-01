@@ -13,7 +13,7 @@ from django.conf import settings
 
 from concord.actions.models import TemplateModel
 from concord.utils.lookups import get_all_permissioned_models, get_all_community_models
-from concord.actions.utils import MockAction
+from concord.actions.utils import MockAction, AutoDescription
 from concord.utils.converters import ConcordConverterMixin
 from concord.utils import field_utils
 
@@ -30,12 +30,6 @@ class BaseStateChange(ConcordConverterMixin):
     configurable_fields = list()
     allowable_targets = ["all_models"]
 
-    def serialize_fields(self):
-        fields = {}
-        for field_name, field in self.get_concord_fields_with_names().items():
-            fields.update({field_name: getattr(self, field_name)})
-        return fields
-
     def __init__(self, *args, **kwargs):
         super().__init__()
         for field_name, field in self.get_concord_fields_with_names().items():
@@ -50,6 +44,12 @@ class BaseStateChange(ConcordConverterMixin):
                 value = {} if value == dict else value
                 value = [] if value == list else value
             setattr(self, field_name, value)
+
+    def serialize_fields(self):
+        fields = {}
+        for field_name, field in self.get_concord_fields_with_names().items():
+            fields.update({field_name: getattr(self, field_name)})
+        return fields
 
     @classmethod
     def get_change_type(cls):
@@ -168,25 +168,40 @@ class BaseStateChange(ConcordConverterMixin):
     # Text / description methods
 
     @classmethod
+    def _description(cls):
+        return AutoDescription(
+            verb=cls.descriptive_text["verb"],
+            default_string=cls.descriptive_text["default_string"],
+            detail_string=cls.descriptive_text.get("detail_string", ""),
+            preposition=cls.descriptive_text.get("preposition", "to"),
+            past_tense=cls.descriptive_text.get("past_tense", None),
+            configurations=cls.descriptive_text.get("configurations", None)
+        )
+
+    @classmethod
+    def change_description(cls, capitalize=True):
+        return cls._description().basic_description(capitalize)
+
+    @classmethod
     def get_preposition(cls):
-        """By default, we make changes "to" things but change types can override this default preposition with
-        "for", "with", etc."""
-        if hasattr(cls, "preposition"):
-            return cls.preposition
-        return "to"
+        return cls._description().preposition
+
+    @classmethod
+    def get_uninstantiated_description(cls, configuration=None):
+        return cls._description().description_with_configuration(configuration if configuration else {})
 
     @classmethod
     def get_configured_field_text(cls, configuration):
         """Gets additional text for permissions item instance descriptions from configured fields."""
-        return ""
+        return cls._description().get_configured_field_text(configuration)
 
     def description_present_tense(self):
         """Returns the description of the state change object, in present tense."""
-        return self.description
+        return self._description().description_present_tense(change_obj=self)
 
     def description_past_tense(self):
         """Returns the description of the state change object, in past tense."""
-        ...
+        return self._description().description_past_tense(change_obj=self)
 
     # Context methods
 
@@ -226,20 +241,20 @@ class BaseStateChange(ConcordConverterMixin):
 class ChangeOwnerStateChange(BaseStateChange):
     """State change for changing which community owns the object. Not to be confused with state changes which
     change who the owners are within a community."""
-    change_description = "Change owner"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "change",
+        "default_string": "owner of community",
+        "detail_string": "owner of community to {new_owner_id}",
+        "preposition": "for"
+    }
+
     is_foundational = True
     section = "Leadership"
 
     # Fields
     new_owner_content_type = field_utils.IntegerField(label="New owner's content type id", required=True)
     new_owner_id = field_utils.IntegerField(label="New owner's ID", required=True)
-
-    def description_present_tense(self):
-        return f"change owner of community to {self.new_owner_id}"
-
-    def description_past_tense(self):
-        return f"changed owner of community to {self.new_owner_id}"
 
     def get_new_owner(self):
         """Helper method to get model instance of new owner from params."""
@@ -271,16 +286,15 @@ class ChangeOwnerStateChange(BaseStateChange):
 
 class EnableFoundationalPermissionStateChange(BaseStateChange):
     """State change object for enabling the foundational permission of a permissioned model."""
-    change_description = "Enable the foundational permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "enable",
+        "default_string": "the foundational permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     is_foundational = True
-
-    def description_present_tense(self):
-        return "enable the foundational permission"
-
-    def description_past_tense(self):
-        return "enabled the foundational permission"
 
     def implement(self, actor, target, **kwargs):
         target.foundational_permission_enabled = True
@@ -290,16 +304,15 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
 class DisableFoundationalPermissionStateChange(BaseStateChange):
     """State change object for disabling the foundational permission of a permissioned model."""
-    change_description = "Disable foundational permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "disable",
+        "default_string": "the foundational permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     is_foundational = True
-
-    def description_present_tense(self):
-        return "disable the foundational permission"
-
-    def description_past_tense(self):
-        return "disabled the foundational permission"
 
     def implement(self, actor, target, **kwargs):
         target.foundational_permission_enabled = False
@@ -309,16 +322,15 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
 class EnableGoverningPermissionStateChange(BaseStateChange):
     """State change object for enabling the governing permission of a permissioned model."""
-    change_description = "Enable the governing permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "enable",
+        "default_string": "the governing permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     is_foundational = True
-
-    def description_present_tense(self):
-        return "enable the governing permission"
-
-    def description_past_tense(self):
-        return "enabled the governing permission"
 
     def implement(self, actor, target, **kwargs):
         target.governing_permission_enabled = True
@@ -328,16 +340,15 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
 class DisableGoverningPermissionStateChange(BaseStateChange):
     """State change object for disabling the governing permission of a permissioned model."""
-    change_description = "Disable governing permission"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "disable",
+        "default_string": "the governing permission",
+        "preposition": "for"
+    }
+
     section = "Permissions"
     is_foundational = True
-
-    def description_present_tense(self):
-        return "disable the governing permission"
-
-    def description_past_tense(self):
-        return "disabled the governing permission"
 
     def implement(self, actor, target, **kwargs):
         target.governing_permission_enabled = False
@@ -348,18 +359,17 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
 class ViewStateChange(BaseStateChange):
     """ViewStateChange is a state change which doesn't actually change state. Instead, it returns the specified
     fields. It exists so we can wrap view permissions in the same model as all the other permissions."""
-    change_description = "View"
-    preposition = "for"
+
+    descriptive_text = {
+        "verb": "view",
+        "default_string": "fields",
+        "preposition": "for"
+    }
+
     configurable_fields = ["fields_to_include"]
 
     # Fields
     fields_to_include = field_utils.ListField(label="Fields that can be viewed")
-
-    def description_present_tense(self):
-        return f"view {', '.join(self.fields_to_include) if self.fields_to_include else 'all fields'}"
-
-    def description_past_tense(self):
-        return f"viewed {', '.join(self.fields_to_include) if self.fields_to_include else 'all fields'}"
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):
@@ -417,8 +427,15 @@ class ViewStateChange(BaseStateChange):
 
 class ApplyTemplateStateChange(BaseStateChange):
     """State change object for applying a template."""
-    change_description = "Apply template"
-    preposition = "to"
+
+    descriptive_text = {
+        "verb": "apply",
+        "past_tense": "applied",
+        "default_string": "template",
+        "preposition": "for",
+        "configurations": [("original_creator_only", "if the user is the creator of the template's target")]
+    }
+
     pass_action = True
     configurable_fields = ["original_creator_only"]
 
@@ -427,18 +444,6 @@ class ApplyTemplateStateChange(BaseStateChange):
     supplied_fields = field_utils.DictField(label="Fields to supply when applying template", null_value=dict)
     is_foundational = field_utils.BooleanField(label="Template makes foundational changes")
     original_creator_only = field_utils.BooleanField(label="Only allow original creator")
-
-    def description_present_tense(self):
-        return "apply template"
-
-    def description_past_tense(self):
-        return "applied template"
-
-    @classmethod
-    def get_configured_field_text(cls, configuration):
-        if "original_creator_only" in configuration and configuration['original_creator_only']:
-            return ", but only if the user is the creator of the template's target"
-        return ""
 
     @classmethod
     def check_configuration_is_valid(cls, configuration):

@@ -201,9 +201,9 @@ class AddGovernorRoleStateChange(BaseStateChange):
     """State change to add governor role to Community."""
 
     descriptive_text = {
-        "verb": "grant",
-        "default_string": "role governing permissions in community",
-        "detail_string": "role {role_name} governing permissions in community",
+        "verb": "add",
+        "default_string": "governor role to community",
+        "detail_string": "governor role {role_name} to community",
     }
 
     is_foundational = True
@@ -233,8 +233,8 @@ class RemoveGovernorRoleStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "remove",
-        "default_string": "governing permissions from role in community",
-        "detail_string": "governing permissions from role {role_name} in community",
+        "default_string": "governor role from community",
+        "detail_string": "governor role {role_name} from community",
     }
 
     section = "Leadership"
@@ -312,8 +312,8 @@ class AddOwnerRoleStateChange(BaseStateChange):
     """State change to add owner role to Community."""
 
     descriptive_text = {
-        "verb": "grant",
-        "default_string": "role ownership permissions in community",
+        "verb": "add",
+        "default_string": "owner role to community",
         "detail_string": "role {role_name} ownership permissions in community",
     }
 
@@ -344,8 +344,8 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "remove",
-        "default_string": "role's ownership permissions in community",
-        "detail_string": "role {role_name}'s ownership permissions in community",
+        "default_string": "owner role from community",
+        "detail_string": "owner role {role_name} from community",
         "preposition": "from"
     }
 
@@ -421,7 +421,7 @@ class RemoveRoleStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "remove",
         "default_string": "role from community",
-        "detail_string": "role {role_name} from community",
+        "detail_string": "role {role_name}",
         "preposition": "from"
     }
 
@@ -547,8 +547,8 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "remove",
-        "default_string": "people from role in community",
-        "detail_string": "people {people_to_remove} from role '{role_name}' in community",
+        "default_string": "people from role",
+        "detail_string": "people {people_to_remove} from role '{role_name}'",
         "preposition": "in"
     }
 

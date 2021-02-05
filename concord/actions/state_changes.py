@@ -38,7 +38,9 @@ class BaseStateChange(ConcordConverterMixin):
                 setattr(self, field_name, value)
                 continue
             if field.required:
-                raise Exception(f"Field {field_name} is required")
+                skip_validation = kwargs.get("skip_validation", False)
+                if not skip_validation:
+                    raise Exception(f"Field {field_name} is required")
             if field.null_value:
                 value = field.null_value
                 value = {} if value == dict else value
@@ -289,7 +291,7 @@ class EnableFoundationalPermissionStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "enable",
-        "default_string": "the foundational permission",
+        "default_string": "foundational permission",
         "preposition": "for"
     }
 
@@ -307,7 +309,7 @@ class DisableFoundationalPermissionStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "disable",
-        "default_string": "the foundational permission",
+        "default_string": "foundational permission",
         "preposition": "for"
     }
 
@@ -325,7 +327,7 @@ class EnableGoverningPermissionStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "enable",
-        "default_string": "the governing permission",
+        "default_string": "governing permission",
         "preposition": "for"
     }
 
@@ -343,7 +345,7 @@ class DisableGoverningPermissionStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "disable",
-        "default_string": "the governing permission",
+        "default_string": "governing permission",
         "preposition": "for"
     }
 

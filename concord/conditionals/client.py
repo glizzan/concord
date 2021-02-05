@@ -17,20 +17,12 @@ logger = logging.getLogger(__name__)
 
 class ApprovalConditionClient(BaseClient):
     """The target of the ApprovalConditionClient must always be an ApprovalCondition instance."""
-
-    def approve(self) -> Tuple[int, Any]:
-        """Approve the target condition."""
-        change = sc.ApproveStateChange()
-        return self.create_and_take_action(change)
-
-    def reject(self) -> Tuple[int, Any]:
-        """Reject the taret condition."""
-        change = sc.RejectStateChange()
-        return self.create_and_take_action(change)
+    app_name = "conditionals"
 
 
 class VoteConditionClient(BaseClient):
     """The target of the VoteConditionClient must always be a VoteCondition instance."""
+    app_name = "conditionals"
 
     # Read only
 
@@ -46,16 +38,10 @@ class VoteConditionClient(BaseClient):
         """Gets current results of vote condition."""
         return self.target.current_results()
 
-    # State changes
-
-    def vote(self, *, vote: str) -> Tuple[int, Any]:
-        """Add vote to condition."""
-        change = sc.AddVoteStateChange(vote=vote)
-        return self.create_and_take_action(change)
-
 
 class ConsensusConditionClient(BaseClient):
     """The target of the ConsensusConditionClient must always be a ConsensusCondition instance."""
+    app_name = "conditionals"
 
     # Read only
 
@@ -71,22 +57,11 @@ class ConsensusConditionClient(BaseClient):
         """Gets current results of vote condition."""
         return self.target.get_responses()
 
-    # State changes
-
-    def respond(self, *, response: str) -> Tuple[int, Any]:
-        """Add response to consensus condition."""
-        change = sc.RespondConsensusStateChange(response=response)
-        return self.create_and_take_action(change)
-
-    def resolve(self) -> Tuple[int, Any]:
-        """Resolve consensus condition."""
-        change = sc.ResolveConsensusStateChange()
-        return self.create_and_take_action(change)
-
 
 class ConditionalClient(BaseClient):
     """ConditionalClient is largely used as an easy way to access all the specific conditionclients at once, but
     can also has some helper methods and one state change - add_condition_to_action."""
+    app_name = "conditionals"
 
     # Target-less methods (don't require a target to be set ahead of time)
 
@@ -154,22 +129,3 @@ class ConditionalClient(BaseClient):
         """Given a condition mananger, get the element IDs of the contained conditions."""
         condition_manager = self.get_condition_manager(self.target, leadership_type)
         return condition_manager.get_element_ids()
-
-    # State changes
-
-    def add_condition(self, *, condition_type, condition_data=None, permission_data=None, leadership_type=None,
-                      mode="acceptance"):
-        change = sc.AddConditionStateChange(
-            condition_type=condition_type, condition_data=condition_data, permission_data=permission_data,
-            leadership_type=leadership_type, mode=mode)
-        return self.create_and_take_action(change)
-
-    def edit_condition(self, *, element_id, condition_data=None, permission_data=None, leadership_type=None):
-        change = sc.EditConditionStateChange(
-            element_id=element_id, condition_data=condition_data, permission_data=permission_data,
-            leadership_type=leadership_type)
-        return self.create_and_take_action(change)
-
-    def remove_condition(self, *, leadership_type=None, element_id=None):
-        change = sc.RemoveConditionStateChange(leadership_type=leadership_type, element_id=element_id)
-        return self.create_and_take_action(change)

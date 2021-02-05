@@ -17,6 +17,7 @@ from concord.resources import state_changes as sc
 
 class CommentClient(BaseClient):
     """Client for interacting with Comment model."""
+    app_name = "resources"
 
     def swap_target_if_needed(self, create=False):
         """The target of CommentClient needs to be the CommentCatcher object, but sometimes the target is
@@ -52,16 +53,6 @@ class CommentClient(BaseClient):
         change = sc.AddCommentStateChange(text=text)
         return self.create_and_take_action(change)
 
-    def edit_comment(self, text):
-        """Edit a comment on the target."""
-        change = sc.EditCommentStateChange(text=text)
-        return self.create_and_take_action(change)
-
-    def delete_comment(self):
-        """Delete a comment from the target."""
-        change = sc.DeleteCommentStateChange()
-        return self.create_and_take_action(change)
-
 
 ######################
 ### ResourceClient ###
@@ -73,6 +64,7 @@ class ResourceClient(BaseClient):
     model. As with all Concord clients, a target must be set for all methods not
     explicitly grouped as target-less methods.
     """
+    app_name = "resources"
 
     # Target-less methods (don't require a target to be set ahead of time)
 
@@ -100,23 +92,6 @@ class ResourceClient(BaseClient):
         """Get items on targtet resource."""
         return self.target.get_items()
 
-    # State changes
-
-    def change_name(self, *, new_name: str) -> Tuple[int, Any]:
-        """Change name of resource."""
-        change = sc.ChangeResourceNameStateChange(name=new_name)
-        return self.create_and_take_action(change)
-
-    def add_item(self, *, item_name: str) -> Tuple[int, Any]:
-        """Add item to resource."""
-        change = sc.AddItemStateChange(name=item_name)
-        return self.create_and_take_action(change)
-
-    def remove_item(self) -> Tuple[int, Any]:
-        """Remove item from resource."""
-        change = sc.RemoveItemStateChange()
-        return self.create_and_take_action(change)
-
 
 ##################
 ### ListClient ###
@@ -125,6 +100,7 @@ class ResourceClient(BaseClient):
 
 class ListClient(BaseClient):
     """Client for interacting with Lists."""
+    app_name = "resources"
 
     # Read methods
 
@@ -138,33 +114,3 @@ class ListClient(BaseClient):
         content_type = ContentType.objects.get_for_model(owner)
         return SimpleList.objects.filter(
             owner_content_type=content_type, owner_object_id=owner.id)
-
-    # State changes
-
-    def add_list(self, name, configuration, description=None):
-        change = sc.AddListStateChange(name=name, configuration=configuration, description=description)
-        return self.create_and_take_action(change)
-
-    def edit_list(self, name=None, configuration=None, description=None):
-        change = sc.EditListStateChange(name=name, configuration=configuration, description=description)
-        return self.create_and_take_action(change)
-
-    def delete_list(self):
-        change = sc.DeleteListStateChange()
-        return self.create_and_take_action(change)
-
-    def add_row(self, row_content, index=None):
-        change = sc.AddRowStateChange(row_content=row_content, index=index)
-        return self.create_and_take_action(change)
-
-    def edit_row(self, row_content, index):
-        change = sc.EditRowStateChange(row_content=row_content, index=index)
-        return self.create_and_take_action(change)
-
-    def move_row(self, old_index, new_index):
-        change = sc.MoveRowStateChange(old_index=old_index, new_index=new_index)
-        return self.create_and_take_action(change)
-
-    def delete_row(self, index):
-        change = sc.DeleteRowStateChange(index=index)
-        return self.create_and_take_action(change)

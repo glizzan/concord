@@ -73,7 +73,7 @@ class ResourceModelTests(DataTestCase):
         """
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.Resource.set_target(target=resource)
-        action, item = self.client.Resource.add_item(item_name="Equal Pay")
+        action, item = self.client.Resource.add_item_to_resource(name="Equal Pay")
         self.assertEquals(item.get_unique_id(), "resources_item_1")
 
     def test_remove_item_from_resource(self):
@@ -82,10 +82,10 @@ class ResourceModelTests(DataTestCase):
         """
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.Resource.set_target(target=resource)
-        action, item = self.client.Resource.add_item(item_name="Equal Pay")
+        action, item = self.client.Resource.add_item_to_resource(name="Equal Pay")
         self.assertEquals(resource.get_items(), ["Equal Pay"])
         self.client.Resource.set_target(item)
-        self.client.Resource.remove_item()
+        self.client.Resource.remove_item_from_resource()
         self.assertEquals(resource.get_items(), [])
 
 
@@ -101,8 +101,8 @@ class PermissionResourceModelTests(DataTestCase):
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.pinoe.pk])
+            change_type=Changes().Resources.AddItem,
+            actors=[self.users.pinoe.pk])
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
 
@@ -113,8 +113,8 @@ class PermissionResourceModelTests(DataTestCase):
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.pinoe.pk])
+            change_type=Changes().Resources.AddItem,
+            actors=[self.users.pinoe.pk])
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
         self.client.PermissionResource.set_target(permission)
@@ -141,15 +141,15 @@ class PermissionSystemTest(DataTestCase):
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+            change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(),
             'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
 
         # Now the non-owner actor (Rose) takes the permitted action on the resource
         self.roseClient = Client(actor=self.users.rose, target=resource)
-        action, item = self.roseClient.Resource.add_item(item_name="Test New")
+        action, item = self.roseClient.Resource.add_item_to_resource(name="Test New")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "Test New")
 
@@ -161,29 +161,29 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission for Rose to the resource.
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
 
         # Tobin can't add an item to this resource because she's not the owner nor specified in
         # the permission.
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin's item")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin's item")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Pinoe adds a permission on the permission which Tobin does have.
         self.client.PermissionResource.set_target(target=permission)
-        action, rec_permission = self.client.PermissionResource.add_permission(permission_type=Changes().Permissions.AddPermission,
-            permission_actors=[self.users.tobin.pk])
+        action, rec_permission = self.client.PermissionResource.add_permission(change_type=Changes().Permissions.AddPermission,
+            actors=[self.users.tobin.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # Tobin still cannot make the original change because she does not have *that* permission.
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin's item")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin's item")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # But Tobin CAN make the second-level change.
         self.tobinClient.PermissionResource.set_target(target=permission)
-        action, permission = self.tobinClient.PermissionResource.add_permission(permission_type=Changes().Permissions.AddPermission,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.tobinClient.PermissionResource.add_permission(change_type=Changes().Permissions.AddPermission,
+            actors=[self.users.rose.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
     def test_multiple_specific_permission(self):
@@ -192,22 +192,22 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission to the resource.
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.christen.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.christen.pk])
 
         # Then she adds another permission with different actors/roles.
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.tobin.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.tobin.pk])
 
         # Both of the actors specified can do the thing.
 
         self.christenClient = Client(actor=self.users.christen, target=resource)
-        action, item = self.christenClient.Resource.add_item(item_name="Christen Test")
+        action, item = self.christenClient.Resource.add_item_to_resource(name="Christen Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "Christen Test")
 
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "Tobin Test")
 
@@ -217,12 +217,12 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission to the resource.
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.christen.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.christen.pk])
 
         # Then she adds another permission with different actors/roles.
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.tobin.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.tobin.pk])
 
         # Then she adds a condition to the second one
         self.client.Conditional.set_target(permission)
@@ -235,12 +235,12 @@ class PermissionSystemTest(DataTestCase):
         # The first (Christen) is accepted while the second (Tobin) has to wait
 
         self.christenClient = Client(actor=self.users.christen, target=resource)
-        action, item = self.christenClient.Resource.add_item(item_name="Christen Test")
+        action, item = self.christenClient.Resource.add_item_to_resource(name="Christen Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "Christen Test")
 
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "waiting")
         self.assertEquals(item, None)
 
@@ -250,29 +250,29 @@ class PermissionSystemTest(DataTestCase):
         # Pinoe creates a resource and adds a permission to the resource.
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.jj.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.jj.pk])
 
         # JJ can use the permission
         self.jjClient = Client(actor=self.users.jj, target=resource)
-        action, item = self.jjClient.Resource.add_item(item_name="JJ Ertz's Test")
+        action, item = self.jjClient.Resource.add_item_to_resource(name="JJ Ertz's Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "JJ Ertz's Test")
 
         # Pinoe toggles the permission
         self.client.PermissionResource.set_target(permission)
-        action, result = self.client.PermissionResource.change_inverse_field_of_permission(change_to=True)
+        action, result = self.client.PermissionResource.toggle_inverse_field_on_permission(change_to=True)
         permission.refresh_from_db()
         self.assertEquals(permission.inverse, True)
 
         # JJ can no longer use the permission
-        action, item = self.jjClient.Resource.add_item(item_name="JJ Test #2")
+        action, item = self.jjClient.Resource.add_item_to_resource(name="JJ Test #2")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(item, None)
 
         # but anyone who is not JJ can
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(item.name, "Tobin Test")
 
@@ -287,20 +287,20 @@ class PermissionSystemTest(DataTestCase):
 
         # She sets a permission on the resource and it works, blocking Tobin from adding an item
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.christen.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.christen.pk])
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(item, None)
 
         # She sets a permission on the group that does let Tobin add item, now it works
         self.client.PermissionResource.set_target(target=self.instance)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.tobin.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.tobin.pk])
 
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
     def test_nested_object_permission_with_conditions(self):
@@ -314,11 +314,11 @@ class PermissionSystemTest(DataTestCase):
 
         # She sets permissions on the resource and on the group, both of which let Tobin add an item
         self.client.PermissionResource.set_target(target=resource)
-        action, resource_permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.tobin.pk])
+        action, resource_permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.tobin.pk])
         self.client.PermissionResource.set_target(target=self.instance)
-        action, group_permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.tobin.pk])
+        action, group_permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.tobin.pk])
 
         # She adds a condition to the one on the resource
         self.client.Conditional.set_target(resource_permission)
@@ -328,7 +328,7 @@ class PermissionSystemTest(DataTestCase):
 
         # Tobin adds an item and it works without setting off the conditional
         self.tobinClient = Client(actor=self.users.tobin, target=resource)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # She adds a condition to the group, now Tobin has to wait
@@ -336,7 +336,7 @@ class PermissionSystemTest(DataTestCase):
         permission_data = [{ "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}]
         action, result = self.client.Conditional.add_condition(
             condition_type="approvalcondition", permission_data=permission_data, condition_data=None)
-        action, item = self.tobinClient.Resource.add_item(item_name="Tobin Test 2")
+        action, item = self.tobinClient.Resource.add_item_to_resource(name="Tobin Test 2")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "waiting")
 
     def test_anyone_permission_toggle(self):
@@ -344,22 +344,22 @@ class PermissionSystemTest(DataTestCase):
         # Create a group with members, give members permission to change the group name
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.Community.set_target(self.instance)
-        self.client.Community.add_members([self.users.rose.pk, self.users.crystal.pk,
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.rose.pk, self.users.crystal.pk,
             self.users.tobin.pk])
         self.client.PermissionResource.set_target(self.instance)
-        action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Communities.ChangeName,
-            permission_roles=['members'])
+        action, result = self.client.PermissionResource.add_permission(change_type=Changes().Communities.ChangeName,
+            roles=['members'])
         self.target_permission = result
 
         # Test someone in the group can do the thing
         self.roseClient = Client(actor=self.users.rose, target=self.instance)
-        action, result = self.roseClient.Community.change_name(new_name="USWNT!!!!")
+        action, result = self.roseClient.Community.change_name_of_community(name="USWNT!!!!")
         self.assertEquals(action.status, "implemented")
         self.assertEquals(self.instance.name, "USWNT!!!!")
 
         # Test that another user, Sonny, who is not in the group, can't do the thing
         self.sonnyClient = Client(actor=self.users.sonny, target=self.instance)
-        action, result = self.sonnyClient.Community.change_name(new_name="USWNT????")
+        action, result = self.sonnyClient.Community.change_name_of_community(name="USWNT????")
         self.assertEquals(action.status, "rejected")
         self.assertEquals(self.instance.name, "USWNT!!!!")
 
@@ -368,7 +368,7 @@ class PermissionSystemTest(DataTestCase):
         action, result = self.client.PermissionResource.give_anyone_permission()
 
         # Our non-member can do the thing now!
-        action, result = self.sonnyClient.Community.change_name(new_name="USWNT????")
+        action, result = self.sonnyClient.Community.change_name_of_community(name="USWNT????")
         self.assertEquals(action.status, "implemented")
         self.assertEquals(self.instance.name, "USWNT????")
 
@@ -376,7 +376,7 @@ class PermissionSystemTest(DataTestCase):
         action, result = self.client.PermissionResource.remove_anyone_from_permission()
 
         # Once again our non-member can no longer do the thing
-        action, result = self.sonnyClient.Community.change_name(new_name="USWNT :D :D :D")
+        action, result = self.sonnyClient.Community.change_name_of_community(name="USWNT :D :D :D")
         self.assertEquals(action.status, "rejected")
         self.assertEquals(self.instance.name, "USWNT????")
 
@@ -386,8 +386,8 @@ class PermissionSystemTest(DataTestCase):
          # Pinoe creates a resource and adds a permission to the resource and a condition to the permission.
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.tobin.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.tobin.pk])
         self.client.Conditional.set_target(permission)
         permission_data = [
             {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.pinoe.pk]}
@@ -418,6 +418,20 @@ class PermissionSystemTest(DataTestCase):
                 {'display': 'People who can reject', 'type': 'ActorListField', 'required': False, 'value': None, 'can_depend': True,
                 'field_name': 'reject_actors', 'full_name': 'concord.conditionals.state_changes.RejectStateChange'}}})
 
+    def test_has_permission(self):
+
+        # Create a group with members, give members permission to change the group name
+        self.instance = self.client.Community.create_community(name="USWNT")
+        self.client.Community.set_target(self.instance)
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.rose.pk, self.users.crystal.pk,
+            self.users.tobin.pk])
+        self.client.update_target_on_all(target=self.instance)
+        action, result = self.client.PermissionResource.add_permission(change_type=Changes().Communities.ChangeName,
+            roles=['members'])
+
+        self.client.update_actor_on_all(actor=self.users.rose)
+        result = self.client.PermissionResource.has_permission(self.client, "change_name_of_community", {})
+        self.assertTrue(result)
 
 
 class ConditionSystemTest(DataTestCase):
@@ -458,8 +472,8 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
 
         # But she places a vote condition on the permission
         self.client.Conditional.set_target(permission)
@@ -471,7 +485,7 @@ class ConditionalsTest(DataTestCase):
         # Rose tries to add an item, triggering the condition
         self.client.Resource.set_actor(actor=self.users.rose)
         self.client.Resource.set_target(target=resource)
-        action, result = self.client.Resource.add_item(item_name="Rose's item")
+        action, result = self.client.Resource.add_item_to_resource(name="Rose's item")
 
         # We get the vote condition
         crystalClient = Client(actor=self.users.crystal)
@@ -506,8 +520,8 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
 
         # But she places a condition on the permission that Rose has to get
         # approval (without specifying permissions, so it uses the default governing/foundational.
@@ -517,13 +531,13 @@ class ConditionalsTest(DataTestCase):
         # Now when Sonny tries to add an item she is flat out rejected
         self.client.Resource.set_actor(actor=self.users.sonny)
         self.client.Resource.set_target(target=resource)
-        action, item = self.client.Resource.add_item(item_name="Saucy Sonny's item")
+        action, item = self.client.Resource.add_item_to_resource(name="Saucy Sonny's item")
         self.assertEquals(resource.get_items(), [])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # When Rose tries to add an item it is stuck waiting
         self.client.Resource.set_actor(actor=self.users.rose)
-        rose_action, item = self.client.Resource.add_item(item_name="Rose's item")
+        rose_action, item = self.client.Resource.add_item_to_resource(name="Rose's item")
         self.assertEquals(resource.get_items(), [])
         self.assertEquals(Action.objects.get(pk=rose_action.pk).status, "waiting")
 
@@ -551,8 +565,8 @@ class ConditionalsTest(DataTestCase):
         # Pinoe creates a resource and sets a permission and a condition on it
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
         self.client.Conditional.set_target(target=permission)
         permission_data = [{ "permission_type": Changes().Conditionals.Approve,
             "permission_actors" : [self.users.crystal.pk]}]
@@ -561,14 +575,14 @@ class ConditionalsTest(DataTestCase):
 
         # When Rose tries to add an item it is stuck waiting
         self.roseClient = Client(actor=self.users.rose, target=resource)
-        rose_action, item = self.roseClient.Resource.add_item(item_name="Rose's item")
+        rose_action, item = self.roseClient.Resource.add_item_to_resource(name="Rose's item")
         self.assertEquals(Action.objects.get(pk=rose_action.pk).status, "waiting")
 
         # Now Pinoe removes the condition
         action, result = self.client.Conditional.remove_condition()
 
         # When Rose tries again, it passes
-        rose_action_two, item = self.roseClient.Resource.add_item(item_name="Rose's item")
+        rose_action_two, item = self.roseClient.Resource.add_item_to_resource(name="Rose's item")
         self.assertEquals(Action.objects.get(pk=rose_action_two.pk).status, "implemented")
 
     def test_approval_conditional_with_second_order_permission(self):
@@ -583,8 +597,8 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
 
         # But she places a condition on the permission that Rose has to get
         # approval.  She specifies that *Crystal* has to approve it.
@@ -597,7 +611,7 @@ class ConditionalsTest(DataTestCase):
         # When Rose tries to add an item it is stuck waiting
         self.client.Resource.set_actor(actor=self.users.rose)
         self.client.Resource.set_target(target=resource)
-        rose_action, item = self.client.Resource.add_item(item_name="Rose's item")
+        rose_action, item = self.client.Resource.add_item_to_resource(name="Rose's item")
         self.assertEquals(resource.get_items(), [])
         self.assertEquals(Action.objects.get(pk=rose_action.pk).status, "waiting")
 
@@ -621,8 +635,8 @@ class ConditionalsTest(DataTestCase):
 
         # Then she adds a permission that says that Rose can add items.
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
 
         # But she places a condition on the permission that Rose has to get
         # approval.  She specifies that *Crystal* has to approve it.  She also
@@ -638,14 +652,14 @@ class ConditionalsTest(DataTestCase):
         # When Rose tries to add an item, Crystal can approve it
         self.client.Resource.set_actor(actor=self.users.rose)
         self.client.Resource.set_target(target=resource)
-        rose_action_one, item = self.client.Resource.add_item(item_name="Rose's first item")
+        rose_action_one, item = self.client.Resource.add_item_to_resource(name="Rose's first item")
         conditional_action = self.client.Conditional.get_condition_items_given_action_and_source(
             action=rose_action_one, source=permission)[0]
         crystalClient = Client(target=conditional_action, actor=self.users.crystal)
         action, result = crystalClient.ApprovalCondition.approve()
 
         # When Rose tries to add an item, Andi Sullivan can reject it
-        rose_action_two, item = self.client.Resource.add_item(item_name="Rose's second item")
+        rose_action_two, item = self.client.Resource.add_item_to_resource(name="Rose's second item")
         conditional_action = self.client.Conditional.get_condition_items_given_action_and_source(
             action=rose_action_two, source=permission)[0]
         sullyClient = Client(target=conditional_action, actor=self.users.sully)
@@ -657,7 +671,7 @@ class ConditionalsTest(DataTestCase):
         self.assertEquals(resource.get_items(), ["Rose's first item"])
 
         # Rose tries one more time - Andi can't approve and Crystal can't reject, so the action is waiting
-        rose_action_three, item = self.client.Resource.add_item(item_name="Rose's third item")
+        rose_action_three, item = self.client.Resource.add_item_to_resource(name="Rose's third item")
         conditional_action = self.client.Conditional.get_condition_items_given_action_and_source(
             action=rose_action_three, source=permission)[0]
         crystalClient.ApprovalCondition.set_target(target=conditional_action)
@@ -671,8 +685,8 @@ class ConditionalsTest(DataTestCase):
         # Pinoe creates resource, permission on resource, and adds two conditions
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
         self.client.Conditional.set_target(target=permission)
         permission_data = [
             {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]}
@@ -685,7 +699,7 @@ class ConditionalsTest(DataTestCase):
         # Rose takes action, it's waiting
         self.client.Resource.set_actor(actor=self.users.rose)
         self.client.Resource.set_target(target=resource)
-        rose_action, item = self.client.Resource.add_item(item_name="Rose's first item")
+        rose_action, item = self.client.Resource.add_item_to_resource(name="Rose's first item")
         self.assertEquals(rose_action.status, "waiting")
 
         # Resolve first condition but Rose is still waiting
@@ -706,8 +720,8 @@ class ConditionalsTest(DataTestCase):
         # Pinoe creates resource, permission on resource, and adds two conditions
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
         self.client.Conditional.set_target(target=permission)
         permission_data = [
             {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]},
@@ -721,7 +735,7 @@ class ConditionalsTest(DataTestCase):
         # Rose takes action, it's waiting
         self.client.Resource.set_actor(actor=self.users.rose)
         self.client.Resource.set_target(target=resource)
-        rose_action, item = self.client.Resource.add_item(item_name="Rose's first item")
+        rose_action, item = self.client.Resource.add_item_to_resource(name="Rose's first item")
         self.assertEquals(rose_action.status, "waiting")
 
         # Resolve first condition but Rose is still waiting
@@ -742,8 +756,8 @@ class ConditionalsTest(DataTestCase):
         # Pinoe creates resource, permission on resource, and adds two conditions
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
         self.client.Conditional.set_target(target=permission)
         permission_data = [
             {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]},
@@ -761,7 +775,7 @@ class ConditionalsTest(DataTestCase):
         # Rose takes action, it's waiting
         self.client.Resource.set_actor(actor=self.users.rose)
         self.client.Resource.set_target(target=resource)
-        rose_action, item = self.client.Resource.add_item(item_name="Rose's first item")
+        rose_action, item = self.client.Resource.add_item_to_resource(name="Rose's first item")
         self.assertEquals(rose_action.status, "waiting")
 
         # Remaining condition handled
@@ -782,8 +796,8 @@ class ConditionalsTest(DataTestCase):
         # Pinoe creates resource, permission on resource, and adds condition
         resource = self.client.Resource.create_resource(name="Go USWNT!")
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.AddItem,
-            permission_actors=[self.users.rose.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.AddItem,
+            actors=[self.users.rose.pk])
         self.client.Conditional.set_target(target=permission)
         permission_data = [
             {"permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.crystal.pk]},
@@ -794,7 +808,7 @@ class ConditionalsTest(DataTestCase):
 
         # Rose takes action, it's waiting
         self.roseClient.Resource.set_target(target=resource)
-        rose_action, item = self.roseClient.Resource.add_item(item_name="Rose's first item")
+        rose_action, item = self.roseClient.Resource.add_item_to_resource(name="Rose's first item")
         self.assertEquals(rose_action.status, "waiting")
 
         # Condition resolved, Rose's action has passed
@@ -816,7 +830,7 @@ class ConditionalsTest(DataTestCase):
 
         # Rose takes second action, it's waiting
         self.roseClient.Resource.set_target(target=resource)
-        rose_action, item = self.roseClient.Resource.add_item(item_name="Rose's second item")
+        rose_action, item = self.roseClient.Resource.add_item_to_resource(name="Rose's second item")
         self.assertEquals(rose_action.status, "waiting")
 
         # Crystal can't approve
@@ -859,7 +873,7 @@ class BasicCommunityTest(DataTestCase):
     def test_change_name_of_community(self):
         community = self.client.Community.create_community(name="A New Community")
         self.client.Community.set_target(target=community)
-        action, result = self.client.Community.change_name(new_name="A Newly Named Community")
+        action, result = self.client.Community.change_name_of_community(name="A Newly Named Community")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(community.name, "A Newly Named Community")
 
@@ -867,7 +881,7 @@ class BasicCommunityTest(DataTestCase):
         community = self.client.Community.create_community(name="A New Community")
         self.client.Community.set_target(target=community)
         self.client.Community.set_actor(actor=self.users.jj)
-        action, result = self.client.Community.change_name(new_name="A Newly Named Community")
+        action, result = self.client.Community.change_name_of_community(name="A Newly Named Community")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(community.name, "A New Community")
 
@@ -879,7 +893,7 @@ class BasicCommunityTest(DataTestCase):
         action, result = self.client.Resource.change_owner_of_target(new_owner=community)
         self.assertEquals(resource.get_owner().name, "A New Community")
         # Test
-        new_action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        new_action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=new_action.pk).status, "implemented")
         self.assertEquals(resource.name, "A Changed Resource")
 
@@ -892,7 +906,7 @@ class BasicCommunityTest(DataTestCase):
         self.assertEquals(resource.get_owner().name, "A New Community")
         # Test
         self.client.Resource.set_actor(actor=self.users.jj)
-        new_action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        new_action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=new_action.pk).status, "rejected")
         self.assertEquals(resource.name, "A New Resource")
 
@@ -907,24 +921,24 @@ class BasicCommunityTest(DataTestCase):
 
         # Add  permission for nongovernor to change name
         self.client.PermissionResource.set_target(target=resource)
-        action, permission = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.ChangeResourceName,
-            permission_actors=[self.users.jj.pk])
+        action, permission = self.client.PermissionResource.add_permission(change_type=Changes().Resources.ChangeResourceName,
+            actors=[self.users.jj.pk])
 
         # Test - JJ should now be allowed to change name
         self.client.Resource.set_actor(actor=self.users.jj)
-        new_action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        new_action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=new_action.pk).status, "implemented")
         self.assertEquals(resource.name, "A Changed Resource")
 
         # Test - Governors should still be able to do other things still that are not set in PR
         self.client.Resource.set_actor(actor=self.users.pinoe)
-        new_action, result = self.client.Resource.add_item(item_name="Pinoe's item")
+        new_action, result = self.client.Resource.add_item_to_resource(name="Pinoe's item")
         self.assertEquals(resource.get_items(), ["Pinoe's item"])
 
-    def test_add_governor(self):
+    def test_add_governor_to_community(self):
         community = self.client.Community.create_community(name="A New Community")
         self.client.Community.set_target(community)
-        action, result = self.client.Community.add_governor(governor_pk=self.users.crystal.pk)
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.crystal.pk)
         self.assertEquals(community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
 
@@ -934,18 +948,18 @@ class BasicCommunityTest(DataTestCase):
         # create a community with a role on it & person in role
         community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=community)
-        action, result = self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.christen.pk])
+        action, result = self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk])
         action, result = self.client.Community.add_people_to_role(role_name="forwards",
             people_to_add=[self.users.christen.pk])
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.christen.pk]})
 
         # add a permission that references that role
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.ChangeName, permission_roles=["forwards"])
+            change_type=Changes().Communities.ChangeName, roles=["forwards"])
 
         # can't remove that role
-        action, result = self.client.Community.remove_role(role_name="forwards")
+        action, result = self.client.Community.remove_role_from_community(role_name="forwards")
         self.assertEquals(action.error_message,
             f"Role cannot be deleted until it is removed from permissions: {permission.pk}")
 
@@ -954,7 +968,7 @@ class BasicCommunityTest(DataTestCase):
         action, result = self.client.PermissionResource.remove_permission()
 
         # now you can remove the role
-        action, result = self.client.Community.remove_role(role_name="forwards")
+        action, result = self.client.Community.remove_role_from_community(role_name="forwards")
         self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_custom_roles(), {})
 
@@ -964,24 +978,24 @@ class BasicCommunityTest(DataTestCase):
         # create a community with a role on it & person in role
         community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=community)
-        action, result = self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.christen.pk])
+        action, result = self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk])
         action, result = self.client.Community.add_people_to_role(role_name="forwards",
             people_to_add=[self.users.christen.pk])
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.christen.pk]})
 
         # add it to the owners & remove current owner
-        action, result = self.client.Community.add_owner_role(owner_role="forwards")
+        action, result = self.client.Community.add_owner_role_to_community(role_name="forwards")
 
         # can't remove that role
-        action, result = self.client.Community.remove_role(role_name="forwards")
+        action, result = self.client.Community.remove_role_from_community(role_name="forwards")
         self.assertEquals(action.error_message, "Cannot remove role with ownership privileges")
 
         # remove owner role
-        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_owner_role_from_community(role_name="forwards")
 
         # now we can remove the role
-        action, result = self.client.Community.remove_role(role_name="forwards")
+        action, result = self.client.Community.remove_role_from_community(role_name="forwards")
         self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_custom_roles(), {})
 
@@ -992,15 +1006,15 @@ class BasicCommunityTest(DataTestCase):
         # create a community with a role on it & person in role
         community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=community)
-        action, result = self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
+        action, result = self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk, self.users.crystal.pk])
         action, result = self.client.Community.add_people_to_role(role_name="forwards",
             people_to_add=[self.users.christen.pk])
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.christen.pk]})
 
         # add it to the owners & remove current owner
-        action, result = self.client.Community.add_owner_role(owner_role="forwards")
-        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+        action, result = self.client.Community.add_owner_role_to_community(role_name="forwards")
+        action, result = self.client.Community.remove_owner_from_community(owner_pk=self.users.pinoe.pk)
 
         # Christen can't remove herself from role
         self.client.update_actor_on_all(actor=self.users.christen)
@@ -1010,7 +1024,7 @@ class BasicCommunityTest(DataTestCase):
             "Cannot remove everyone from this role as doing so would leave the community without an owner")
 
         # add an actor to owners
-        self.client.Community.add_owner(owner_pk=self.users.crystal.pk)
+        self.client.Community.add_owner_to_community(owner_pk=self.users.crystal.pk)
         self.client.Community.refresh_target()
 
         # now christen can remove herself from the role
@@ -1026,27 +1040,27 @@ class BasicCommunityTest(DataTestCase):
         # create a community with a role on it & person in role
         community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=community)
-        action, result = self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
+        action, result = self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk, self.users.crystal.pk])
         action, result = self.client.Community.add_people_to_role(role_name="forwards",
             people_to_add=[self.users.pinoe.pk])
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.pinoe.pk]})
 
         # add it to the owners & remove current owner (though Pinoe is still owner via role)
-        action, result = self.client.Community.add_owner_role(owner_role="forwards")
-        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+        action, result = self.client.Community.add_owner_role_to_community(role_name="forwards")
+        action, result = self.client.Community.remove_owner_from_community(owner_pk=self.users.pinoe.pk)
 
         # can't remove that role as owner role
-        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_owner_role_from_community(role_name="forwards")
         self.assertEquals(action.error_message,
             "Cannot remove this role as doing so would leave the community without an owner")
 
         # add an actor to owners
-        self.client.Community.add_owner(owner_pk=self.users.crystal.pk)
+        self.client.Community.add_owner_to_community(owner_pk=self.users.crystal.pk)
         self.client.Community.refresh_target()
 
         # now christen can remove the role
-        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_owner_role_from_community(role_name="forwards")
         self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_owners(), {'actors': [self.users.crystal.pk], 'roles': []})
 
@@ -1057,18 +1071,18 @@ class BasicCommunityTest(DataTestCase):
         # create a community with another member
         community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=community)
-        self.client.Community.add_members([self.users.christen.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk])
 
         # can't remove self as owner
-        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+        action, result = self.client.Community.remove_owner_from_community(owner_pk=self.users.pinoe.pk)
         self.assertEquals(action.error_message,
             "Cannot remove owner as doing so would leave the community without an owner")
 
         # add an actor to owners
-        self.client.Community.add_owner(owner_pk=self.users.christen.pk)
+        self.client.Community.add_owner_to_community(owner_pk=self.users.christen.pk)
 
         # now christen can remove the role
-        action, result = self.client.Community.remove_owner(owner_pk=self.users.pinoe.pk)
+        action, result = self.client.Community.remove_owner_from_community(owner_pk=self.users.pinoe.pk)
         self.assertEquals(action.status, "implemented")
         self.assertEquals(community.roles.get_owners(), {'actors': [self.users.christen.pk], 'roles': []})
 
@@ -1080,9 +1094,9 @@ class BasicCommunityTest(DataTestCase):
         # create a community & members with role. governor and owner are different
         community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=community)
-        action, result = self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
-        action, result = self.client.Community.add_governor(governor_pk=self.users.christen.pk)
+        action, result = self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk, self.users.crystal.pk])
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.christen.pk)
         self.christenClient = Client(actor=self.users.christen, target=community)
 
         # governor can add and remove people from role
@@ -1091,7 +1105,7 @@ class BasicCommunityTest(DataTestCase):
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
 
         # make role a governing role
-        action, result = self.client.Community.add_governor_role(governor_role="forwards")
+        action, result = self.client.Community.add_governor_role_to_community(role_name="forwards")
 
         # governor can no longer add and remove people from role
         action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
@@ -1100,8 +1114,8 @@ class BasicCommunityTest(DataTestCase):
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
 
         # make role an owner role instead
-        action, result = self.client.Community.remove_governor_role(governor_role="forwards")
-        action, result = self.client.Community.add_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_governor_role_from_community(role_name="forwards")
+        action, result = self.client.Community.add_owner_role_to_community(role_name="forwards")
 
         # governor can still not add and remove people from role
         action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
@@ -1110,7 +1124,7 @@ class BasicCommunityTest(DataTestCase):
         self.assertEquals(community.roles.get_custom_roles(), {'forwards': [self.users.crystal.pk]})
 
         # remove owner role
-        action, result = self.client.Community.remove_owner_role(owner_role="forwards")
+        action, result = self.client.Community.remove_owner_role_from_community(role_name="forwards")
 
         # Gov can finally remove from role
         action, result = self.christenClient.Community.remove_people_from_role(role_name="forwards",
@@ -1129,14 +1143,10 @@ class PermissionResourceUtilsTest(DataTestCase):
         community = self.client.Community.create_community(name="A New Community")
         self.client.PermissionResource.set_target(target=community)
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.ChangeName,
-            permission_actors=[self.users.pinoe.pk]
-        )
+            change_type=Changes().Communities.ChangeName, actors=[self.users.pinoe.pk])
         self.client.PermissionResource.set_target(target=permission)
         action2, permission2 = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Permissions.AddRoleToPermission,
-            permission_actors=[self.users.pinoe.pk]
-        )
+            change_type=Changes().Permissions.AddRoleToPermission, actors=[self.users.pinoe.pk])
         self.assertEquals(len(PermissionsItem.objects.all()), 5)
 
         # call delete_permissions_on_target
@@ -1150,8 +1160,8 @@ class GoverningAuthorityTest(DataTestCase):
         self.client = Client(actor=self.users.pinoe)
         self.community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=self.community)
-        self.client.Community.add_members([self.users.sonny.pk])
-        self.client.Community.add_governor(governor_pk=self.users.sonny.pk)
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.sonny.pk])
+        self.client.Community.add_governor_to_community(governor_pk=self.users.sonny.pk)
 
     def test_with_conditional_on_governer_decision_making(self):
 
@@ -1162,7 +1172,7 @@ class GoverningAuthorityTest(DataTestCase):
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented") # Action accepted
 
         # Governor Pinoe does a thing, creates a conditional action to be approved
-        action, result = self.client.Community.change_name(new_name="A Newly Named Community")
+        action, result = self.client.Community.change_name_of_community(name="A Newly Named Community")
         # self.assertEquals(Action.objects.get(pk=action.pk).status, "waiting")
         # self.assertEquals(self.community.name, "A New Community")
         # conditional_action = self.condClient.get_condition_item_given_action_and_source(action_pk=action.pk,
@@ -1200,15 +1210,15 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # By default, Aubrey's actions are not successful
         aubreyClient = Client(actor=self.users.aubrey, target=resource)
-        action, result = aubreyClient.Resource.change_name(new_name="Aubrey's resource")
+        action, result = aubreyClient.Resource.change_name_of_resource(name="Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(resource.get_name(), "A resource")
 
         # Owner adds a specific permission for Aubrey, so Aubrey's action is successful
         self.client.PermissionResource.set_target(resource)
-        owner_action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.ChangeResourceName,
-            permission_actors=[self.users.aubrey.pk])
-        action, result = aubreyClient.Resource.change_name(new_name="Aubrey's resource")
+        owner_action, result = self.client.PermissionResource.add_permission(
+            change_type=Changes().Resources.ChangeResourceName, actors=[self.users.aubrey.pk])
+        action, result = aubreyClient.Resource.change_name_of_resource(name="Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(resource.get_name(), "Aubrey's resource")
 
@@ -1216,7 +1226,7 @@ class FoundationalAuthorityTest(DataTestCase):
         fp_action, result = self.client.PermissionResource.enable_foundational_permission()
 
         # Aunrey's actions are no longer successful
-        action, result = aubreyClient.Resource.change_name(new_name="A new name for Aubrey's resource")
+        action, result = aubreyClient.Resource.change_name_of_resource(name="A new name for Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(resource.get_name(), "Aubrey's resource")
 
@@ -1224,15 +1234,15 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # By default, Aubrey's actions are not successful
         aubreyClient = Client(actor=self.users.aubrey, target=self.resource)
-        action, result = aubreyClient.Resource.change_name(new_name="Aubrey's resource")
+        action, result = aubreyClient.Resource.change_name_of_resource(name="Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.get_name(), "A New Resource")
 
         # Owner Pinoe adds a specific permission for Aubrey, Aubrey's action is successful
         self.client.PermissionResource.set_target(self.resource)
-        owner_action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.ChangeResourceName,
-            permission_actors=[self.users.aubrey.pk])
-        action, result = aubreyClient.Resource.change_name(new_name="Aubrey's resource")
+        owner_action, result = self.client.PermissionResource.add_permission(
+            change_type=Changes().Resources.ChangeResourceName, actors=[self.users.aubrey.pk])
+        action, result = aubreyClient.Resource.change_name_of_resource(name="Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(self.resource.get_name(), "Aubrey's resource")
 
@@ -1240,7 +1250,7 @@ class FoundationalAuthorityTest(DataTestCase):
         fp_action, result = self.client.PermissionResource.enable_foundational_permission()
 
         # Aubrey's actions are no longer successful
-        action, result = aubreyClient.Resource.change_name(new_name="A new name for Aubrey's resource")
+        action, result = aubreyClient.Resource.change_name_of_resource(name="A new name for Aubrey's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.get_name(), "Aubrey's resource")
 
@@ -1248,7 +1258,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe, Tobin, Christen and JMac are members of the community.
         self.client.update_target_on_all(self.community)
-        action, result = self.client.Community.add_members([self.users.tobin.pk, self.users.christen.pk,
+        action, result = self.client.Community.add_members_to_community(member_pk_list=[self.users.tobin.pk, self.users.christen.pk,
             self.users.jmac.pk])
         com_members = self.client.Community.get_members()
         self.assertCountEqual(com_members,
@@ -1256,7 +1266,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # In this community, all members are owners but for the foundational authority to do
         # anything they must agree via majority vote.
-        action, result = self.client.Community.add_owner_role(owner_role="members") # Add member role
+        action, result = self.client.Community.add_owner_role_to_community(role_name="members") # Add member role
         permission_data = [{ "permission_type": Changes().Conditionals.AddVote, "permission_roles": ["members"]}]
         action, result = self.client.Conditional.add_condition(leadership_type="owner", condition_type="votecondition",
             condition_data={"voting_period": 1 }, permission_data=permission_data)
@@ -1264,7 +1274,7 @@ class FoundationalAuthorityTest(DataTestCase):
         # Christen tries to change the name of the resource but is not successful because it's not something
         # that triggers foundational authority.
         christenClient = Client(actor=self.users.christen, target=self.resource)
-        action, result = christenClient.Resource.change_name(new_name="Christen's resource")
+        action, result = christenClient.Resource.change_name_of_resource(name="Christen's resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.get_name(), "A New Resource")
 
@@ -1298,28 +1308,28 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe is the owner, Sully and Pinoe are governors.
         self.client.Community.set_target(self.community)
-        self.client.Community.add_members([self.users.sully.pk])
-        action, result = self.client.Community.add_governor(governor_pk=self.users.sully.pk)
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.sully.pk])
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.sully.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.sully.pk], 'roles': []})
 
         # Sully tries to add Aubrey as a governor.  She cannot, she is not an owner.
         self.client.Community.set_actor(actor=self.users.sully)
-        action, result = self.client.Community.add_governor(governor_pk=self.users.aubrey.pk)
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.aubrey.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.sully.pk], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Rose tries to add Aubrey as a governor.  She cannot, she is not an owner.
         self.client.Community.set_actor(actor=self.users.rose)
-        action, result = self.client.Community.add_governor(governor_pk=self.users.aubrey.pk)
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.aubrey.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.sully.pk], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Pinoe tries to add Aubrey as a governor.  She can, since has foundational authority.
         self.client.Community.set_actor(actor=self.users.pinoe)
-        action, result = self.client.Community.add_governor(governor_pk=self.users.aubrey.pk)
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.aubrey.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.sully.pk, self.users.aubrey.pk],
             'roles': []})
@@ -1329,22 +1339,22 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe adds Crystal as owner.  There are now two owners with no conditions.
         self.client.Community.set_target(self.community)
-        self.client.Community.add_members([self.users.crystal.pk])
-        action, result = self.client.Community.add_owner(owner_pk=self.users.crystal.pk)
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.crystal.pk])
+        action, result = self.client.Community.add_owner_to_community(owner_pk=self.users.crystal.pk)
         self.assertEquals(self.community.roles.get_owners(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # Tobin tries to add Christen as owner.  She cannot, she is not an owner.
         self.client.Community.set_actor(actor=self.users.tobin)
-        action, result = self.client.Community.add_owner(owner_pk=self.users.christen.pk)
+        action, result = self.client.Community.add_owner_to_community(owner_pk=self.users.christen.pk)
         self.assertEquals(self.community.roles.get_owners(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # Crystal tries to add Christen as owner.  She can, since has foundational authority.
         self.client.Community.set_actor(actor=self.users.crystal)
-        action, result = self.client.Community.add_owner(owner_pk=self.users.christen.pk)
+        action, result = self.client.Community.add_owner_to_community(owner_pk=self.users.christen.pk)
         self.assertEquals(self.community.roles.get_owners(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk, self.users.christen.pk],
             'roles': []})
@@ -1354,8 +1364,8 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe is the owner, Pinoe and Crystal are governors.
         self.client.Community.set_target(self.community)
-        self.client.Community.add_members([self.users.crystal.pk])
-        action, result = self.client.Community.add_governor(governor_pk=self.users.crystal.pk)
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.crystal.pk])
+        action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.crystal.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
         self.client.Resource.set_target(self.resource)
@@ -1402,13 +1412,13 @@ class RolesetTest(DataTestCase):
         self.assertEquals(roles, {})
 
         # Add a role
-        action, result = self.client.Community.add_role(role_name="forwards")
+        action, result = self.client.Community.add_role_to_community(role_name="forwards")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         roles = self.client.Community.get_custom_roles()
         self.assertEquals(roles, {'forwards': []})
 
         # Add people to role
-        self.client.Community.add_members([self.users.christen.pk, self.users.crystal.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk, self.users.crystal.pk])
         action, result = self.client.Community.add_people_to_role(role_name="forwards",
             people_to_add=[self.users.christen.pk, self.users.crystal.pk, self.users.pinoe.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
@@ -1424,7 +1434,7 @@ class RolesetTest(DataTestCase):
         self.assertCountEqual(roles["forwards"], [self.users.christen.pk, self.users.pinoe.pk])
 
         # Remove role
-        action, result = self.client.Community.remove_role(role_name="forwards")
+        action, result = self.client.Community.remove_role_from_community(role_name="forwards")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         roles = self.client.Community.get_custom_roles()
         self.assertEquals(roles, {})
@@ -1432,15 +1442,15 @@ class RolesetTest(DataTestCase):
     def test_basic_role_works_with_permission_item(self):
 
         # Aubrey wants to change the name of the resource, she can't
-        self.client.Community.add_members([self.users.aubrey.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.aubrey.pk])
         self.client.Resource.set_actor(actor=self.users.aubrey)
-        action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "USWNT Resource")
 
         # Pinoe adds a 'namers' role to the community which owns the resource
         self.client.Resource.set_actor(actor=self.users.pinoe)
-        action, result = self.client.Community.add_role(role_name="namers")
+        action, result = self.client.Community.add_role_to_community(role_name="namers")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.client.Community.refresh_target()
         roles = self.client.Community.get_custom_roles()
@@ -1448,8 +1458,8 @@ class RolesetTest(DataTestCase):
 
         # Pinoe creates a permission item with the 'namers' role in it
         self.client.PermissionResource.set_target(self.resource)
-        action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Resources.ChangeResourceName,
-            permission_roles=["namers"])
+        action, result = self.client.PermissionResource.add_permission(
+            change_type=Changes().Resources.ChangeResourceName, roles=["namers"])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # Pinoe adds Aubrey to the 'namers' role in the community
@@ -1461,7 +1471,7 @@ class RolesetTest(DataTestCase):
 
         # Aubrey can now change the name of the resource
         self.client.Resource.set_actor(actor=self.users.aubrey)
-        action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(self.resource.name, "A Changed Resource")
 
@@ -1474,7 +1484,7 @@ class RolesetTest(DataTestCase):
 
         # Aubrey can no longer change the name of the resource
         self.client.Resource.set_actor(actor=self.users.aubrey)
-        action, result = self.client.Resource.change_name(new_name="A Newly Changed Resource")
+        action, result = self.client.Resource.change_name_of_resource(name="A Newly Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "A Changed Resource")
 
@@ -1486,30 +1496,30 @@ class RolesetTest(DataTestCase):
 
         # Aubrey wants to change the name of the resource, she can't
         self.client.Resource.set_actor(actor=self.users.aubrey)
-        action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "USWNT Resource")
 
         # Pinoe adds member role to governors
-        action, result = self.client.Community.add_governor_role(governor_role="members")
+        action, result = self.client.Community.add_governor_role_to_community(role_name="members")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.client.Community.refresh_target()
         gov_info = self.client.Community.get_governorship_info()
         self.assertDictEqual(gov_info, {'actors': [self.users.pinoe.pk], 'roles': ['members']})
 
         # Aubrey tries to do a thing and can't
-        action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.assertEquals(self.resource.name, "USWNT Resource")
 
         # Pinoe adds Aubrey as a member
-        action, result = self.client.Community.add_members(member_pk_list=[self.users.aubrey.pk])
+        action, result = self.client.Community.add_members_to_community(member_pk_list=[self.users.aubrey.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         roles = self.client.Community.get_roles()
         self.assertCountEqual(roles["members"], [self.users.pinoe.pk, self.users.aubrey.pk])
 
         # Aubrey tries to do a thing and can
-        action, result = self.client.Resource.change_name(new_name="A Changed Resource")
+        action, result = self.client.Resource.change_name_of_resource(name="A Changed Resource")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.assertEquals(self.resource.name, "A Changed Resource")
 
@@ -1518,194 +1528,13 @@ class RolesetTest(DataTestCase):
         self.assertEquals(self.client.Community.get_members(), [self.users.pinoe])
 
         # Pinoe adds Aubrey to the community
-        self.client.Community.add_members([self.users.aubrey.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.aubrey.pk])
         self.assertCountEqual(self.client.Community.get_members(),
             [self.users.pinoe, self.users.aubrey])
 
         # Pinoe removes Aubrey from the community
-        action, result = self.client.Community.remove_members([self.users.aubrey.pk])
+        action, result = self.client.Community.remove_members_from_community(member_pk_list=[self.users.aubrey.pk])
         self.assertEquals(self.client.Community.get_members(), [self.users.pinoe])
-
-
-# class ResolutionFieldTest(DataTestCase):
-
-#     def setUp(self):
-
-#         # Create clients for Pinoe, create community
-#         self.client = Client(actor=self.users.pinoe)
-#         self.instance = self.client.Community.create_community(name="USWNT")
-#         self.client.Community.set_target(self.instance)
-#         self.client.Community.change_owner_of_target(new_owner=self.instance)  # Make community self-owned
-#         self.client.update_target_on_all(target=self.instance)  # make instance the default target for Pinoe
-
-#         # Make separate clients for Midge, Crystal, JJ
-#         self.midgeClient = Client(actor=self.users.midge, target=self.instance)      # non-member
-#         self.roseClient = Client(actor=self.users.rose, target=self.instance)        # member
-#         self.jjClient = Client(actor=self.users.jj, target=self.instance)            # governing
-#         self.crystalClient = Client(actor=self.users.crystal, target=self.instance)  # roletest
-
-#         # Create request objects
-#         Request = namedtuple('Request', 'user')
-#         self.request = Request(user=self.users.pinoe)
-#         self.midgeRequest = Request(user=self.users.midge)
-#         self.roseRequest = Request(user=self.users.rose)
-#         self.jjRequest = Request(user=self.users.jj)
-#         self.crystalRequest = Request(user=self.users.crystal)
-
-#         # Pinoe adds members to community
-#         self.client.Community.add_members([self.users.jj.pk, self.users.crystal.pk,
-#             self.users.rose.pk])
-
-#         # Pinoe adds a role to community and assign relevant members
-#         action, result = self.client.Community.add_role(role_name="midfielders")
-#         self.client.Community.add_people_to_role(role_name="midfielders",
-#             people_to_add=[self.users.pinoe.pk, self.users.rose.pk])
-
-#     def test_resolution_field_correct_for_approved_action(self):
-
-#         # Add permission so any member can change the name of the group
-#         self.client.PermissionResource.add_permission(permission_roles=["members"],
-#             permission_type=Changes().Communities.ChangeName)
-
-#         # Rose, a member, changes the name
-#         action, result = self.roseClient.Community.change_name(new_name="Miscellaneous Badasses")
-#         self.assertEquals(action.status, "implemented")
-
-#         # Inspect action's resolution field
-#         self.assertTrue(action.is_resolved)
-#         self.assertTrue(action.is_approved)
-#         self.assertEquals(action.approved_through(), "specific")
-
-#     def test_resolution_field_correct_for_rejected_action(self):
-
-#         # Add permission so any member can change the name of the group
-#         self.client.PermissionResource.add_permission(permission_roles=["members"],
-#             permission_type=Changes().Communities.ChangeName)
-
-#         # Non-member user changes name
-#         action, result = self.midgeClient.Community.change_name(new_name="Miscellaneous Badasses")
-#         self.assertEquals(action.status, "rejected")
-
-#         # Inspect action's resolution field
-#         self.assertTrue(action.is_resolved)
-#         self.assertFalse(action.is_approved)
-
-#     def test_resolution_field_approved_through(self):
-
-#         # Pinoe can make JJ a governor because she has a foundational permission
-#         action, result = self.client.Community.add_governor(governor_pk=self.users.jj.pk)
-#         self.assertEquals(action.status, "implemented")
-#         self.assertTrue(action.is_resolved)
-#         self.assertTrue(action.is_approved)
-#         self.assertEquals(action.approved_through(), "foundational")
-
-#         # JJ can change the name of the group because she has a governing permission.
-#         action, result = self.jjClient.Community.change_name(new_name="Julie Ertz and Her Sidekicks")
-#         self.assertEquals(action.status, "implemented")
-#         self.assertTrue(action.is_resolved)
-#         self.assertTrue(action.is_approved)
-#         self.assertEquals(action.approved_through(), "governing")
-
-#         # Crystal can change the name of the group because she has a specific permission.
-#         self.client.PermissionResource.add_permission(permission_actors=[self.users.crystal.pk],
-#             permission_type=Changes().Communities.ChangeName)
-#         action, result = self.crystalClient.Community.change_name(new_name="Crystal Dunn and Her Sidekicks")
-#         self.assertEquals(action.status, "implemented")
-#         self.assertTrue(action.is_resolved)
-#         self.assertTrue(action.is_approved)
-#         self.assertEquals(action.approved_through(), "specific")
-
-#     def test_resolution_field_for_role_for_specific_permission(self):
-
-#         # Add permission so any member can change the name of the group
-#         self.client.PermissionResource.add_permission(permission_roles=["members"],
-#             permission_type=Changes().Communities.ChangeName)
-
-#         # When they change the name, the resolution role field shows the role
-#         action, result = self.roseClient.Community.change_name(new_name="Best Team")
-#         self.assertTrue(action.is_approved)
-#         self.assertEquals(action.resolution.specific_status, "approved")
-#         self.assertEquals(action.approved_through(), "specific")
-#         self.assertEquals(action.resolution.approved_role, "members")
-
-#     def test_resolution_field_for_role_for_governing_permission(self):
-
-#         # Pinoe makes a governing role
-#         action, result = self.client.Community.add_governor_role(governor_role="midfielders")
-#         action, result = self.roseClient.Community.change_name(new_name="Best Team")
-#         self.assertEquals(action.approved_through(), "governing")
-#         self.assertEquals(action.resolution.governing_status, "approved")
-#         self.assertEquals(action.resolution.approved_role, "midfielders")
-
-#     def test_resolution_field_for_individual_with_specific_permission(self):
-
-#         # Add permission so a specific person can change the name of the group
-#         self.client.PermissionResource.add_permission(permission_actors=[self.users.rose.pk],
-#             permission_type=Changes().Communities.ChangeName)
-
-#         # When they change the name, the resolution role field shows no role
-#         action, result = self.roseClient.Community.change_name(new_name="Best Team")
-#         self.assertTrue(action.is_approved)
-#         self.assertEquals(action.approved_through(), "specific")
-#         self.assertFalse(action.resolution.approved_role)
-
-#     def test_resolution_field_captures_conditional_info(self):
-
-#         # Pinoe sets a permission on the community that any 'member' can change the name.
-#         action, permission = self.client.PermissionResource.add_permission(permission_roles=["members"],
-#             permission_type=Changes().Communities.ChangeName)
-
-#         # But then she adds a condition that someone needs to approve a name change
-#         # before it can go through.
-#         self.client.Conditional.set_target(permission)
-#         self.client.Conditional.add_condition(condition_type="approvalcondition")
-
-#         # (Since no specific permission is set on the condition, "approving" it
-#         # requirest foundational or governing authority to change.  So only Pinoe
-#         # can approve.)
-
-#         # Midge tries to change the name and fails because she is not a member.  The
-#         # condition never gets triggered.
-#         action, result = self.midgeClient.Community.change_name(new_name="Let's go North Carolina!")
-#         self.assertEquals(action.status, "rejected")
-#         self.assertTrue(action.is_resolved)
-#         self.assertFalse(action.is_approved)
-
-#         # Rose tries to change the name and has to wait for approval.
-#         rose_action, result = self.roseClient.Community.change_name(new_name="Friends <3")
-#         self.assertEquals(rose_action.status, "waiting")
-#         self.assertEquals(rose_action.resolution.specific_status, "waiting")
-#         self.assertFalse(rose_action.is_resolved)
-#         self.assertFalse(rose_action.is_approved)
-#         self.assertTrue(rose_action.resolution.conditions)
-
-#         # Pinoe approves Rose's name change.
-#         condition_item = self.client.Conditional.get_condition_items_given_action_and_source(
-#             action=rose_action, source=permission)[0]
-#         self.client.ApprovalCondition.set_target(target=condition_item)
-#         action, result = self.client.ApprovalCondition.approve()
-#         self.assertEquals(action.status, "implemented")
-
-#         # Rose's action is implemented
-#         rose_action.refresh_from_db()
-#         self.assertEquals(rose_action.status, "implemented")
-#         self.assertTrue(rose_action.is_resolved)
-#         self.assertTrue(rose_action.is_approved)
-#         self.assertEquals(rose_action.resolution.approved_condition, "approvalcondition")
-#         self.instance = self.client.Community.get_community(community_pk=str(self.instance.pk))
-#         self.assertEquals(self.instance.name, "Friends <3")
-
-#         # Rose tries to change the name again.  This time Pinoe rejects it, for Pinoe is fickle.
-#         rose_action, result = self.roseClient.Community.change_name(new_name="BEST Friends <3")
-#         condition_item = self.client.Conditional.get_condition_items_given_action_and_source(
-#             action=rose_action, source=permission)[0]
-#         self.client.ApprovalCondition.set_target(target=condition_item)
-#         action, result = self.client.ApprovalCondition.reject()
-#         rose_action.refresh_from_db()
-#         self.assertEquals(rose_action.status, "rejected")
-#         self.assertEquals(self.instance.name, "Friends <3")
-#         self.assertTrue(rose_action.is_resolved)
-#         self.assertFalse(rose_action.is_approved)
 
 
 class ConfigurablePermissionTest(DataTestCase):
@@ -1719,12 +1548,12 @@ class ConfigurablePermissionTest(DataTestCase):
         self.client.update_target_on_all(self.instance)
 
         # Add roles to community and assign members
-        self.client.Community.add_members([self.users.rose.pk, self.users.tobin.pk,
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.rose.pk, self.users.tobin.pk,
             self.users.christen.pk, self.users.crystal.pk, self.users.jmac.pk,
             self.users.aubrey.pk, self.users.sonny.pk, self.users.sully.pk,
             self.users.jj.pk])
-        self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_role(role_name="spirit players")
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_role_to_community(role_name="spirit players")
 
         # Make separate clients for other users.
         self.tobinClient = Client(actor=self.users.tobin, target=self.instance)
@@ -1741,9 +1570,8 @@ class ConfigurablePermissionTest(DataTestCase):
 
         # test permission form
         action, result = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddPeopleToRole,
-            permission_actors=[self.users.rose.pk],
-            permission_configuration={"role_name": "spirit players"})
+            change_type=Changes().Communities.AddPeopleToRole,
+            actors=[self.users.rose.pk], configuration={"role_name": "spirit players"})
 
         created_change_obj = result.get_state_change_object()
         self.assertEquals(created_change_obj.change_description(), "Add people to role")
@@ -1765,9 +1593,8 @@ class ConfigurablePermissionTest(DataTestCase):
         # Pinoe configures a position so that only Rose can add people to the Spirit Players role
         # and not the Forwards role
         action, result = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddPeopleToRole,
-            permission_actors=[self.users.rose.pk],
-            permission_configuration={"role_name": "spirit players"})
+            change_type=Changes().Communities.AddPeopleToRole,
+            actors=[self.users.rose.pk], configuration={"role_name": "spirit players"})
 
         # Rose can add Aubrey to to the Spirit Players role
         action, result = self.roseClient.Community.add_people_to_role(role_name="spirit players",
@@ -1784,16 +1611,15 @@ class ConfigurablePermissionTest(DataTestCase):
 
         # Pinoe creates a role called 'admins' in community USWNT and adds Tobin to the role. She also
         # adds Rose to the 'spirit players' role.
-        self.client.Community.add_role(role_name="admins")
+        self.client.Community.add_role_to_community(role_name="admins")
         self.client.Community.add_people_to_role(role_name="admins", people_to_add=[self.users.tobin.pk])
         self.client.Community.add_people_to_role(role_name="spirit players", people_to_add=[self.users.rose.pk])
 
         # Pinoe creates a configured permission where people with role 'admins', as well as the role
         # 'spirit players', can add people to the role 'forwards'.
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddPeopleToRole,
-            permission_roles=["admins", "spirit players"],
-            permission_configuration={"role_name": "forwards"})
+            change_type=Changes().Communities.AddPeopleToRole,
+            roles=["admins", "spirit players"], configuration={"role_name": "forwards"})
         self.assertCountEqual(permission.roles.role_list, ["admins", "spirit players"])
 
         # We test that Rose, in the role Spirit Players, can add JMac to forwards, and that
@@ -1807,9 +1633,8 @@ class ConfigurablePermissionTest(DataTestCase):
         # JJ to remove the role 'spirit players' but not admins.
         self.client.PermissionResource.set_target(permission)
         self.client.PermissionResource.add_permission(
-            permission_type=Changes().Permissions.RemoveRoleFromPermission,
-            permission_actors=[self.users.jj.pk],
-            permission_configuration={"role_name": "spirit players"})
+            change_type=Changes().Permissions.RemoveRoleFromPermission,
+            actors=[self.users.jj.pk], configuration={"role_name": "spirit players"})
 
         # JJ tries to remove both.  She is successful in removing spirit players but not admins.
         self.jjClient = Client(actor=self.users.jj, target=permission)
@@ -1835,13 +1660,13 @@ class MockActionTest(DataTestCase):
         # Create a Community and Client and some members
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(self.instance)
-        self.client.Community.add_members([self.users.rose.pk, self.users.tobin.pk,
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.rose.pk, self.users.tobin.pk,
             self.users.christen.pk, self.users.aubrey.pk])
 
     def test_single_mock_action(self):
 
         self.client.Community.mode = "mock"
-        action = self.client.Community.add_role(role_name="forwards")
+        action = self.client.Community.add_role_to_community(role_name="forwards")
         self.assertTrue(action.is_mock)
 
     def test_check_permissions_for_action_group_when_user_has_unconditional_permission(self):
@@ -1849,8 +1674,8 @@ class MockActionTest(DataTestCase):
         from concord.actions.utils import check_permissions_for_action_group
         self.client.Community.mode = "mock"
 
-        add_forwards_action = self.client.Community.add_role(role_name="forwards")
-        add_mids_action = self.client.Community.add_role(role_name="midfielders")
+        add_forwards_action = self.client.Community.add_role_to_community(role_name="forwards")
+        add_mids_action = self.client.Community.add_role_to_community(role_name="midfielders")
 
         summary_status, log = check_permissions_for_action_group([add_forwards_action, add_mids_action])
 
@@ -1862,15 +1687,14 @@ class MockActionTest(DataTestCase):
 
         # Pinoe sets specific permission that Tobin does not have
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddRole,
-            permission_actors=[self.users.christen.pk])
+            change_type=Changes().Communities.AddRole, actors=[self.users.christen.pk])
 
         from concord.actions.utils import check_permissions_for_action_group
         self.client.Community.mode = "mock"
         self.client.Community.set_actor(actor=self.users.tobin)
 
-        add_forwards_action = self.client.Community.add_role(role_name="forwards")
-        add_mids_action = self.client.Community.add_role(role_name="midfielders")
+        add_forwards_action = self.client.Community.add_role_to_community(role_name="forwards")
+        add_mids_action = self.client.Community.add_role_to_community(role_name="midfielders")
 
         summary_status, log = check_permissions_for_action_group([add_forwards_action, add_mids_action])
 
@@ -1882,8 +1706,7 @@ class MockActionTest(DataTestCase):
 
          # Pinoe sets specific permission & condition on that permission
         action, permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddRole,
-            permission_actors=[self.users.tobin.pk])
+            change_type=Changes().Communities.AddRole, actors=[self.users.tobin.pk])
         self.client.Conditional.set_target(permission)
         perm_data = [ { "permission_type": Changes().Conditionals.Approve, "permission_actors": [self.users.christen.pk] } ]
         self.client.Conditional.add_condition(condition_type="approvalcondition",
@@ -1893,8 +1716,8 @@ class MockActionTest(DataTestCase):
         self.client.Community.mode = "mock"
         self.client.Community.set_actor(actor=self.users.tobin)
 
-        add_forwards_action = self.client.Community.add_role(role_name="forwards")
-        add_mids_action = self.client.Community.add_role(role_name="midfielders")
+        add_forwards_action = self.client.Community.add_role_to_community(role_name="forwards")
+        add_mids_action = self.client.Community.add_role_to_community(role_name="midfielders")
 
         summary_status, log = check_permissions_for_action_group([add_forwards_action, add_mids_action])
 
@@ -1912,8 +1735,8 @@ class TemplateTest(DataTestCase):
         # Create a Community and Client
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(self.instance)
-        self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.tobin.pk])
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.tobin.pk])
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
         # Create templates (note that this servces as a test that all templates can be instantiated)
@@ -1928,7 +1751,7 @@ class TemplateTest(DataTestCase):
 
         # Before applying template, Tobin (with role Forward) cannot add members
         self.client.Community.set_actor(actor=self.users.tobin)
-        action, result = self.client.Community.add_members([self.users.christen.pk])
+        action, result = self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk])
         self.assertEquals(action.status, "rejected")
         self.assertEquals(self.client.Community.get_members(), [self.users.pinoe, self.users.tobin])
 
@@ -1950,7 +1773,7 @@ class TemplateTest(DataTestCase):
              'approval to pass.'})
 
         # now Tobin can add members but conditionally
-        action, result = self.client.Community.add_members([self.users.christen.pk])
+        action, result = self.client.Community.add_members_to_community(member_pk_list=[self.users.christen.pk])
         self.assertEquals(action.status, "waiting")
 
         # the added member approves and is added to community
@@ -1973,8 +1796,8 @@ class PermissionedReadTest(DataTestCase):
         # Create a community with roles
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(self.instance)
-        self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.tobin.pk, self.users.rose.pk])
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.tobin.pk, self.users.rose.pk])
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
         # Create a resource and put it in the community
@@ -1988,15 +1811,14 @@ class PermissionedReadTest(DataTestCase):
 
     def test_unconfigured_permission_read(self):
         # Only people with role "forwards" can view the resource
-        action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Actions.View,
-            permission_roles=["forwards"])
+        action, result = self.client.PermissionResource.add_permission(change_type=Changes().Actions.View, roles=["forwards"])
 
         # User Rose without role 'forwards' can't see object
-        action, result = self.roseClient.Resource.get_target_data()
+        action, result = self.roseClient.Resource.view_fields()
         self.assertEquals(action.status, "rejected")
 
         # User Tobin with role 'forwards' can see object
-        action, result = self.tobinClient.Resource.get_target_data()
+        action, result = self.tobinClient.Resource.view_fields()
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result,
             { 'id': 1,
@@ -2009,58 +1831,58 @@ class PermissionedReadTest(DataTestCase):
 
     def test_can_configure_readable_fields(self):
         # Only people with role "forwards" can view the resource field "name" and resource "id"
-        action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Actions.View,
-            permission_roles=["forwards"], permission_configuration={"fields_to_include": ["name", "id"]})
+        action, result = self.client.PermissionResource.add_permission(change_type=Changes().Actions.View,
+            roles=["forwards"], configuration={"fields_to_include": ["name", "id"]})
 
         # They try to get other fields, get error
-        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["owner"])
+        action, result = self.tobinClient.Community.view_fields(fields_to_include=["owner"])
         self.assertEquals(action.status, "rejected")
         self.assertEquals("Cannot view fields owner", action.rejection_reason())
 
         # They try to get the right field, success
-        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["name"])
+        action, result = self.tobinClient.Community.view_fields(fields_to_include=["name"])
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, {'name': 'Go USWNT!'})
 
         # They try to get two fields at once, success
-        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["name", "id"])
+        action, result = self.tobinClient.Community.view_fields(fields_to_include=["name", "id"])
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, {'name': 'Go USWNT!', "id": 1})
 
         # They try to get one allowed field and one unallowed field, error
-        action, result = self.tobinClient.Community.get_target_data(fields_to_include=["name", "owner"])
+        action, result = self.tobinClient.Community.view_fields(fields_to_include=["name", "owner"])
         self.assertEquals(action.status, "rejected")
         self.assertEquals("Cannot view fields owner", action.rejection_reason())
 
         # They try to get a nonexistent field, error
-        result = self.tobinClient.Community.get_target_data(fields_to_include=["potato"])
+        result = self.tobinClient.Community.view_fields(fields_to_include=["potato"])
         self.assertTrue(result, "Attempting to view field(s) potato that are not on target Resource object (1)")
 
     def test_multiple_readpermissions(self):
 
         # Permission 1: user Tobin can only see field "name"
-        action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Actions.View,
-            permission_actors=[self.users.tobin.pk],
-            permission_configuration={"fields_to_include": ["name"]})
+        action, result = self.client.PermissionResource.add_permission(change_type=Changes().Actions.View,
+            actors=[self.users.tobin.pk],
+            configuration={"fields_to_include": ["name"]})
 
         # Permission 2: user Rose can only see field "owner"
-        action, result = self.client.PermissionResource.add_permission(permission_type=Changes().Actions.View,
-            permission_actors=[self.users.rose.pk],
-            permission_configuration={"fields_to_include": ["owner"]})
+        action, result = self.client.PermissionResource.add_permission(change_type=Changes().Actions.View,
+            actors=[self.users.rose.pk],
+            configuration={"fields_to_include": ["owner"]})
 
         # Tobin can see name but not owner
-        action, result = self.tobinClient.Resource.get_target_data(fields_to_include=["name"])
+        action, result = self.tobinClient.Resource.view_fields(fields_to_include=["name"])
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, {'name': 'Go USWNT!'})
-        action, result = self.tobinClient.Resource.get_target_data(fields_to_include=["owner"])
+        action, result = self.tobinClient.Resource.view_fields(fields_to_include=["owner"])
         self.assertEquals(action.status, "rejected")
         self.assertEquals("Cannot view fields owner", action.rejection_reason())
 
         # Rose can see owner but not name
-        action, result = self.roseClient.Resource.get_target_data(fields_to_include=["owner"])
+        action, result = self.roseClient.Resource.view_fields(fields_to_include=["owner"])
         self.assertEquals(action.status, "implemented")
         self.assertEquals(result, {'owner': 'USWNT'})
-        action, result = self.roseClient.Resource.get_target_data(fields_to_include=["name"])
+        action, result = self.roseClient.Resource.view_fields(fields_to_include=["name"])
         self.assertEquals(action.status, "rejected")
         self.assertEquals("Cannot view fields name", action.rejection_reason())
 
@@ -2074,8 +1896,8 @@ class CommentTest(DataTestCase):
         # Create a community with roles
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.Community.set_target(self.instance)
-        self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.tobin.pk, self.users.rose.pk])
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.tobin.pk, self.users.rose.pk])
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
         # Create a resource and put it in the community
@@ -2135,8 +1957,8 @@ class SimpleListTest(DataTestCase):
         # Create a community with roles
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(self.instance)
-        self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.tobin.pk, self.users.rose.pk])
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.tobin.pk, self.users.rose.pk])
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
     def test_basic_list_functionality(self):
@@ -2156,10 +1978,10 @@ class SimpleListTest(DataTestCase):
         self.assertEquals(list_instance.name, "Awesome Players!")
 
         # add a few rows
-        action, list_instance = self.client.List.add_row(row_content={"player name": "Sam Staab"})
-        action, list_instance = self.client.List.add_row(row_content={"player name": "Tziarra King"}, index=0)
-        action, list_instance = self.client.List.add_row(row_content={"player name": "Bethany Balcer"}, index=1)
-        action, list_instance = self.client.List.add_row(row_content={"player name": "Ifeoma Onumonu"})
+        action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Sam Staab"})
+        action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Tziarra King"}, index=0)
+        action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Bethany Balcer"}, index=1)
+        action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Ifeoma Onumonu"})
         self.assertEquals(list_instance.get_rows(),
             [{'player name': 'Tziarra King', 'team': ''},
             {'player name': 'Bethany Balcer', 'team': ''},
@@ -2167,13 +1989,13 @@ class SimpleListTest(DataTestCase):
             {'player name': 'Ifeoma Onumonu', 'team': ''}])
 
         # edit a row
-        action, list_instance = self.client.List.edit_row(
+        action, list_instance = self.client.List.edit_row_in_list(
             row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, index=0)
-        action, list_instance = self.client.List.edit_row(
+        action, list_instance = self.client.List.edit_row_in_list(
             row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, index=1)
-        action, list_instance = self.client.List.edit_row(
+        action, list_instance = self.client.List.edit_row_in_list(
             row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, index=2)
-        action, list_instance = self.client.List.edit_row(
+        action, list_instance = self.client.List.edit_row_in_list(
             row_content={'player name': 'Ifeoma Onumonu', "team": "Sky Blue FC"}, index=3)
         self.assertEquals(list_instance.get_rows(),
             [{'player name': 'Tziarra King', 'team': 'Utah Royals'},
@@ -2182,7 +2004,7 @@ class SimpleListTest(DataTestCase):
             {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
 
         # delete a row
-        action, list_instance = self.client.List.delete_row(index=1)
+        action, list_instance = self.client.List.delete_row_in_list(index=1)
         self.assertEquals(list_instance.get_rows(),
             [{'player name': 'Tziarra King', 'team': 'Utah Royals'},
             {'player name': 'Sam Staab', 'team': 'Washington Spirit'},
@@ -2199,13 +2021,13 @@ class SimpleListTest(DataTestCase):
             configuration={"player name": {"required": True}, "team": {"required": False}},
             description="Our fave players")
         self.client.List.set_target(list_instance)
-        action, list_instance = self.client.List.add_row(
+        action, list_instance = self.client.List.add_row_to_list(
             row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, index=0)
-        action, list_instance = self.client.List.add_row(
+        action, list_instance = self.client.List.add_row_to_list(
             row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, index=1)
-        action, list_instance = self.client.List.add_row(
+        action, list_instance = self.client.List.add_row_to_list(
             row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, index=2)
-        action, list_instance = self.client.List.add_row(
+        action, list_instance = self.client.List.add_row_to_list(
             row_content={'player name': 'Ifeoma Onumonu'}, index=3)
 
         # can't make team required since Ify is missing a team and there's no default value
@@ -2214,14 +2036,14 @@ class SimpleListTest(DataTestCase):
         self.assertEquals(action.error_message, 'Need default value for required field team')
 
         # add default value for Ify, and now we can make team required
-        action, list_instance = self.client.List.edit_row(
+        action, list_instance = self.client.List.edit_row_in_list(
             row_content={'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}, index=3)
         action, list_instance = self.client.List.edit_list(
             configuration={"player name": {"required": True}, "team": {"required": True}})
         self.assertEquals(action.status, "implemented")
 
         # now when we try to add a new player without a team it's rejected
-        action, list_instance = self.client.List.add_row(
+        action, list_instance = self.client.List.add_row_to_list(
             row_content={'player name': 'Paige Nielson'}, index=3)
         self.assertEquals(action.error_message,
             'Field team is required with no default_value, so must be supplied')
@@ -2230,7 +2052,7 @@ class SimpleListTest(DataTestCase):
         action, list_instance = self.client.List.edit_list(
             configuration={"player name": {"required": True}, "team": {"required": True},
                 "position": {"required": True, "default_value": "forward"} })
-        action, list_instance = self.client.List.add_row(
+        action, list_instance = self.client.List.add_row_to_list(
             row_content={'player name': 'Paige Nielson', 'team': 'Washington Spirit'}, index=3)
         self.assertEquals(list_instance.get_rows(),
             [{'player name': 'Tziarra King', 'team': 'Utah Royals', 'position': 'forward'},
@@ -2259,9 +2081,9 @@ class ConsensusConditionTest(DataTestCase):
         # Create a community with roles
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(self.instance)
-        self.client.Community.add_role(role_name="midfielders")
-        self.client.Community.add_role(role_name="forwards")
-        self.client.Community.add_members([self.users.lindsey.pk, self.users.midge.pk, self.users.jj.pk,
+        self.client.Community.add_role_to_community(role_name="midfielders")
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.lindsey.pk, self.users.midge.pk, self.users.jj.pk,
             self.users.rose.pk, self.users.christen.pk])
         self.client.Community.add_people_to_role(
             role_name="midfielders", people_to_add=[self.users.lindsey.pk, self.users.jj.pk, self.users.rose.pk])
@@ -2269,7 +2091,7 @@ class ConsensusConditionTest(DataTestCase):
 
         # Create permission and condition
         action, self.permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.ChangeName, permission_roles=["forwards"])
+            change_type=Changes().Communities.ChangeName, roles=["forwards"])
         self.client.Conditional.set_target(self.permission)
         self.permission_data = [{"permission_type": Changes().Conditionals.RespondConsensus,
                             "permission_roles": ["midfielders", "forwards"] },
@@ -2282,7 +2104,7 @@ class ConsensusConditionTest(DataTestCase):
         action, result = self.client.Conditional.add_condition(
             condition_type="consensuscondition", permission_data=self.permission_data, condition_data=None)
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
 
         self.assertDictEqual(self.condition_item.get_responses(),
@@ -2296,7 +2118,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 332})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
 
         self.assertEquals(self.condition_item.duration_display(), "1 week, 6 days and 20 hours")
@@ -2310,7 +2132,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
 
         self.assertTrue(self.condition_item.ready_to_resolve())  # can be resolved right away since duration is 0
@@ -2340,7 +2162,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
 
         # users respond, some block
@@ -2364,7 +2186,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0, "is_strict": True})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
         self.assertTrue(self.condition_item.is_strict)
 
@@ -2393,7 +2215,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0, "is_strict": True})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
         self.assertTrue(self.condition_item.is_strict)
 
@@ -2419,7 +2241,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0, "is_strict": True})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
         self.assertTrue(self.condition_item.is_strict)
 
@@ -2441,7 +2263,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
         self.client.update_target_on_all(self.condition_item)
 
@@ -2473,7 +2295,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
 
         # update some but not all users
@@ -2492,7 +2314,7 @@ class ConsensusConditionTest(DataTestCase):
             condition_type="consensuscondition", permission_data=self.permission_data,
             condition_data={"minimum_duration": 0})
         self.client.update_actor_on_all(self.users.midge)
-        self.trigger_action, result = self.client.Community.change_name(new_name="United States Women's National Team")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
         self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
         self.client.update_target_on_all(self.condition_item)
 
@@ -2553,9 +2375,9 @@ class FilterConditionTest(DataTestCase):
 
         # create new user & add her to group; give her a permission
         self.users.kmew = User.objects.create(username="kristiemewis")
-        self.client.Community.add_members([self.users.kmew.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.kmew.pk])
         action, target_permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.ChangeName, permission_roles=['members'])
+            change_type=Changes().Communities.ChangeName, roles=['members'])
 
         # add filter condition, user must have been created more than 1 second ago
         self.client.Conditional.set_target(target=target_permission)
@@ -2566,7 +2388,7 @@ class FilterConditionTest(DataTestCase):
         # Kristie tries to change name and fails
         self.kristieClient = Client(actor=self.users.kmew)
         self.kristieClient.update_target_on_all(target=self.instance)
-        action, result = self.kristieClient.Community.change_name(new_name="KMEW!!!")
+        action, result = self.kristieClient.Community.change_name_of_community(name="KMEW!!!")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
         # wait 1 second
@@ -2575,16 +2397,16 @@ class FilterConditionTest(DataTestCase):
         # Kristie tries to change name and succeeds
         self.kristieClient = Client(actor=self.users.kmew)
         self.kristieClient.update_target_on_all(target=self.instance)
-        action, result = self.kristieClient.Community.change_name(new_name="KMEW!!!")
+        action, result = self.kristieClient.Community.change_name_of_community(name="KMEW!!!")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
     def test_single_filter_condition_inverse(self):
 
         # create new user & add her to group; give her a permission
         self.users.kmew = User.objects.create(username="kristiemewis")
-        self.client.Community.add_members([self.users.kmew.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.kmew.pk])
         action, target_permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.ChangeName, permission_roles=['members'])
+            change_type=Changes().Communities.ChangeName, roles=['members'])
 
         # add filter condition, user must have been created more than 1 second ago
         self.client.Conditional.set_target(target=target_permission)
@@ -2595,7 +2417,7 @@ class FilterConditionTest(DataTestCase):
         # Kristie tries to change name and fails
         self.kristieClient = Client(actor=self.users.kmew)
         self.kristieClient.update_target_on_all(target=self.instance)
-        action, result = self.kristieClient.Community.change_name(new_name="KMEW!!!")
+        action, result = self.kristieClient.Community.change_name_of_community(name="KMEW!!!")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
 
         # wait 1 second
@@ -2604,13 +2426,13 @@ class FilterConditionTest(DataTestCase):
         # Kristie tries to change name and succeeds
         self.kristieClient = Client(actor=self.users.kmew)
         self.kristieClient.update_target_on_all(target=self.instance)
-        action, result = self.kristieClient.Community.change_name(new_name="USWNT")
+        action, result = self.kristieClient.Community.change_name_of_community(name="USWNT")
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
 
     def test_manager_form(self):
 
         action, target_permission = self.client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.ChangeName, permission_roles=['members'])
+            change_type=Changes().Communities.ChangeName, roles=['members'])
         self.client.Conditional.set_target(target=target_permission)
 
         # add acceptance condition

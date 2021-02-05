@@ -1,6 +1,6 @@
 """Client for Community models."""
 
-import logging
+import logging, time
 from typing import Tuple, Any
 
 from django.db.models import Model
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 class CommunityClient(BaseClient):
     """The target of a community client, if a target is required, is always a community model. As with all
     Concord clients, a target must be set for all methods not explicitly grouped as target-less methods."""
+    app_name = "communities"
 
     community_model = Community
 
@@ -157,82 +158,7 @@ class CommunityClient(BaseClient):
     def get_users_with_governorship_privileges(self):
         ...
 
-    # State changes
-
-    def add_members(self, member_pk_list: list) -> Tuple[int, Any]:
-        """Add members to community."""
-        change = sc.AddMembersStateChange(member_pk_list=member_pk_list)
-        return self.create_and_take_action(change)
-
-    def remove_members(self, member_pk_list: list) -> Tuple[int, Any]:
-        """Remove members from community."""
-        change = sc.RemoveMembersStateChange(member_pk_list=member_pk_list)
-        return self.create_and_take_action(change)
-
-    def add_governor(self, *, governor_pk: int) -> Tuple[int, Any]:
-        """Add governor to community."""
-        change = sc.AddGovernorStateChange(governor_pk=governor_pk)
-        return self.create_and_take_action(change)
-
-    def remove_governor(self, *, governor_pk: int) -> Tuple[int, Any]:
-        """Remove governor from community."""
-        change = sc.RemoveGovernorStateChange(governor_pk=governor_pk)
-        return self.create_and_take_action(change)
-
-    def add_governor_role(self, *, governor_role: str) -> Tuple[int, Any]:
-        """Add governor role tocommunity."""
-        change = sc.AddGovernorRoleStateChange(role_name=governor_role)
-        return self.create_and_take_action(change)
-
-    def remove_governor_role(self, *, governor_role: str) -> Tuple[int, Any]:
-        """Remove governor role from community."""
-        change = sc.RemoveGovernorRoleStateChange(role_name=governor_role)
-        return self.create_and_take_action(change)
-
-    def add_owner(self, *, owner_pk: int) -> Tuple[int, Any]:
-        """Add owner tocommunity."""
-        change = sc.AddOwnerStateChange(owner_pk=owner_pk)
-        return self.create_and_take_action(change)
-
-    def remove_owner(self, *, owner_pk: int) -> Tuple[int, Any]:
-        """Remove owner from community."""
-        change = sc.RemoveOwnerStateChange(owner_pk=owner_pk)
-        return self.create_and_take_action(change)
-
-    def add_owner_role(self, *, owner_role: str) -> Tuple[int, Any]:
-        """Add owner role to community."""
-        change = sc.AddOwnerRoleStateChange(role_name=owner_role)
-        return self.create_and_take_action(change)
-
-    def remove_owner_role(self, *, owner_role: str) -> Tuple[int, Any]:
-        """Remove owner role from community."""
-        change = sc.RemoveOwnerRoleStateChange(role_name=owner_role)
-        return self.create_and_take_action(change)
-
-    def change_name(self, *, new_name: str) -> Tuple[int, Any]:
-        """Change name of community."""
-        change = sc.ChangeNameStateChange(name=new_name)
-        return self.create_and_take_action(change)
-
-    def add_role(self, *, role_name: str) -> Tuple[int, Any]:
-        """Add role to community."""
-        change = sc.AddRoleStateChange(role_name=role_name)
-        return self.create_and_take_action(change)
-
-    def remove_role(self, *, role_name: str) -> Tuple[int, Any]:
-        """Remove role from community."""
-        change = sc.RemoveRoleStateChange(role_name=role_name)
-        return self.create_and_take_action(change)
-
-    def add_people_to_role(self, *, role_name: str, people_to_add: list) -> Tuple[int, Any]:
-        """Add people to role in community."""
-        change = sc.AddPeopleToRoleStateChange(role_name=role_name, people_to_add=people_to_add)
-        return self.create_and_take_action(change)
-
-    def remove_people_from_role(self, *, role_name: str, people_to_remove: list) -> Tuple[int, Any]:
-        """Remove people from role in community."""
-        change = sc.RemovePeopleFromRoleStateChange(role_name=role_name, people_to_remove=people_to_remove)
-        return self.create_and_take_action(change)
+    # Complex state updates
 
     def update_owners(self, *, new_owner_data):
         """Takes in a list of owners, adds those that are missing and removes those that
@@ -244,22 +170,22 @@ class CommunityClient(BaseClient):
 
         for new_owner in new_owner_data["individuals"]:
             if new_owner not in existing_owners["actors"]:
-                action, result = self.add_owner(owner_pk=new_owner)
+                action, result = self.add_owner_to_community(owner_pk=new_owner)
                 actions.append(action)
 
         for old_owner in existing_owners["actors"]:
             if old_owner not in new_owner_data["individuals"]:
-                action, result = self.remove_owner(owner_pk=old_owner)
+                action, result = self.remove_owner_from_community(owner_pk=old_owner)
                 actions.append(action)
 
         for new_owner_role in new_owner_data["roles"]:
             if new_owner_role not in existing_owners["roles"]:
-                action, result = self.add_owner_role(owner_role=new_owner_role)
+                action, result = self.add_owner_role_to_community(owner_role=new_owner_role)
                 actions.append(action)
 
         for old_owner_role in existing_owners["roles"]:
             if old_owner_role not in new_owner_data["roles"]:
-                action, result = self.remove_owner_role(owner_role=old_owner_role)
+                action, result = self.remove_owner_role_from_community(owner_role=old_owner_role)
                 actions.append(action)
 
         return actions
@@ -274,22 +200,22 @@ class CommunityClient(BaseClient):
 
         for new_governor in new_governor_data["individuals"]:
             if new_governor not in existing_governors["actors"]:
-                action, result = self.add_governor(governor_pk=new_governor)
+                action, result = self.add_governor_to_community(governor_pk=new_governor)
                 actions.append(action)
 
         for old_governor in existing_governors["actors"]:
             if old_governor not in new_governor_data["individuals"]:
-                action, result = self.remove_governor(governor_pk=old_governor)
+                action, result = self.remove_governor_from_community(governor_pk=old_governor)
                 actions.append(action)
 
         for new_governor_role in new_governor_data["roles"]:
             if new_governor_role not in existing_governors["roles"]:
-                action, result = self.add_governor_role(governor_role=new_governor_role)
+                action, result = self.add_governor_role_to_community(governor_role=new_governor_role)
                 actions.append(action)
 
         for old_governor_role in existing_governors["roles"]:
             if old_governor_role not in new_governor_data["roles"]:
-                action, result = self.remove_governor_role(governor_role=old_governor_role)
+                action, result = self.remove_governor_role_from_community(governor_role=old_governor_role)
                 actions.append(action)
 
         return actions
@@ -304,7 +230,7 @@ class CommunityClient(BaseClient):
         for index, role in role_data.items():
             # Check if role exists, if not make it
             if role["rolename"] not in existing_roles:
-                action, result = self.add_role(role_name=role["rolename"])
+                action, result = self.add_role_to_community(role_name=role["rolename"])
                 actions.append(action)
 
         return actions

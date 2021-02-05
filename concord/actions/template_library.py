@@ -95,12 +95,10 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
         client = self.get_client()
 
         # Step 1: give members permission to add row
-        action_1 = client.PermissionResource.add_permission(
-            permission_roles=['members'], permission_type=Changes().Resources.AddRow)
+        action_1 = client.PermissionResource.add_permission(roles=['members'], change_type=Changes().Resources.AddRow)
 
         # Step 2: give members permission to edit list
-        action_2 = client.PermissionResource.add_permission(
-            permission_roles=['members'], permission_type=Changes().Resources.EditList)
+        action_2 = client.PermissionResource.add_permission(roles=['members'], change_type=Changes().Resources.EditList)
 
         # Step 3: set approval condition on permission
         permission_data = [{"permission_type": Changes().Conditionals.Approve,
@@ -113,21 +111,17 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
         action_3.target = "{{previous.1.result}}"
 
         # Step 4: give members permission to edit row
-        action_4 = client.PermissionResource.add_permission(
-            permission_roles=['members'], permission_type=Changes().Resources.EditRow)
+        action_4 = client.PermissionResource.add_permission(roles=['members'], change_type=Changes().Resources.EditRow)
 
         # Step 5: set approval condition on permission
-        action_5 = client.Conditional.add_condition(
-            condition_type="approvalcondition", permission_data=permission_data)
+        action_5 = client.Conditional.add_condition(condition_type="approvalcondition", permission_data=permission_data)
         action_5.target = "{{previous.3.result}}"
 
         # Step 6: give members permission to edit row
-        action_6 = client.PermissionResource.add_permission(
-            permission_roles=['members'], permission_type=Changes().Resources.DeleteRow)
+        action_6 = client.PermissionResource.add_permission(roles=['members'], change_type=Changes().Resources.DeleteRow)
 
         # Step 7: set approval condition on permission
-        action_7 = client.Conditional.add_condition(
-            condition_type="approvalcondition", permission_data=permission_data)
+        action_7 = client.Conditional.add_condition(condition_type="approvalcondition", permission_data=permission_data)
         action_7.target = "{{previous.5.result}}"
 
         return [action_1, action_2, action_3, action_4, action_5, action_6, action_7]
@@ -153,17 +147,17 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
         client = self.get_client()
 
         # Step 1: create role which will be governing role
-        action_1 = client.Community.add_role(role_name="board")
+        action_1 = client.Community.add_role_to_community(role_name="board")
 
         # Step 2: add initial people to board
         action_2 = client.Community.add_people_to_role(
             role_name="board", people_to_add="{{supplied_fields.initial_board_members}}")
 
         # Step 3: make 'board' role a governorship role
-        action_3 = client.Community.add_governor_role(governor_role="board")
+        action_3 = client.Community.add_governor_role_to_community(role_name="board")
 
         # Step 4: make members an ownership role
-        action_4 = client.Community.add_owner_role(owner_role="members")
+        action_4 = client.Community.add_owner_role_to_community(role_name="members")
 
         # Step 5: add vote condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.AddVote, "permission_roles": ["owners"]}]
@@ -171,7 +165,7 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
             condition_type="votecondition", leadership_type="owner", permission_data=permission_data)
 
         # Step 6: create role 'membership admins'
-        action_6 = client.Community.add_role(role_name="membership admins")
+        action_6 = client.Community.add_role_to_community(role_name="membership admins")
 
         # Step 7: add initial people to 'membership admins'
         action_7 = client.Community.add_people_to_role(
@@ -179,7 +173,7 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
 
         # Step 8: add addMember permission with anyone set to True and self_only set to True
         action_8 = client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddMembers, anyone=True, permission_configuration={"self_only": True}
+            change_type=Changes().Communities.AddMembers, anyone=True, configuration={"self_only": True}
         )
 
         # Step 9: add condition to that permission
@@ -213,17 +207,17 @@ class CommunityCoreTeamTemplate(TemplateLibraryObject):
         client = self.get_client()
 
         # Step 1: add 'core team'
-        action_1 = client.Community.add_role(role_name="core team")
+        action_1 = client.Community.add_role_to_community(role_name="core team")
 
         # Step 2: make initial people into 'core team'
         action_2 = client.Community.add_people_to_role(
             role_name="core team", people_to_add="{{supplied_fields.initial_core_team_members}}")
 
         # Step 3: make 'core team' role an ownership role
-        action_3 = client.Community.add_owner_role(owner_role="core team")
+        action_3 = client.Community.add_owner_role_to_community(role_name="core team")
 
         # Step 4: make 'core team' role an governorship role
-        action_4 = client.Community.add_governor_role(governor_role="core team")
+        action_4 = client.Community.add_governor_role_to_community(role_name="core team")
 
         # Step 5: add approval condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.Approve, "permission_roles": ["core team"]},
@@ -233,7 +227,7 @@ class CommunityCoreTeamTemplate(TemplateLibraryObject):
 
         # Step 6: add anyone can join permission
         action_6 = client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddMembers, anyone=True, permission_configuration={"self_only": True})
+            change_type=Changes().Communities.AddMembers, anyone=True, configuration={"self_only": True})
 
         return [action_1, action_2, action_3, action_4, action_5, action_6]
 
@@ -264,7 +258,7 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
         client = self.get_client()
 
         # Step 1: add 'voting member'
-        action_1 = client.Community.add_role(role_name="voting members")
+        action_1 = client.Community.add_role_to_community(role_name="voting members")
         action_1.target = "{{context.action.target}}"
 
         # Step 2: make initial people into 'voting members'
@@ -273,7 +267,7 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
         action_2.target = "{{context.action.target}}"
 
         # Step 3: make 'voting member' role an ownership role
-        action_3 = client.Community.add_owner_role(owner_role="voting members")
+        action_3 = client.Community.add_owner_role_to_community(role_name="voting members")
         action_3.target = "{{context.action.target}}"
 
         # Step 4: add vote condition to ownership role
@@ -290,7 +284,7 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
 
         # Step 5: add anyone can join permission
         action_5 = client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddMembers, anyone=True, permission_configuration={"self_only": True})
+            change_type=Changes().Communities.AddMembers, anyone=True, configuration={"self_only": True})
         action_5.target = "{{context.action.target}}"
 
         return [action_1, action_2, action_3, action_4, action_5]
@@ -313,9 +307,9 @@ class InviteOnlyMembershipTemplate(TemplateLibraryObject):
 
         # Step 1: add permission to addMember change
         action_1 = client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddMembers,
-            permission_actors="{{supplied_fields.addmembers_permission_actors}}",
-            permission_roles="{{supplied_fields.addmembers_permission_roles}}"
+            change_type=Changes().Communities.AddMembers,
+            actors="{{supplied_fields.addmembers_permission_actors}}",
+            roles="{{supplied_fields.addmembers_permission_roles}}"
         )
         action_1.target = "{{context.action.target}}"
 
@@ -347,7 +341,7 @@ class AnyoneCanRequestMembershipTemplate(TemplateLibraryObject):
 
         # Step 1: add addMember permission with anyone set to True and self_only set to True
         action_1 = client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddMembers, anyone=True, permission_configuration={"self_only": True}
+            change_type=Changes().Communities.AddMembers, anyone=True, configuration={"self_only": True}
         )
         action_1.target = "{{context.action.target}}"
 
@@ -377,7 +371,7 @@ class AnyoneCanJoinMembershipTemplate(TemplateLibraryObject):
 
         # Step 1: add addMember permission with anyone set to True and self_only set to True
         action_1 = client.PermissionResource.add_permission(
-            permission_type=Changes().Communities.AddMembers, anyone=True, permission_configuration={"self_only": True}
+            change_type=Changes().Communities.AddMembers, anyone=True, configuration={"self_only": True}
         )
         action_1.target = "{{context.action.target}}"
 
@@ -398,16 +392,16 @@ class CommenterRoleTemplate(TemplateLibraryObject):
         client = self.get_client()
 
         # Step 1: create commenter role
-        action_1 = client.Community.add_role(role_name="commenters")
+        action_1 = client.Community.add_role_to_community(role_name="commenters")
 
         # Step 2: set permissions
         action_2 = client.PermissionResource.add_permission(
-            permission_type=Changes().Resources.AddComment, permission_roles=["commenters"])
+            change_type=Changes().Resources.AddComment, roles=["commenters"])
         action_3 = client.PermissionResource.add_permission(
-            permission_type=Changes().Resources.EditComment, permission_roles=["commenters"],
-            permission_configuration={"commenter_only": True})
+            change_type=Changes().Resources.EditComment, roles=["commenters"],
+            configuration={"commenter_only": True})
         action_4 = client.PermissionResource.add_permission(
-            permission_type=Changes().Resources.DeleteComment, permission_roles=["commenters"],
-            permission_configuration={"commenter_only": True})
+            change_type=Changes().Resources.DeleteComment, roles=["commenters"],
+            configuration={"commenter_only": True})
 
         return [action_1, action_2, action_3, action_4]

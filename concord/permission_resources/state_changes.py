@@ -95,7 +95,7 @@ class RemovePermissionStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "remove",
-        "default_string": "condition",
+        "default_string": "permission",
         "preposition": "from"
     }
 
@@ -119,7 +119,7 @@ class AddActorToPermissionStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "add",
         "default_string": "actor to permission",
-        "detail_string": "actor {actor_to_add} to permission",
+        "detail_string": "actor {actor} to permission",
         "preposition": "for"
     }
 
@@ -127,18 +127,18 @@ class AddActorToPermissionStateChange(BaseStateChange):
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
-    actor_to_add = field_utils.ActorField(label="Actor to add", required=True)
+    actor = field_utils.ActorField(label="Actor to add", required=True)
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
             return False
-        if not isinstance(self.actor_to_add, str):
-            self.set_validation_error(message=f"Actor must be passed as string not {type(self.actor_to_add)}")
+        if not isinstance(self.actor, str):
+            self.set_validation_error(message=f"Actor must be passed as string not {type(self.actor)}")
             return False
         return True
 
     def implement(self, actor, target, **kwargs):
-        target.actors.add_actors(actors=[self.actor_to_add])
+        target.actors.add_actors(actors=[self.actor])
         target.save()
         return target
 
@@ -149,7 +149,7 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "remove",
         "default_string": "actor from permission",
-        "detail_string": "actor {actor_to_remove} from permission",
+        "detail_string": "actor {actor} from permission",
         "preposition": "for"
     }
 
@@ -157,19 +157,19 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
-    actor_to_remove = field_utils.ActorField(label="Actor to remove", required=True)
+    actor = field_utils.ActorField(label="Actor to remove", required=True)
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
             return False
-        if target.actors.actor_in_list(int(self.actor_to_remove)):
-            self.set_validation_error(message=f"Actor {self.actor_to_remove} is not set as an actor on this " +
+        if target.actors.actor_in_list(int(self.actor)):
+            self.set_validation_error(message=f"Actor {self.actor} is not set as an actor on this " +
                                       "permission so they cannot be removed.")
             return False
         return True
 
     def implement(self, actor, target, **kwargs):
-        target.actors.remove_actors(actors=[self.actor_to_remove])
+        target.actors.remove_actors(actors=[self.actor])
         target.save()
         return target
 
@@ -337,7 +337,7 @@ class DisableAnyoneStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "remove",
-        "default_string": "anyone permission",
+        "default_string": "anyone from permission",
         "preposition": "for"
     }
 

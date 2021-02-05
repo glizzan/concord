@@ -9,7 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
 
 from concord.actions.models import Action, TemplateModel
-from concord.utils.lookups import get_all_permissioned_models
+from concord.utils.lookups import get_all_permissioned_models, get_all_state_changes
 from concord.utils.pipelines import action_pipeline
 from concord.actions import state_changes as sc
 
@@ -33,10 +33,35 @@ class BaseClient(object):
     is_client = True
     mode = "default"
     raise_error_if_failed = False
+    app_name = None
 
     def __init__(self, actor=None, target=None):
         self.actor = actor
         self.target = target
+
+    def __getattr__(self, name):
+        """Getattr is only called if __getattribute__ fails with an attribute error. If you expect this to be called but
+        it isn't, check that however you're calling it will fail otherwise."""
+        state_change_function = self.get_state_change_function(name)
+        if state_change_function:
+            return state_change_function
+        raise AttributeError(f"No attribute {name} on {self}")
+
+    def get_state_change_function(self, name):
+        """This method, which should be called only within getattr by the client, allows us to instantiate state
+        changes and create/take actions with them from the client without having to explicitly define methods for
+        each one. The function returns expects as args the dictionary of parameters that need to be passed on to
+        the state change, and the client that will be used to create and take the action."""
+        if self.app_name:
+            for state_change in get_all_state_changes():
+                if state_change.__name__ == "BaseStateChange":
+                    continue
+                change_name = state_change.change_description(capitalize=False).strip(" ").replace(" ", "_")
+                if change_name == name:
+                    def state_change_function(**kwargs):
+                        change = state_change(**kwargs)
+                        return self.create_and_take_action(change)
+                    return state_change_function
 
     def set_target(self, target=None, target_pk=None, target_ct=None):
         """Sets target of the client. Accepts either a target model or the target's pk and ct and fetches,
@@ -152,17 +177,6 @@ class BaseClient(object):
         from concord.permission_resources.utils import set_default_permissions
         set_default_permissions(self.actor, created_model)
 
-    # State Change methods
-
-    # Read
-
-    def get_target_data(self, fields_to_include=None):
-        """Gets information about the target after passing request through permissions pipeline. Supply
-        fields_to_include, a list of field names as strings, to limit the data requested, otherwise returns
-        all fields."""
-        change = sc.ViewStateChange(fields_to_include=fields_to_include)
-        return self.create_and_take_action(change)
-
     # Write
 
     def change_owner_of_target(self, new_owner) -> Tuple[int, Any]:
@@ -175,30 +189,6 @@ class BaseClient(object):
         new_owner_content_type = ContentType.objects.get_for_model(new_owner)
         change = sc.ChangeOwnerStateChange(new_owner_content_type=new_owner_content_type.id,
                                            new_owner_id=new_owner.id)
-        return self.create_and_take_action(change)
-
-    def enable_foundational_permission(self) -> Tuple[int, Any]:
-        """Enables the foundational permission on a target. This overrides all specific permissions and
-        governing permissions and requires changes to the target to be made by owners. Foundational
-        permission is typically disabled."""
-        change = sc.EnableFoundationalPermissionStateChange()
-        return self.create_and_take_action(change)
-
-    def disable_foundational_permission(self) -> Tuple[int, Any]:
-        """Disables the foundational permission on a target. Foundational permission is typically disabled."""
-        change = sc.DisableFoundationalPermissionStateChange()
-        return self.create_and_take_action(change)
-
-    def enable_governing_permission(self) -> Tuple[int, Any]:
-        """Enables the governing permission on a target. This allows anyone who is a governor to take any
-        non-foundational action on the target. Governing permission is typically enabled."""
-        change = sc.EnableGoverningPermissionStateChange()
-        return self.create_and_take_action(change)
-
-    def disable_governing_permission(self) -> Tuple[int, Any]:
-        """Disables the governing permission on a target. This prevents governors from taking actions on the
-        target unless they're granted specific permissions. Governing permission is typically enabled."""
-        change = sc.DisableGoverningPermissionStateChange()
         return self.create_and_take_action(change)
 
 
@@ -302,16 +292,18 @@ class TemplateClient(BaseClient):
 
     # State changes
 
-    def apply_template(self, template_model_pk, supplied_fields=None):
+    def apply_template(self, template_model_pk=None, supplied_fields=None, **kwargs):
         """Applies a template to the target.  If any of the actions in the template is a foundational change,
         changes the state change object's attr to foundational so it goes through the foundational pipeline."""
 
+        if self.mode == "mock":
+            change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk,
+                        supplied_fields=supplied_fields, is_foundational=None, **kwargs)
+            return self.create_and_take_action(change)
+
         template_model = TemplateModel.objects.get(pk=template_model_pk)
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields,
-                                             is_foundational=template_model.has_foundational_actions)
-
-        if self.mode == "mock":
-            return self.create_and_take_action(change)
+                                             is_foundational=template_model.has_foundational_actions, **kwargs)
 
         action, result = self.create_and_take_action(change)
         if action.status == "invalid":

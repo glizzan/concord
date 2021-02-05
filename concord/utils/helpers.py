@@ -76,6 +76,14 @@ class Client(object):
         for client in self.get_clients():
             client.mode = mode
 
+    def get_method(self, method_name):
+        for client in self.get_clients():
+            try:
+                return getattr(client, method_name)
+            except:
+                pass
+        print(f"Warning: couldn't find method {method_name} on client.")
+
     @property
     def Community(self):
         """Projects that use Concord may create a new model and client, descending from the Community model and

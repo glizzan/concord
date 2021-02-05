@@ -3,14 +3,14 @@ from concord.utils.helpers import Changes
 
 DEFAULT_PERMISSIONS = {
     "community": [
-        {"permission_type": Changes().Resources.AddComment,
-         "permission_roles": ["members"],
-         "permission_configuration": {"target_type": "action"}},
-        {"permission_type": Changes().Actions.ApplyTemplate,
-         "permission_roles": ["members"],
-         "permission_configuration": {"original_creator_only": True}},
-        {"permission_type": Changes().Communities.AddMembers,
-         "anyone": True, "permission_configuration": {"self_only": True},
+        {"change_type": Changes().Resources.AddComment,
+         "roles": ["members"],
+         "configuration": {"target_type": "action"}},
+        {"change_type": Changes().Actions.ApplyTemplate,
+         "roles": ["members"],
+         "configuration": {"original_creator_only": True}},
+        {"change_type": Changes().Communities.AddMembers,
+         "anyone": True, "configuration": {"self_only": True},
          "condition": {"condition_type": "approvalcondition",
                        "permission_data": [
                            {"permission_type": Changes().Conditionals.Approve, "permission_roles": ["governors"]},

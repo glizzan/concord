@@ -20,6 +20,7 @@ from concord.utils.lookups import get_state_changes_settable_on_model
 class PermissionResourceClient(BaseClient):
     """Client for interacting with Permission resources.  Target is usually the PermissionedModel
     that we're setting permissions on, but is occasionally the PermissionedModel itself."""
+    app_name = "permission_resources"
 
     # Target-less methods (don't require a target to be set ahead of time)
 
@@ -50,11 +51,11 @@ class PermissionResourceClient(BaseClient):
         plus all of its owned objects but for now, this is what we have."""
         return PermissionsItem.objects.all()
 
-    def has_permission(self, client, method_name, parameters, exclude_conditional=False):
+    def has_permission(self, client, method_name, params, exclude_conditional=True):
         """Checks results of running a given (mock) action through the permissions pipeline.  Note that this
         says nothing about whether the given action is valid, as the validate step is called separately."""
-        client.mode = "mock"
-        mock_action = getattr(client, method_name)(**parameters)  # for check_configuration or just to instantiate change obj?
+        client.set_mode_for_all(mode="mock")
+        mock_action = client.get_method(method_name)(skip_validation=True)
         return mock_action_pipeline(mock_action, exclude_conditional)
 
     # Read methods which require target to be set
@@ -117,61 +118,6 @@ class PermissionResourceClient(BaseClient):
         return permissions
 
     # State changes
-
-    def add_permission(self, *, permission_type: str, permission_actors: list = None, permission_roles: list = None,
-                       permission_configuration: dict = None, anyone=False) -> Tuple[int, Any]:
-        """Add permission to target."""
-        change = sc.AddPermissionStateChange(
-            change_type=permission_type, actors=permission_actors, roles=permission_roles,
-            configuration=permission_configuration, anyone=anyone)
-        return self.create_and_take_action(change)
-
-    def remove_permission(self) -> Tuple[int, Any]:
-        """Remove permission from target."""
-        change = sc.RemovePermissionStateChange()
-        return self.create_and_take_action(change)
-
-    def add_actor_to_permission(self, *, actor: str) -> Tuple[int, Any]:
-        """Add actor to permission."""
-        change = sc.AddActorToPermissionStateChange(actor_to_add=actor)
-        return self.create_and_take_action(change)
-
-    def remove_actor_from_permission(self, *, actor: str) -> Tuple[int, Any]:
-        """Remove actor from permission."""
-        change = sc.RemoveActorFromPermissionStateChange(actor_to_remove=actor)
-        return self.create_and_take_action(change)
-
-    def add_role_to_permission(self, *, role_name: str) -> Tuple[int, Any]:
-        """Add role to permission."""
-        change = sc.AddRoleToPermissionStateChange(role_name=role_name)
-        return self.create_and_take_action(change)
-
-    def remove_role_from_permission(self, *, role_name: str) -> Tuple[int, Any]:
-        """Remove role from permission."""
-        change = sc.RemoveRoleFromPermissionStateChange(role_name=role_name)
-        return self.create_and_take_action(change)
-
-    def change_configuration_of_permission(
-            self, *, configurable_field_name: str, configurable_field_value: str) -> Tuple[int, Any]:
-        """Change the configuration of the permission."""
-        change = sc.ChangePermissionConfigurationStateChange(
-            configurable_field_name=configurable_field_name, configurable_field_value=configurable_field_value)
-        return self.create_and_take_action(change)
-
-    def change_inverse_field_of_permission(self, *, change_to: bool) -> Tuple[int, Any]:
-        """Toggle the inverse field on the permission."""
-        change = sc.ChangeInverseStateChange(change_to=change_to)
-        return self.create_and_take_action(change)
-
-    def give_anyone_permission(self):
-        """Make it so everyone has the permission."""
-        change = sc.EnableAnyoneStateChange()
-        return self.create_and_take_action(change)
-
-    def remove_anyone_from_permission(self):
-        """Remove the ability for everyone to have the permission."""
-        change = sc.DisableAnyoneStateChange()
-        return self.create_and_take_action(change)
 
     # Complex/multiple state changes
 

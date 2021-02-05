@@ -15,9 +15,13 @@ class Match:
 
     def __init__(self, *args, **kwargs):
         for key, value in kwargs.items():
-            # if key == "matches":
-            #     value = [Match(**match) for match in value]
             setattr(self, key, value)
+
+    def __str__(self):
+        return json.dumps(self.serialize())
+
+    def __repr__(self):
+        return self.__str__()
 
     @property
     def unresolved(self):
@@ -65,12 +69,21 @@ def determine_status(action, has_authority, has_condition, manager):
 def check_configuration(action, permission):
     """Given a permission, check whether the action matches the configuration."""
 
-    # Does permission.configuration contain keys?  If not, action passes by default.
-    if not json.loads(permission.configuration):
-        return True, None
+    try:
 
-    # Call check_configuration on the state_change, passing in the permission configuration data, and return result.
-    return action.change.check_configuration(action, permission)
+        # Does permission.configuration contain keys?  If not, action passes by default.
+        if not json.loads(permission.configuration):
+            return True, None
+
+        # Call check_configuration on the state_change, passing in the permission configuration data, and return result.
+        return action.change.check_configuration(action, permission)
+
+    except Exception as error:
+
+        if action.__class__.__name__ == "MockAction":
+            return True, None
+
+        raise error
 
 
 def foundational_permission_pipeline(action, client, community):
@@ -149,6 +162,8 @@ def specific_permission_pipeline(action, client):
 
 
 def is_foundational(action):
+    if action.__class__.__name__ == "MockAction":
+        return False
     return action.change.is_foundational or action.target.foundational_permission_enabled or \
         action.change.is_conditionally_foundational(action)
 
@@ -244,7 +259,9 @@ def mock_action_pipeline(mock_action, exclude_conditional=False):
     matches = has_permission(mock_action)
     status = determine_action_status(matches)
 
-    if status == "approved": return True
-    if status == "waiting" and not exclude_conditional: return True
+    if status == "approved":
+        return True
+    if status == "waiting" and exclude_conditional:
+        return True
 
     return False

@@ -31,7 +31,7 @@ class AddConditionStateChange(BaseStateChange):
     condition_data = field_utils.DictField(label="Data for condition", null_value=dict)
     permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
     leadership_type = field_utils.CharField(label="Type of leadership condition is set on")
-    mode = field_utils.CharField(label="Condition mode", required=True)
+    mode = field_utils.CharField(label="Condition mode", null_value="acceptance")
 
     def validate(self, actor, target):
 

@@ -297,8 +297,8 @@ class TemplateClient(BaseClient):
         changes the state change object's attr to foundational so it goes through the foundational pipeline."""
 
         if self.mode == "mock":
-            change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk,
-                        supplied_fields=supplied_fields, is_foundational=None, **kwargs)
+            change = sc.ApplyTemplateStateChange(
+                template_model_pk=template_model_pk, supplied_fields=supplied_fields, is_foundational=None, **kwargs)
             return self.create_and_take_action(change)
 
         template_model = TemplateModel.objects.get(pk=template_model_pk)

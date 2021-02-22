@@ -1,5 +1,3 @@
-import inspect
-
 from concord.utils.lookups import get_all_state_changes, get_all_clients
 
 
@@ -80,7 +78,7 @@ class Client(object):
         for client in self.get_clients():
             try:
                 return getattr(client, method_name)
-            except:
+            except AttributeError:
                 pass
         print(f"Warning: couldn't find method {method_name} on client.")
 

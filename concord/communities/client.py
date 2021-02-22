@@ -1,7 +1,6 @@
 """Client for Community models."""
 
-import logging, time
-from typing import Tuple, Any
+import logging
 
 from django.db.models import Model
 from django.contrib.auth.models import User
@@ -10,7 +9,6 @@ from concord.actions.client import BaseClient
 from concord.utils.text_utils import community_basic_info_to_text, community_governance_info_to_text
 from concord.communities.models import Community
 from concord.communities.customfields import RoleHandler
-from concord.communities import state_changes as sc
 
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 import json
 from contextlib import suppress
-from collections import namedtuple
 
 
 # TODO: fields shouldn't be storing values, need to remove once no longer depended on
@@ -52,13 +51,13 @@ class RoleListField(BaseConcordField):
         if type(value) == str:
             try:
                 value = json.loads(value)
-            except:
+            except ValueError:
                 ...
 
         if type(value) != list:
             try:
                 value = list(value)
-            except:
+            except TypeError:
                 ...
 
         with suppress(ValueError):
@@ -109,18 +108,18 @@ class ActorListField(BaseConcordField):
         if type(value) == str:
             try:
                 value = json.loads(value)
-            except:
+            except ValueError:
                 ...
 
         if type(value) != list:
             try:
                 value = list(value)
-            except:
+            except TypeError:
                 ...
 
         try:
             value = [int(val) for val in value]
-        except:
+        except ValueError:
             ...
 
         with suppress(ValueError):
@@ -136,7 +135,7 @@ class ActorField(BaseConcordField):
 
 class PermissionedModelField(BaseConcordField):
 
-    def __init__(self, *args, **kwargs):   # Optionally allows us to restrict to only certain types of permissioned models
+    def __init__(self, *args, **kwargs):   # Allows us to restrict to only certain types of permissioned models
         self.restrict_to = kwargs.pop("restrict_to", list())
         super().__init__(*args, **kwargs)
 

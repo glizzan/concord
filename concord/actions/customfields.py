@@ -1,13 +1,12 @@
 """This module contains custom fields used by this package's models.py, as well as the Python objects used to
 create those custom fields, which are occasionally used on their own."""
 
-import logging
+import logging, json
 
 from django.db import models, transaction
 from concord.actions.utils import MockAction
 from concord.utils.dependent_fields import replace_fields
-from concord.utils.text_utils import (action_status_to_text, mock_action_to_text, foundational_actions_to_text,
-                                      supplied_fields_to_text)
+from concord.utils.text_utils import (mock_action_to_text, foundational_actions_to_text, supplied_fields_to_text)
 from concord.utils.converters import ConcordConverterMixin
 
 
@@ -113,9 +112,6 @@ class Template(ConcordConverterMixin):
                     is_valid = action_model.change.validate(actor=action_model.actor, target=action_model.target)
                     if not is_valid:
                         validation_errors.append(action_model.change.validation_error)
-
-                    # TODO: how is it getting here without replacing .actors?
-                    # oh is it because actors is an ActorField now, and the details are stuck in .value?
 
                     # implement and save results to context
                     result = action_model.change.implement(actor=action_model.actor, target=action_model.target)
@@ -235,5 +231,3 @@ class TemplateField(models.Field):
         if isinstance(value, list) and all([item.__class__ == MockAction for item in value]):
             template = Template(action_list=value, system=self.system)
             return template.serialize(to_json=True)
-
-

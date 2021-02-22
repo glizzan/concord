@@ -1,6 +1,6 @@
 """Permission Resource utilities."""
 
-import json, logging
+import logging
 from collections import OrderedDict
 
 from concord.utils.lookups import get_default_permissions

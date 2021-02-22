@@ -2,16 +2,10 @@ from typing import TypeVar
 from datetime import datetime
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.models import PermissionedModel
 from concord.actions.communities import Community
-
-
-
-
-
-
-
 
 
 # The following types should cover any types handled by user:
@@ -45,7 +39,7 @@ class Converter(object):
 
         try:
             value = int(value)
-        except:
+        except ValueError:
             return Exception(f"Cannot convert string {value} to integer")
 
         return [value]
@@ -63,13 +57,13 @@ class Converter(object):
         if isinstance(value, str):
             try:
                 value = int(value)
-            except:
+            except ValueError:
                 return Exception(f"Cannot convert string {value} to integer")
 
         if isinstance(value, int):
             try:
                 return User.objects.get(pk=value)
-            except:
+            except ObjectDoesNotExist:
                 return Exception(f"Integer {value} is not a valid User pk, cannot convert value to actor")
 
         return Exception(f"value {value} cannot be converted to actor")

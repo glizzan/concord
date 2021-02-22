@@ -101,35 +101,6 @@ def replace_permission_fields(*, condition_dataclass, action):
             condition_dataclass.data["permission_data"][index][field_name] = result
 
 
-
-# def create_condition(*, manager, element_id, condition_dataclass, action):
-
-#     # Create condition
-#     cond = get_condition_model(condition_type=condition_dataclass.data["condition_type"])()
-#     cond.action, cond.source, cond.element_id, cond.owner = action.pk, manager.pk, element_id, manager.get_owner()
-#     context = {"context": {"action": action}}
-#     for key, value in condition_dataclass.data["condition_data"]:
-#         new_value = replacer(field_value, context)
-#         cond.transform_and_set_value(key, new_value if new_value else value)
-#     cond.initialize_condition(action.target, condition_dataclass, manager.set_on)
-#     cond.save()
-
-#     # Create & link permissions
-#     for permission in condition_dataclass.data["permission_data"]:
-#         perm = PermissionsItem()
-#         perm.owner, perm.permitted_object, perm.change_type = cond.owner, cond, permission["permission_type"]
-#         change_object = get_state_change_object(permission["permission_type"])
-#         context = {"context": change_object.all_context_instances(action)}
-#         for name, default in {"permission_actors": [], "permission_roles": [], "permission_configuration": {}}.items():
-#             field_value = permission.get(name, default)
-#             new_value = replacer(field_value, context)
-#             perm.transform_and_set_value(name, new_value if new_value else field_value)
-#         perm.save()
-
-#     return cond
-
-
-
 def create_condition(*, manager, element_id, condition_dataclass, action):
 
     replace_condition_fields(condition_dataclass=condition_dataclass, action=action)
@@ -138,8 +109,8 @@ def create_condition(*, manager, element_id, condition_dataclass, action):
     if condition_dataclass.mode == "acceptance":
 
         condition_model = get_condition_model(condition_type=condition_dataclass.data["condition_type"])
-        condition_instance = condition_model(action=action.pk, source=manager.pk, element_id=element_id,
-                                                **condition_dataclass.data["condition_data"])
+        condition_instance = condition_model(
+            action=action.pk, source=manager.pk, element_id=element_id, **condition_dataclass.data["condition_data"])
 
         condition_instance.owner = manager.get_owner()
         condition_instance.initialize_condition(action.target, condition_dataclass, manager.set_on)
@@ -167,7 +138,6 @@ def create_conditions(*, manager, action):
                                         condition_dataclass=condition_dataclass, action=action)
             created_instances.append(instance)
     return created_instances
-
 
 
 ##################

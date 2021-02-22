@@ -7,17 +7,21 @@ from concord.conditionals import utils
 
 
 def get_permission_from_data(permission_type, permission_data):
-    if not permission_data: return None
+    if not permission_data:
+        return None
     for permission in permission_data:
         if permission["permission_type"] == permission_type:
             return permission
 
 
 def get_value_from_permission_data(field_type, permission):
-    if not permission: return None
+    if not permission:
+        return None
     roles, actors = permission.get("permission_roles", None), permission.get("permission_actors", None)
-    if field_type in ["RoleField", "RoleListField"]: return roles
-    if field_type in ["ActorField", "ActorListField"]: return actors
+    if field_type in ["RoleField", "RoleListField"]:
+        return roles
+    if field_type in ["ActorField", "ActorListField"]:
+        return actors
 
 
 def update_permission_field_dict(field_name, field_dict, permission_data):

@@ -1,6 +1,6 @@
 """Clients for conditionals."""
 
-from typing import Tuple, Any, Dict
+from typing import Dict
 import logging
 
 from django.db.models import Model
@@ -8,7 +8,6 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 from concord.utils.helpers import Client
 from concord.utils.lookups import get_all_conditions, get_acceptance_conditions
-from concord.conditionals import state_changes as sc
 from concord.conditionals import utils
 
 

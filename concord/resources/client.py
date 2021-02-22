@@ -1,6 +1,6 @@
 """Client for Resources."""
 
-from typing import List, Tuple, Any
+from typing import List
 
 from django.db.models import QuerySet
 from django.contrib.contenttypes.models import ContentType

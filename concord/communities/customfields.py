@@ -1,7 +1,7 @@
 """Defines customfields used in Community."""
 
 from typing import List, Dict
-import json, logging
+import logging
 
 from django.db import models
 

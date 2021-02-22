@@ -103,7 +103,10 @@ def governing_permission_pipeline(action, client, community):
 
     has_authority, matched_role = client.Community.has_governing_authority(actor=action.actor)
     has_condition = community.has_condition("governor")
-    manager = client.Conditional.get_condition_manager(community, "governor") if has_authority and has_condition else None
+    if has_authority and has_condition:
+        manager = client.Conditional.get_condition_manager(community, "governor")
+    else:
+        manager = None
     status = determine_status(action, has_authority, has_condition, manager)
 
     return Match(pipeline="governing", has_authority=has_authority, matched_role=matched_role,
@@ -151,7 +154,8 @@ def specific_permission_pipeline(action, client):
     # If we're still here, that means nothing matched without a condition, so now we look for nested permissions
     for nested_object in action.target.get_nested_objects():
         client.PermissionResource.set_target(target=nested_object)
-        for permission in client.PermissionResource.get_specific_permissions(change_type=action.change.get_change_type()):
+        for permission in client.PermissionResource.get_specific_permissions(
+                change_type=action.change.get_change_type()):
             permission_dict = check_specific_permission(action, client, permission)
             if permission_dict.status == "approved": return permission_dict
             matches.append(permission_dict)

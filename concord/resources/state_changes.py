@@ -36,7 +36,8 @@ class AddCommentStateChange(BaseStateChange):
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(
+        label="Only the creator of this comment's target can add comment", null_value=False)
     target_type = field_utils.CharField(label="Add comments only to this type of target")
 
     @classmethod
@@ -114,7 +115,8 @@ class EditCommentStateChange(BaseStateChange):
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
     commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment", null_value=False)
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can add comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(
+        label="Only the creator of this comment's target can add comment", null_value=False)
 
     @classmethod
     def return_configured_settings(self, configuration):
@@ -186,7 +188,8 @@ class DeleteCommentStateChange(BaseStateChange):
 
     # Fields
     commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment", null_value=False)
-    original_creator_only = field_utils.BooleanField(label="Only the creator of this comment's target can delete comment", null_value=False)
+    original_creator_only = field_utils.BooleanField(
+        label="Only the creator of this comment's target can delete comment", null_value=False)
 
     @classmethod
     def return_configured_settings(self, configuration):

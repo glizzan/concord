@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from datetime import datetime, timezone
 from contextlib import suppress
 
@@ -6,6 +6,7 @@ from concord.conditionals import utils, forms
 from concord.utils.dependent_fields import crawl_objects
 from concord.utils import field_utils
 from concord.utils.converters import ConcordConverterMixin
+from concord.utils.helpers import Client
 
 
 class FilterCondition(ConcordConverterMixin, ABC):
@@ -59,25 +60,25 @@ class FilterCondition(ConcordConverterMixin, ABC):
         # FIXME: target during validation and check are often the same but sometimes the target (aka thing being)
         # set on is not the same as the action target, so it can't really be validated :/
 
-        crawl_tokens = field_to_match.split(".")
+        tokens = field_to_match.split(".")
 
-        if token[0] == "action" and action:
-            return crawl_objects(crawl_tokens[1:], base=action)
+        if tokens[0] == "action" and action:
+            return crawl_objects(tokens[1:], base=action)
 
-        if token[0] == "action" and token[1] == "actor":
+        if tokens[0] == "action" and tokens[1] == "actor":
             ...
 
-        if token[0] == "action" and token[1] == "target":
-            return crawl_objects(crawl_tokens[2:], base=target)
+        if tokens[0] == "action" and tokens[1] == "target":
+            return crawl_objects(tokens[2:], base=target)
 
-        if token[0] == "action" and token[1] == "change":
-            return crawl_objects(crawl_tokens[2:], base=permission)
+        if tokens[0] == "action" and tokens[1] == "change":
+            return crawl_objects(tokens[2:], base=permission)
 
-        if token[0] == "target":
-            return crawl_objects(crawl_tokens[1:], base=target)
+        if tokens[0] == "target":
+            return crawl_objects(tokens[1:], base=target)
 
-        if token[0].lower() == target.__class__.__name__.lower():
-            return crawl_objects(crawl_tokens[1:], base=target)
+        if tokens[0].lower() == target.__class__.__name__.lower():
+            return crawl_objects(tokens[1:], base=target)
 
 
 ### REAL FILTERS ###
@@ -103,12 +104,12 @@ class ActorIsSameAs(FilterCondition):
 
         field = self.get_matching_field(self.field_to_match, permission=permission, target=target)
         if not field:
-            return False, f"No field found for '{field_to_match}'"
+            return False, f"No field found for '{self.field_to_match}'"
 
         convertible = field.can_convert_to("ActorField")
 
         if not field:
-            return False, f"Field {field_to_match} cannot convert to Actor"
+            return False, f"Field {self.field_to_match} cannot convert to Actor"
 
         return True
 
@@ -151,7 +152,7 @@ class FieldIs(FilterCondition):
 
         field = getattr(permission.change, self.field_to_match)
         if not field:
-            return False, f"No field found for '{field_to_match}'"
+            return False, f"No field found for '{self.field_to_match}'"
 
         if not field.transform_to_valid_value(self.value_to_match):
             return False, f"{self.value_to_match} is not a valid value for {self.field_to_match}"
@@ -161,7 +162,6 @@ class FieldIs(FilterCondition):
     def check(self, action):
         field = getattr(action.change, self.field_to_match)
         return field.value == self.value_to_match
-
 
 
 ### FIRST DRAFTS ####
@@ -203,16 +203,16 @@ class ContainsText(FilterCondition):
 
         field = self.get_matching_field(self.field_to_match, permission=permission, target=target)
         if not field:
-            return False, f"No field {field_to_match} on target"
+            return False, f"No field {self.field_to_match} on target"
 
         convertible = field.can_convert_to("CharField")
         if not field:
-            return False, f"Field {field_to_match} cannot convert to text"
+            return False, f"Field {self.field_to_match} cannot convert to text"
 
         return True
 
     def check(self, action):
-        field = self.get_matched_field([action, target])
+        field = self.get_matched_field([action, action.target])
         if self.text in field:
             return True
         return False
@@ -229,7 +229,7 @@ class ActorMemberCondition(FilterCondition):
         self.inverse = inverse
 
     def check(self, action):
-        date_joined = Client(target=target.get_owner().Community.user_joined(action.actor))
+        date_joined = Client(target=action.target.get_owner().Community.user_joined(action.actor))
         if datetime.datetime.now() - date_joined > self.duration:
             return True
         return False

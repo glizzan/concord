@@ -1,13 +1,12 @@
 """Client for permissions"""
 
-from typing import Tuple, Any, List
+from typing import Tuple, List
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Model
 
 from concord.actions.client import BaseClient
 from concord.permission_resources.models import PermissionsItem
-from concord.permission_resources import state_changes as sc
 from concord.utils.pipelines import mock_action_pipeline
 from concord.utils.lookups import get_state_changes_settable_on_model
 

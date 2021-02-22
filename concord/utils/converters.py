@@ -1,5 +1,8 @@
 import inspect, json
+
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import FieldDoesNotExist
+
 from concord.utils.lookups import get_concord_class
 
 
@@ -19,7 +22,7 @@ def recursively_serialize(field):
     except AttributeError:
         pass
 
-    if field.__class__.__name__  == "User":  # inbuilt user model needs special handling
+    if field.__class__.__name__ == "User":  # inbuilt user model needs special handling
         return {"class": field.__class__.__name__, "concord_dict": True, "pk": field.pk}
 
     # crawl through structures to find the unserializable thing
@@ -35,7 +38,7 @@ def recursively_serialize(field):
         new_field = {}
         for key, value in field.items():
             new_value = recursively_serialize(value)
-            new_field.update({key:new_value})
+            new_field.update({key: new_value})
         return new_field
 
 
@@ -48,7 +51,7 @@ def get_class_name(cls, field_dict):
     if cls and hasattr(cls, "__name__") and cls.__name__ != "ConcordConverterMixin":
         return cls.__name__
 
-    raise ValueError(f"Need class information to deserialize.")
+    raise ValueError("Need class information to deserialize.")
 
 
 def recursively_deserialize(field):
@@ -73,7 +76,7 @@ def recursively_deserialize(field):
         new_field = {}
         for key, value in field.items():
             new_value = recursively_deserialize(value)
-            new_field.update({key:new_value})
+            new_field.update({key: new_value})
         return new_field
 
     return field
@@ -152,9 +155,9 @@ class ConcordConverterMixin(object):
         """Takes in a serialized dict and returns an instantiated Python object.  Used in conjunction with
         serialize.
         Determines what Python class to deserialize into based on, first, the class kwarg passed in via serialized
-        dict. This should almost always be passed in, however if it's not we can try to see what class is calling it, and
-        if it's a non-mixin class we assume this is the class we want to instantiate.  Otherwise we raise an exception.
-        If a given field is itself a concord_dict, calls deserialize on it.
+        dict. This should almost always be passed in, however if it's not we can try to see what class is calling it,
+        and if it's a non-mixin class we assume this is the class we want to instantiate.  Otherwise we raise an
+        exception. If a given field is itself a concord_dict, calls deserialize on it.
         # FIXME: does this create a new target in the DB every time we deserialize an action with the same target?
         # or create a new user?
         """
@@ -215,7 +218,8 @@ class ConcordConverterMixin(object):
         eg on a Django model:
         @classmethod
         def concord_fields(cls):
-            return {cls.commented_object: 'PermissionedModelField', cls.text: 'CharField', cls.created_at: 'DateTimeField'}
+            return {cls.commented_object: 'PermissionedModelField', cls.text: 'CharField',
+                    cls.created_at: 'DateTimeField'}
         """
         if hasattr(self, "DoesNotExist"):
             print(f"Warning! Django model {self} does not have a concord_fields method implemented.")
@@ -245,7 +249,7 @@ class ConcordConverterMixin(object):
         except KeyError:
             try:
                 field = self._meta.get_field(field_name)
-            except:
+            except FieldDoesNotExist:
                 return
 
         if hasattr(field, "transform_to_valid_value"):
@@ -255,7 +259,7 @@ class ConcordConverterMixin(object):
     def convert_field(self, field_to_convert, type_to_convert_to: str):
         method_to_call = "to_" + type_to_convert_to
         if hasattr(field_to_convert, method_to_call):
-            return get_attr(field_to_convert, method_to_call)()
+            return getattr(field_to_convert, method_to_call)()
 
     def move_data_between_fields(self, from_field, to_field):
         if type(from_field) == type(to_field):
@@ -265,12 +269,6 @@ class ConcordConverterMixin(object):
             to_field.value = new_value
         return to_field
 
-
-"""
-Potential extensions:
-- creating this in DB, updating them in DB
-- validating?
-"""
 
 def deserialize_convertible(data):
     return ConcordConverterMixin.deserialize(data)

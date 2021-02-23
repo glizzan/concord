@@ -53,8 +53,9 @@ class PermissionResourceClient(BaseClient):
     def has_permission(self, client, method_name, params, exclude_conditional=True):
         """Checks results of running a given (mock) action through the permissions pipeline.  Note that this
         says nothing about whether the given action is valid, as the validate step is called separately."""
+        params = params if params else {}
         client.set_mode_for_all(mode="mock")
-        mock_action = client.get_method(method_name)(skip_validation=True)
+        mock_action = client.get_method(method_name)(**params, skip_validation=True)
         return mock_action_pipeline(mock_action, exclude_conditional)
 
     # Read methods which require target to be set

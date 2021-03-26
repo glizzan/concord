@@ -185,13 +185,17 @@ def has_permission(action):
     community = client.Community.get_owner(owned_object=action.target)
     client.update_target_on_all(target=community)
 
-    if is_foundational(action): return [foundational_permission_pipeline(action, client, community)]
+    if is_foundational(action):
+        return [foundational_permission_pipeline(action, client, community)]
 
     if action.target.governing_permission_enabled:
         governing_dict = governing_permission_pipeline(action, client, community)
-        if governing_dict.status == "approved": return [governing_dict]
+        if governing_dict.status == "approved":
+            return [governing_dict]
+        else:
+            return [governing_dict, specific_permission_pipeline(action, client)]
 
-    return [governing_dict, specific_permission_pipeline(action, client)]
+    return [specific_permission_pipeline(action, client)]
 
 
 #######################

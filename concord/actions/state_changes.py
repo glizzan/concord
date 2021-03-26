@@ -440,7 +440,7 @@ class ApplyTemplateStateChange(BaseStateChange):
     # Fields
     template_model_pk = field_utils.IntegerField(label="PK of Template to apply", required=True)
     supplied_fields = field_utils.DictField(label="Fields to supply when applying template", null_value=dict)
-    is_foundational = field_utils.BooleanField(label="Template makes foundational changes")
+    template_is_foundational = field_utils.BooleanField(label="Template makes foundational changes")
     original_creator_only = field_utils.BooleanField(label="Only allow original creator")
 
     @classmethod

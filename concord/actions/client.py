@@ -298,12 +298,13 @@ class TemplateClient(BaseClient):
 
         if self.mode == "mock":
             change = sc.ApplyTemplateStateChange(
-                template_model_pk=template_model_pk, supplied_fields=supplied_fields, is_foundational=None, **kwargs)
+                template_model_pk=template_model_pk, supplied_fields=supplied_fields,
+                template_is_foundational=None, **kwargs)
             return self.create_and_take_action(change)
 
         template_model = TemplateModel.objects.get(pk=template_model_pk)
         change = sc.ApplyTemplateStateChange(template_model_pk=template_model_pk, supplied_fields=supplied_fields,
-                                             is_foundational=template_model.has_foundational_actions, **kwargs)
+                                             template_is_foundational=template_model.has_foundational_actions, **kwargs)
 
         action, result = self.create_and_take_action(change)
         if action.status == "invalid":

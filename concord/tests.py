@@ -104,7 +104,8 @@ class PermissionResourceModelTests(DataTestCase):
             change_type=Changes().Resources.AddItem,
             actors=[self.users.pinoe.pk])
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
-        self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
+        self.assertEquals(items.first().get_name(),
+            'Permission 1 (AddItemStateChange on Resource object (1))')
 
     def test_remove_permission_from_resource(self):
         """
@@ -116,7 +117,8 @@ class PermissionResourceModelTests(DataTestCase):
             change_type=Changes().Resources.AddItem,
             actors=[self.users.pinoe.pk])
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
-        self.assertEquals(items.first().get_name(), 'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
+        self.assertEquals(items.first().get_name(),
+            'Permission 1 (AddItemStateChange on Resource object (1))')
         self.client.PermissionResource.set_target(permission)
         self.client.PermissionResource.remove_permission()
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
@@ -145,7 +147,7 @@ class PermissionSystemTest(DataTestCase):
             actors=[self.users.rose.pk])
         items = self.client.PermissionResource.get_permissions_on_object(target_object=resource)
         self.assertEquals(items.first().get_name(),
-            'Permission 1 (for concord.resources.state_changes.AddItemStateChange on Resource object (1))')
+            'Permission 1 (AddItemStateChange on Resource object (1))')
 
         # Now the non-owner actor (Rose) takes the permitted action on the resource
         self.roseClient = Client(actor=self.users.rose, target=resource)
@@ -2465,3 +2467,63 @@ class FilterConditionTest(DataTestCase):
                           'display': 'Flip to inverse (actor has been user less than...)',
                           'label': 'Flip to inverse (actor has been user less than...)', "default": None,
                           'field_name': 'inverse', 'full_name': None}})
+
+
+class PermissionClientTest(DataTestCase):
+
+    def setUp(self):
+
+        self.client = Client(actor=self.users.pinoe)
+        self.community = self.client.Community.create_community(name="USWNT")
+        self.client.update_target_on_all(target=self.community)
+        self.client.Community.add_role_to_community(role_name="forwards")
+        action, self.list = self.client.List.add_list(name="Awesome Players",
+            configuration={"player name": {"required": True}, "team": {"required": False}},
+            description="Our fave players")
+
+    def add_permissions(self):
+
+        # add permissions to group
+        action, permission = self.client.PermissionResource.add_permission(
+            change_type=Changes().Communities.AddRole, roles=["forwards"])
+        action, permission = self.client.PermissionResource.add_permission(
+            change_type=Changes().Communities.RemoveRole, roles=["forwards"])
+
+        # add permissions targetting objects owned by group but set on group (aka nested)
+        action, permission = self.client.PermissionResource.add_permission(
+            change_type=Changes().Resources.EditList, roles=["forwards"])
+
+        # add permissions directly to objects owned by group
+        self.client.update_target_on_all(target=self.list)
+        self.client.PermissionResource.add_permission(
+            change_type=Changes().Resources.DeleteList, roles=["forwards"])
+
+    def test_get_permissions_in_group(self):
+
+        # check default permissions & generate our test permissions
+        permissions = self.client.PermissionResource.get_all_permissions_in_community(community=self.community)
+        self.assertEquals(len(permissions), 3)
+        self.add_permissions()
+
+        # we should now get 7 permissions, one of which is set on an object owned by the group, not the group
+        self.client.update_target_on_all(target=self.community)
+        permissions = self.client.PermissionResource.get_all_permissions_in_community(community=self.community)
+        self.assertEquals(len(permissions), 7)
+        list_permissions = [p for p in permissions if p.permitted_object == self.list]
+        self.assertEquals(len(list_permissions), 1)
+
+    def test_get_nested_permissions(self):
+
+        # check default permissions & generate our test permissions
+        permissions = self.client.PermissionResource.get_all_permissions_in_community(community=self.community)
+        self.assertEquals(len(permissions), 3)
+        self.add_permissions()
+
+        # gets 3 permissions - the two we set above, plus apply_template, a default permission. the add_comment
+        # permission, which *could* apply to the target, is filtered out because target_type is set to action,
+        # not list
+        self.client.update_target_on_all(target=self.list)
+        permissions = self.client.PermissionResource.get_nested_permissions(target=self.list, include_target=True)
+        self.assertEquals(len(permissions), 3)
+        permissions = self.client.PermissionResource.get_nested_permissions(target=self.list)
+        self.assertEquals(len(permissions), 2)

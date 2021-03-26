@@ -8,7 +8,7 @@ from django.db.models import Model
 from concord.actions.client import BaseClient
 from concord.permission_resources.models import PermissionsItem
 from concord.utils.pipelines import mock_action_pipeline
-from concord.utils.lookups import get_state_changes_settable_on_model
+from concord.utils.lookups import get_state_changes_settable_on_model, get_all_permissioned_models
 
 
 ################################
@@ -40,6 +40,49 @@ class PermissionResourceClient(BaseClient):
             if permission.has_role(role=role_name):
                 matching_permissions.append(permission)
         return matching_permissions
+
+    def get_all_permissions_in_community(self, *, community):
+        """Gets all permissions set in a community by first, getting all permissioned models owned by a given
+        community and then, getting all permissions set on those instances (plus permissions set on the
+        community itself."""
+
+        content_type = ContentType.objects.get_for_model(community)
+
+        owned_objects = []
+        for model in get_all_permissioned_models():
+            owned_objects += model.objects.filter(owner_content_type=content_type, owner_object_id=community.pk)
+
+        permissions = []
+        for obj in owned_objects + [community]:
+            permissions += self.get_permissions_on_object(target_object=obj)
+
+        return permissions
+
+    def get_nested_permissions(self, *, target, include_target=False):
+        """Given a target, get all permissions on on nested objects which apply to
+        it.
+
+        NOTE: we may want to generously get all permissions here
+        and just pass back info to front end about which apply to target."""
+
+        nested_objects = target.get_nested_objects_recursively()
+        if include_target:
+            nested_objects.append(target)
+
+        permissions = []
+        for obj in nested_objects:
+            permissions += self.get_permissions_on_object(target_object=obj)
+
+        # filter by target
+        filtered_permissions = []
+        for perm in permissions:
+            sc = perm.get_state_change_object()
+            if target.__class__ in sc.get_allowable_targets():
+                if not hasattr(sc, "target_type") or \
+                        (hasattr(sc, "target_type") and sc.target_type == target.__class__):
+                    filtered_permissions.append(perm)
+
+        return filtered_permissions
 
     def actor_satisfies_permission(self, *, actor, permission: PermissionsItem) -> bool:
         """Returns True if given actor satisfies given permission."""

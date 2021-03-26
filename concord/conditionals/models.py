@@ -142,6 +142,10 @@ class ConditionModel(PermissionedModel):
 
     is_condition = True
 
+    @property
+    def name(self):
+        self.get_name()
+
     def get_name(self):
         """Get name of condition."""
         return f"{self.descriptive_name}, {self.pk}"

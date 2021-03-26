@@ -47,9 +47,12 @@ class PermissionsItem(PermissionedModel):
 
     # Get model-level information
 
+    def __str__(self):
+        return self.get_name()
+
     def get_name(self):
         """Get permission name."""
-        return f"Permission {self.pk} (for {self.change_type} on {self.permitted_object})"
+        return f"Permission {self.pk} ({self.get_change_type()} on {self.permitted_object})"
 
     def display_string(self):
         """Helper method for displaying permissions."""
@@ -121,6 +124,12 @@ class PermissionsItem(PermissionedModel):
         """Get the state change object associated with the change_type of the permission."""
         return get_state_change_object(self.change_type)
 
+    def get_section(self):
+        return self.get_state_change_object().section
+
+    def is_foundational(self):
+        return self.get_state_change_object().is_foundational
+
     # Get change type and configuration info (replace with customfield?)
 
     def match_change_type(self, change_type):
@@ -141,6 +150,9 @@ class PermissionsItem(PermissionedModel):
         """Get the field data corresponding to the configuration."""
         # Returns (possibly empty) dict with format { permissionfieldname : permissionfieldvalue }
         return self.get_configuration()  # is it this simple?
+
+    def get_configuration_text(self):
+        return self.get_state_change_object().get_configured_field_text(self.get_configuration())
 
     # ActorList and RoleList related methods
 

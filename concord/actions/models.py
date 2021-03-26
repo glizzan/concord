@@ -180,11 +180,16 @@ class PermissionedModel(ConcordConverterMixin, models.Model):
         """Gets objects that the model is nested within.
 
         Nested objects are often things like the owner of instance or, for example,
-        a forum that a post is posted within.
-
-        Called by the permissions pipeline in `permissions.py`.
-        """
+        a forum that a post is posted within."""
         return []
+
+    def get_nested_objects_recursively(self):
+        """Generates a list of nested objects recursively, so if A is set on B which is set on C, calling this
+        on A returns [B, C]."""
+        objects = self.get_nested_objects()
+        for obj in self.get_nested_objects():
+            objects += obj.get_nested_objects_recursively()
+        return objects
 
     def get_serialized_field_data(self):  # NOTE: field_util?
         """Returns data that has been been serialized.

@@ -31,6 +31,10 @@ class Comment(PermissionedModel):
             return self.text
         return self.text[:30] + "..."
 
+    def export(self):
+        return {"commentor": self.commentor.username, "text": self.text, "created_at": str(self.created_at),
+                "updated_at": str(self.updated_at)}
+
 
 class CommentCatcher(PermissionedModel):
     """The comment catcher model is a hack to deal with leaving comments on non-permissioned models.  Right now,
@@ -225,3 +229,11 @@ class SimpleList(PermissionedModel):
     def get_nested_objects(self):
         """Get models that permissions for this model might be set on."""
         return [self.get_owner()]
+
+    def get_csv_data(self):
+        columns = ["index"] + list(self.get_row_configuration().keys())
+        rows = []
+        for index, row_dict in enumerate(self.get_rows()):
+            rows.append({**row_dict, **{"index": index}})
+        return columns, rows
+

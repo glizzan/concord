@@ -236,4 +236,3 @@ class SimpleList(PermissionedModel):
         for index, row_dict in enumerate(self.get_rows()):
             rows.append({**row_dict, **{"index": index}})
         return columns, rows
-

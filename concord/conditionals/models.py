@@ -466,11 +466,11 @@ class ConsensusCondition(ConditionModel):
                         participants.add(int(actor))
 
         if set_on == "owner":
-            for action in client.get_users_with_ownership_privileges():
+            for action in client.Community.get_users_with_ownership_privileges():
                 participants.add(int(actor))
 
         if set_on == "governor":
-            for action in client.get_users_with_governorship_privileges():
+            for action in client.Community.get_users_with_governorship_privileges():
                 participants.add(int(actor))
 
         self.create_response_dictionary(participant_pk_list=list(participants))

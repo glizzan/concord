@@ -252,6 +252,24 @@ class RoleHandler(ConcordConverterMixin):
             return self.owners["actors"]
         return self.owners
 
+    def get_owner_pks(self):
+        users = set([])
+        for actor in self.owners["actors"]:
+            users.add(actor)
+        for role in self.owners["roles"]:
+            for member in self.get_users_given_role(role):
+                users.add(member)
+        return list(users)
+
+    def get_governor_pks(self):
+        users = set([])
+        for actor in self.governors["actors"]:
+            users.add(actor)
+        for role in self.governors["roles"]:
+            for member in self.get_users_given_role(role):
+                users.add(member)
+        return list(users)
+
     def get_governors(self, actors_only=False):
         """Gets all governors."""
         if actors_only:

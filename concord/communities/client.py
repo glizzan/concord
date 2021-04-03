@@ -151,10 +151,13 @@ class CommunityClient(BaseClient):
         return self.target.roles.has_specific_role(role, actor_pk)
 
     def get_users_with_ownership_privileges(self):
-        ...
+        """Returns a list of user pks with ownership privileges. Should never turn [] since there's
+        always at least one owner."""
+        return self.target.roles.get_owner_pks()
 
     def get_users_with_governorship_privileges(self):
-        ...
+        """Returns a list of user pks with governorship privileges. May be empty []."""
+        return self.target.roles.get_governor_pks()
 
     # Complex state updates
 

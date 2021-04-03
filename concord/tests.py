@@ -2113,6 +2113,58 @@ class ConsensusConditionTest(DataTestCase):
                           {"8": "no response", "2": "no response", "11": "no response", "12": "no response"})
         self.assertFalse(self.condition_item.ready_to_resolve())  # two days (default) have not passed
 
+    def test_initialize_consensus_condition_on_governors(self):
+
+        # test on governor (single)
+        self.client.Conditional.set_target(self.instance)
+        permission_data = [{"permission_type": Changes().Conditionals.RespondConsensus,
+                            "permission_roles": ["governors"] },
+                           {"permission_type": Changes().Conditionals.ResolveConsensus,
+                            "permission_roles": ["governors"]}]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="consensuscondition", permission_data=permission_data,
+            condition_data=None, leadership_type="governor")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.assertDictEqual(self.condition_item.get_responses(),
+            {str(self.users.pinoe.pk): "no response" })
+        self.assertFalse(self.condition_item.ready_to_resolve())  # two days (default) have not passed
+
+        # test on governors (many)
+        self.client.Community.add_governor_role_to_community(role_name="forwards")
+        permission_data = [{"permission_type": Changes().Conditionals.RespondConsensus,
+                            "permission_roles": ["governors"] },
+                           {"permission_type": Changes().Conditionals.ResolveConsensus,
+                            "permission_roles": ["governors"]}]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="consensuscondition", permission_data=permission_data,
+            condition_data=None, leadership_type="governor")
+        self.trigger_action, result = self.client.Community.change_name_of_community(name="United States Women's National Team")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.assertDictEqual(self.condition_item.get_responses(),
+            {str(self.users.pinoe.pk): "no response", str(self.users.rose.pk): "no response",
+             str(self.users.midge.pk): "no response"})
+        self.assertFalse(self.condition_item.ready_to_resolve())  # two days (default) have not passed
+
+    def test_initialize_consensus_condition_on_owners(self):
+
+        self.client.Conditional.set_target(self.instance)
+        self.client.Community.add_owner_role_to_community(role_name="forwards")
+        permission_data = [{"permission_type": Changes().Conditionals.RespondConsensus,
+                            "permission_roles": ["owners"] },
+                           {"permission_type": Changes().Conditionals.ResolveConsensus,
+                            "permission_roles": ["owners"]}]
+        action, result = self.client.Conditional.add_condition(
+            condition_type="consensuscondition", permission_data=permission_data,
+            condition_data=None, leadership_type="owner")
+        self.trigger_action, result = self.client.Community.add_owner_role_to_community(
+            role_name="members")
+        self.condition_item = self.client.Conditional.get_condition_items_for_action(action_pk=self.trigger_action.pk)[0]
+        self.assertDictEqual(self.condition_item.get_responses(),
+            {str(self.users.pinoe.pk): "no response", str(self.users.rose.pk): "no response",
+             str(self.users.midge.pk): "no response"})
+        self.assertFalse(self.condition_item.ready_to_resolve())  # two days (default) have not passed
+
     def test_consensus_condition_timing(self):
 
         # add & trigger condition

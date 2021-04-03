@@ -178,12 +178,12 @@ class CommunityClient(BaseClient):
 
         for new_owner_role in new_owner_data["roles"]:
             if new_owner_role not in existing_owners["roles"]:
-                action, result = self.add_owner_role_to_community(owner_role=new_owner_role)
+                action, result = self.add_owner_role_to_community(role_name=new_owner_role)
                 actions.append(action)
 
         for old_owner_role in existing_owners["roles"]:
             if old_owner_role not in new_owner_data["roles"]:
-                action, result = self.remove_owner_role_from_community(owner_role=old_owner_role)
+                action, result = self.remove_owner_role_from_community(role_name=old_owner_role)
                 actions.append(action)
 
         return actions
@@ -208,12 +208,12 @@ class CommunityClient(BaseClient):
 
         for new_governor_role in new_governor_data["roles"]:
             if new_governor_role not in existing_governors["roles"]:
-                action, result = self.add_governor_role_to_community(governor_role=new_governor_role)
+                action, result = self.add_governor_role_to_community(role_name=new_governor_role)
                 actions.append(action)
 
         for old_governor_role in existing_governors["roles"]:
             if old_governor_role not in new_governor_data["roles"]:
-                action, result = self.remove_governor_role_from_community(governor_role=old_governor_role)
+                action, result = self.remove_governor_role_from_community(role_name=old_governor_role)
                 actions.append(action)
 
         return actions

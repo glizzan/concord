@@ -1,12 +1,9 @@
 """Client for Resources."""
 
-from typing import List
-
-from django.db.models import QuerySet
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.client import BaseClient
-from concord.resources.models import Resource, Comment, CommentCatcher, SimpleList
+from concord.resources.models import Comment, CommentCatcher, SimpleList
 from concord.resources import state_changes as sc
 
 
@@ -52,45 +49,6 @@ class CommentClient(BaseClient):
         self.swap_target_if_needed(create=True)
         change = sc.AddCommentStateChange(text=text)
         return self.create_and_take_action(change)
-
-
-######################
-### ResourceClient ###
-######################
-
-class ResourceClient(BaseClient):
-    """
-    The target of a resource client, if a target is required, is always a resource
-    model. As with all Concord clients, a target must be set for all methods not
-    explicitly grouped as target-less methods.
-    """
-    app_name = "resources"
-
-    # Target-less methods (don't require a target to be set ahead of time)
-
-    def get_all_resources(self) -> QuerySet:
-        """Get all resources in the system."""
-        return Resource.objects.all()
-
-    def get_resource_given_name(self, *, resource_name: str) -> QuerySet:
-        """Get a resource given a unique name."""
-        return Resource.objects.filter(name=resource_name)
-
-    def get_resource_given_pk(self, *, pk: int) -> QuerySet:
-        """Get a resource given pk."""
-        return Resource.objects.filter(pk=pk)
-
-    def create_resource(self, *, name: str) -> Resource:
-        """Create a resource given name of resource to be created."""
-        resource = Resource.objects.create(name=name, owner=self.actor.default_community)
-        self.set_default_permissions(resource)
-        return resource
-
-    # Read only
-
-    def get_items_on_resource(self) -> List[str]:
-        """Get items on targtet resource."""
-        return self.target.get_items()
 
 
 ##################

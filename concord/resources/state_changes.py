@@ -2,8 +2,8 @@
 
 import logging
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from concord.resources.models import Resource, Item, Comment, SimpleList
+from django.core.exceptions import ValidationError
+from concord.resources.models import Comment, SimpleList
 from concord.actions.state_changes import BaseStateChange
 from concord.utils.lookups import get_all_permissioned_models
 from concord.utils import field_utils
@@ -241,80 +241,6 @@ class DeleteCommentStateChange(BaseStateChange):
         delete_permissions_on_target(target)
         target.delete()
         return pk
-
-
-#####################################
-### Resource & Item State Changes ###
-#####################################
-
-
-class ChangeResourceNameStateChange(BaseStateChange):
-    """State Change to change a resource name."""
-
-    descriptive_text = {
-        "verb": "change",
-        "default_string": "name of resource",
-        "detail_string": "name of resource to {name}",
-        "preposition": "for"
-    }
-
-    model_based_validation = ("target", ["name"])
-    allowable_targets = [Resource, Item]
-    settable_classes = ["all_models"]
-
-    # Fields
-    name = field_utils.CharField(label="New name", required=True)
-
-    def implement(self, actor, target, **kwargs):
-        target.name = self.name
-        target.save()
-        return target
-
-
-class AddItemStateChange(BaseStateChange):
-    """State Change to add item to a resource."""
-
-    descriptive_text = {
-        "verb": "add",
-        "default_string": "item to resource",
-        "detail_string": "item {name} to resource"
-    }
-
-    model_based_validation = (Item, ["name"])
-    allowable_targets = [Resource]
-    settable_classes = ["all_community_models", Resource]
-
-    # Fields
-    name = field_utils.CharField(label="New name", required=True)
-
-    def implement(self, actor, target, **kwargs):
-        item = Item.objects.create(name=self.name, resource=target, owner=actor.default_community)
-        self.set_default_permissions(actor, item)
-        return item
-
-
-class RemoveItemStateChange(BaseStateChange):
-    """State Change to remove item from a resource."""
-
-    descriptive_text = {
-        "verb": "remove",
-        "default_string": "item from resource",
-        "detail_string": "item {name} from resource",
-        "preposition": "from"
-    }
-
-    allowable_targets = [Item]
-    settable_classes = ["all_community_models", Resource, Item]
-
-    def implement(self, actor, target, **kwargs):
-        try:
-            from concord.permission_resources.utils import delete_permissions_on_target
-            delete_permissions_on_target(target)
-            target.delete()
-            return True
-        except ObjectDoesNotExist as exception:
-            logger.warning(exception)
-            return False
 
 
 ################################

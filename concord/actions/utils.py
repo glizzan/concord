@@ -55,12 +55,12 @@ class AutoDescription:
         return self.capitalize(response) if capitalize else response
 
     def description_present_tense(self, change_obj=None):
-        additional_text = self.details_as_text(change_obj) if change_obj else self.default_string
-        return f"{self.verb} {additional_text}"
+        text = self.details_as_text(change_obj) if change_obj and self.detail_string else self.default_string
+        return f"{self.verb} {text}"
 
     def description_past_tense(self, change_obj=None):
-        additional_text = self.details_as_text(change_obj) if change_obj else self.default_string
-        return f"{self.past_verb} {additional_text}"
+        text = self.details_as_text(change_obj) if change_obj and self.detail_string else self.default_string
+        return f"{self.past_verb} {text}"
 
 
 class MockAction(ConcordConverterMixin):

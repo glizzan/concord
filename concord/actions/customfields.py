@@ -115,6 +115,9 @@ class Template(ConcordConverterMixin):
 
                     # implement and save results to context
                     result = action_model.change.implement(actor=action_model.actor, target=action_model.target)
+                    action_model.status = "implemented"
+                    action_model.add_log({"approved_through": "part of template"})
+                    action_model.save()
                     context["actions_and_results"].append({"action": action_model, "result": result})
 
                 if rollback:

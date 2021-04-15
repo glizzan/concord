@@ -81,7 +81,7 @@ class ConditionManager(PermissionedModel):
         condition_data_list.append(utils.ConditionData(**data_for_condition))
         self.set_conditions(condition_data_list)
 
-    def edit_condition(self, element_id, data_for_condition):  # data passed in does not need to include type or element ID
+    def edit_condition(self, element_id, data_for_condition):  # data doesn't need to include type or element ID
         condition_data_list = self.get_conditions_as_data()
         for condition in condition_data_list:
             if condition.element_id == element_id:

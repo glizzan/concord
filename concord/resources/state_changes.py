@@ -5,7 +5,6 @@ import logging
 from django.core.exceptions import ValidationError
 from concord.resources.models import Comment, SimpleList
 from concord.actions.state_changes import BaseStateChange
-from concord.utils.lookups import get_all_permissioned_models
 from concord.utils import field_utils
 
 

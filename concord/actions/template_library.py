@@ -113,8 +113,8 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
         action_4 = client.PermissionResource.add_permission(roles=['members'], change_type=Changes().Resources.EditRow)
 
         # Step 5: set approval condition on permission
-        action_5 = client.Conditional.add_condition(condition_type="approvalcondition",
-            permission_data=permission_data)
+        action_5 = client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
         action_5.target = "{{previous.3.result}}"
 
         # Step 6: give members permission to edit row
@@ -122,8 +122,8 @@ class SimpleListLimitedMemberTemplate(TemplateLibraryObject):
             roles=['members'], change_type=Changes().Resources.DeleteRow)
 
         # Step 7: set approval condition on permission
-        action_7 = client.Conditional.add_condition(condition_type="approvalcondition",
-            permission_data=permission_data)
+        action_7 = client.Conditional.add_condition(
+            condition_type="approvalcondition", permission_data=permission_data)
         action_7.target = "{{previous.5.result}}"
 
         return [action_1, action_2, action_3, action_4, action_5, action_6, action_7]

@@ -14,10 +14,9 @@ DEFAULT_PERMISSIONS = {
          "conditions": [
             {"condition_type": "approvalcondition",
                 "permission_data": [
-                        {"permission_type": Changes().Conditionals.Approve, "permission_roles": ["governors"]},
-                        {"permission_type": Changes().Conditionals.Reject, "permission_roles": ["governors"]}]},
-            {"condition_type": "SelfMembershipOnly"}
-         ]}
+                    {"permission_type": Changes().Conditionals.Approve, "permission_roles": ["governors"]},
+                    {"permission_type": Changes().Conditionals.Reject, "permission_roles": ["governors"]}]},
+            {"condition_type": "SelfMembershipOnly"}]}
     ],
     "comment": [
     ]

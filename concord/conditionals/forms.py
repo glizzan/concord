@@ -1,7 +1,5 @@
 import inspect
 
-from concord.conditionals import utils
-
 
 # functions for getting individual condition forms with or without data
 
@@ -64,15 +62,6 @@ def form_dict_for_fields_with_data(condition, permission_data=None):
             combined_form_dict[field_name] = update_regular_field_dict(field_name, field_dict, condition)
 
     return combined_form_dict
-
-
-# def form_dict_for_filter_condition(condition):
-#     combined_form_dict = {}
-#     for field_name, field in condition.get_concord_fields_with_names().items():
-#         form_dict = field.to_form_field()
-#         form_dict.update({"field_name": field_name, "can_depend": False, "display": field.label})
-#         combined_form_dict.update({field_name: form_dict})
-#     return combined_form_dict
 
 
 # Condition Manager Forms

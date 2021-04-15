@@ -1,9 +1,6 @@
 """State Changes for conditional models"""
-from django.core.exceptions import ValidationError
-
 from concord.actions.state_changes import BaseStateChange
 from concord.utils.helpers import Client
-from concord.utils.lookups import get_state_change_object
 from concord.conditionals.models import VoteCondition, ApprovalCondition, ConsensusCondition
 from concord.conditionals.utils import validate_condition
 from concord.actions.models import Action
@@ -78,7 +75,7 @@ class AddConditionStateChange(BaseStateChange):
 
         condition_dict = self.condition_data if self.condition_data else {}
         data = {"condition_type": self.condition_type, "condition_data": condition_dict,
-            "permission_data":self.permission_data}
+                "permission_data": self.permission_data}
         manager.add_condition(data_for_condition=data)
         manager.save()
 
@@ -100,7 +97,7 @@ class EditConditionStateChange(BaseStateChange):
     element_id = field_utils.IntegerField(label="Element ID", required=True)
     condition_data = field_utils.DictField(label="New condition data", null_value=dict)
     permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
-    leadership_type = field_utils.CharField(label="Leadership type to set condition on")  # FIXME: should this be settable here?
+    leadership_type = field_utils.CharField(label="Leadership type to set condition on")
 
     def validate(self, actor, target):
 
@@ -135,7 +132,7 @@ class EditConditionStateChange(BaseStateChange):
 
         attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
         manager = getattr(target, attr_name)
-        data = {"condition_data": self.condition_data, "permission_data":self.permission_data}
+        data = {"condition_data": self.condition_data, "permission_data": self.permission_data}
         manager.edit_condition(element_id=self.element_id, data_for_condition=data)
         manager.save()
 

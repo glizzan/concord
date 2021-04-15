@@ -1,6 +1,5 @@
 """Utils for conditionals package."""
-from dataclasses import dataclass, asdict
-
+from django.core.exceptions import ValidationError
 
 from concord.utils.helpers import Changes
 from concord.utils.text_utils import roles_and_actors
@@ -35,7 +34,7 @@ def validate_condition_data(model_instance, condition_data):
             else:
                 field_instance = getattr(model_instance, field_name)
         except AttributeError:
-            return False, f"There is no field {field_name} on condition {self.__class__}"
+            return False, f"There is no field {field_name} on condition {model_instance.__class__}"
 
         try:
             if hasattr(field_instance, "clean"):
@@ -54,7 +53,7 @@ def validate_permission_data(model_instance, permission_data):
 
         state_change_object = get_state_change_object(permission["permission_type"])
         if model_instance.__class__ not in state_change_object.get_allowable_targets():
-            return False, f"Permission type {permission['permission_type']} cannot be set on {condition_model}"
+            return False, f"Permission type {permission['permission_type']} cannot be set on {model_instance}"
 
         if "permission_roles" not in permission and "permission_actors" not in permission:
             return False, f"Must supply either roles or actors to permission {permission['permission_type']}"
@@ -129,7 +128,7 @@ class ConditionData(object):
 
 def validate_condition(condition_type, condition_data, permission_data, change_object):
     return ConditionData(condition_type=condition_type, element_id=None, condition_data=condition_data,
-        permission_data=permission_data).validate(change_object)
+                         permission_data=permission_data).validate(change_object)
 
 
 # Get utils
@@ -144,7 +143,7 @@ def get_filter_condition(*, data, action):
     for condition in get_filter_conditions():
         if condition.__name__ == data.condition_type:
             return condition(**data.get_fields_as_dict()["condition_data"])
-    raise ValueError(f"No matching filter condition found for {condition_data.condition_type}")
+    raise ValueError(f"No matching filter condition found for {data.condition_type}")
 
 
 def get_condition_instances(*, manager, action):

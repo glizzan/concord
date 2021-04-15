@@ -1,7 +1,6 @@
 from contextlib import suppress
 import json
 
-from concord.utils.dependent_fields import crawl_objects
 from concord.utils import field_utils
 
 

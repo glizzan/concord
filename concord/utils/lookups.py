@@ -97,7 +97,7 @@ def get_filter_conditions():
     for app in get_all_apps():
         conditions_module = app.get_concord_module("filter_conditions")
         conditions = inspect.getmembers(conditions_module)  # get_members returns (name, value) tuple
-        all_conditions += [value for (name, value) in conditions if getattr(value, 'unique_name', None)]
+        all_conditions += [value for (name, value) in conditions if getattr(value, 'check', None)]
     return all_conditions
 
 

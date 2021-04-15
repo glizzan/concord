@@ -78,8 +78,8 @@ class PermissionResourceClient(BaseClient):
         for perm in permissions:
             sc = perm.get_state_change_object()
             if target.__class__ in sc.get_allowable_targets():
-                if not hasattr(sc, "target_type") or \
-                        (hasattr(sc, "target_type") and sc.target_type == target.__class__):
+                target_filter = perm.condition.condition_target_filter() if perm.condition else None
+                if not target_filter or target.__class__.__name__ == target_filter:
                     filtered_permissions.append(perm)
 
         return filtered_permissions
@@ -163,25 +163,6 @@ class PermissionResourceClient(BaseClient):
     # State changes
 
     # Complex/multiple state changes
-
-    def update_configuration(self, *, configuration_dict: dict, permission):
-        """Given a dict with the new configuration for a permission, change individual fields
-        as needed."""
-
-        self.target = permission
-        actions = []
-        old_configuration = permission.get_configuration()
-
-        for field_name, field_value in configuration_dict.items():
-
-            if (field_name in old_configuration and old_configuration[field_name] != field_value) or \
-                    (field_name not in old_configuration and field_value not in [None, '', []]):
-
-                action, result = self.change_configuration_of_permission(
-                    configurable_field_name=field_name, configurable_field_value=field_value)
-                actions.append(action)
-
-        return actions
 
     def update_roles_on_permission(self, *, role_data, permission):
         """Given a list of roles, updates the given permission to match those roles."""

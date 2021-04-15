@@ -66,26 +66,6 @@ def determine_status(action, has_authority, has_condition, manager):
     return Client().Conditional.check_condition_status(manager=manager, action=action)
 
 
-def check_configuration(action, permission):
-    """Given a permission, check whether the action matches the configuration."""
-
-    try:
-
-        # Does permission.configuration contain keys?  If not, action passes by default.
-        if not json.loads(permission.configuration):
-            return True, None
-
-        # Call check_configuration on the state_change, passing in the permission configuration data, and return result.
-        return action.change.check_configuration(action, permission)
-
-    except Exception as error:
-
-        if action.__class__.__name__ == "MockAction":
-            return True, None
-
-        raise error
-
-
 def foundational_permission_pipeline(action, client, community):
     """Handles logic for foundational actions."""
 
@@ -116,9 +96,7 @@ def governing_permission_pipeline(action, client, community):
 def check_specific_permission(action, client, permission):
     """Checks whether user has a specific permission."""
 
-    passes_configuration, rejection_message = check_configuration(action, permission)
-
-    if permission.is_active and passes_configuration:
+    if permission.is_active:
 
         has_authority, matched_role = client.PermissionResource.actor_satisfies_permission(
             actor=action.actor, permission=permission)
@@ -131,7 +109,7 @@ def check_specific_permission(action, client, permission):
         has_authority, matched_role, has_condition, manager, status = False, None, None, None, None
 
     return Match(pipeline="specific", has_authority=has_authority, matched_role=matched_role,
-                 has_condition=has_condition, condition_manager=manager, status=status, rejection=rejection_message)
+                 has_condition=has_condition, condition_manager=manager, status=status, rejection=None)
 
 
 def specific_permission_pipeline(action, client):

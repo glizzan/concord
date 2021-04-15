@@ -3,7 +3,6 @@
 from concord.actions.state_changes import BaseStateChange
 from concord.utils.text_utils import list_to_text
 from concord.utils.helpers import Client
-
 from concord.utils import field_utils
 
 
@@ -40,32 +39,14 @@ class AddMembersStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "add",
         "default_string": "members to community",
-        "detail_string": "{member_pk_list} as members",
-        "configurations": [("self_only", "if the user is adding themselves")]
+        "detail_string": "{member_pk_list} as members"
     }
 
     section = "Community"
-    configurable_fields = ["self_only"]
     allowable_targets = ["all_community_models"]
+    linked_filters = ["SelfMembershipFilter"]
 
     member_pk_list = field_utils.ActorListField(label="People to add as members", required=True)
-    self_only = field_utils.BooleanField(label="Only allow actor to add self as member", null_value=False)
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "self_only" in configuration and configuration["self_only"] is not None:
-            if configuration["self_only"] not in [True, False, "True", "False", "true", "false"]:
-                return False, f"self_only must be set to True or False, not {configuration['self_only']}"
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        configuration = permission.get_configuration()
-        if "self_only" in configuration and configuration['self_only']:
-            if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
-                return False, "self_only is set to true, so member_pk_list can contain only the pk of the actor"
-        return True, None
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -93,32 +74,14 @@ class RemoveMembersStateChange(BaseStateChange):
         "verb": "remove",
         "default_string": "members from community",
         "detail_string": "members {member_pk_list} from community",
-        "configurations": [("self_only", "if the user is removing themselves")],
         "preposition": "from"
     }
 
     section = "Community"
-    configurable_fields = ["self_only"]
+    linked_filters = ["SelfMembershipFilter"]
     allowable_targets = ["all_community_models"]
 
     member_pk_list = field_utils.ActorListField(label="People to remove as members", required=True)
-    self_only = field_utils.BooleanField(label="Only allow actor to remove self as member", null_value=False)
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "self_only" in configuration and configuration["self_only"] is not None:
-            if configuration["self_only"] not in [True, False, "True", "False", "true", "false"]:
-                return False, f"self_only must be set to True or False, not {configuration['self_only']}"
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        configuration = permission.get_configuration()
-        if "self_only" in configuration and configuration['self_only']:
-            if len(self.member_pk_list) != 1 or self.member_pk_list[0] != action.actor.pk:
-                return False, "self_only is set to true, so member_pk_list can contain only the pk of the actor"
-        return True, None
 
     def validate(self, actor, target):
         """If any of the members to be removed are an owner or governor (either directly, or through
@@ -480,16 +443,16 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         "verb": "add",
         "default_string": "people to role",
         "detail_string": "people with IDs ({people_to_add}) to role '{role_name}'",
-        "configurations": [("role_name", "if the role is '{role_name}'")],
         "preposition": "in"
     }
 
     section = "Community"
-    configurable_fields = ["role_name"]
     allowable_targets = ["all_community_models"]
 
     role_name = field_utils.RoleField(label="Role to add people to", required=True)
     people_to_add = field_utils.ActorListField(label="People to add to role", required=True)
+
+    linked_filters = ["RoleMatchesFilter"]
 
     def is_conditionally_foundational(self, action):
         """If role_name is owner or governor role, should should be treated as a conditional change."""
@@ -498,23 +461,6 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         if self.role_name in action.target.roles.get_governors()["roles"]:
             return True
         return False
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "role_name" in configuration and configuration["role_name"] is not None:
-            if not isinstance(configuration["role_name"], str):
-                return False, f"Role name must be sent as string, not {str(type(configuration['role_name']))}"
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        '''All configurations must pass for the configuration check to pass.'''
-        configuration = permission.get_configuration()
-        if "role_name" in configuration:
-            if self.role_name not in configuration["role_name"]:
-                return False, f"Can't add people to role {self.role_name}, only {configuration['role_name']}"
-        return True, None
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):

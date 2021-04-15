@@ -82,13 +82,16 @@ class Action(ConcordConverterMixin, models.Model):
 
     def approved_through(self):
         for log in self.get_logs():
-            if log["approved_through"]: return log["approved_through"]
+            if "approved_through" in log and log["approved_through"]: return log["approved_through"]
         return "not approved"
 
     def rejection_reason(self):
+        rejection_reasons = []
         if self.status == "rejected":
             for log in self.get_logs():
-                if log["rejection_reason"]: return log["rejection_reason"]
+                if log["rejection_reason"]:
+                    rejection_reasons.append(log["rejection_reason"])
+            return ", ".join(rejection_reasons) if rejection_reasons else None
         return "not rejected"
 
     @property

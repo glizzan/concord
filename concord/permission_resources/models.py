@@ -43,7 +43,6 @@ class PermissionsItem(PermissionedModel):
     anyone = models.BooleanField(default=False)
 
     change_type = models.CharField(max_length=200)  # Replace with choices field???
-    configuration = models.CharField(max_length=5000, default='{}')
 
     # Get model-level information
 
@@ -79,7 +78,7 @@ class PermissionsItem(PermissionedModel):
         return self.get_state_change_object().get_change_field_options()
 
     def set_fields(self, *, owner=None, permitted_object=None, anyone=None, change_type=None, inverse=None,
-                   actors=None, roles=None, configuration=None):
+                   actors=None, roles=None):
         """Helper method to make it easier to save permissions fields in the format our model expects."""
 
         self.owner = owner if owner else self.owner
@@ -100,10 +99,6 @@ class PermissionsItem(PermissionedModel):
             except ValueError:
                 self.roles = roles
 
-        if configuration:
-            configuration_dict = {key: value for key, value in configuration.items() if value not in [None, [], ""]}
-            self.set_configuration(configuration_dict)
-
     # Get misc info
 
     def has_condition(self):
@@ -113,7 +108,7 @@ class PermissionsItem(PermissionedModel):
     def get_condition_data(self):
         """Used in forms."""
         if self.condition:
-            return self.condition.get_condition_form_data()
+            return self.condition.get_condition_form_data(permission=self)
         return {}
 
     def get_permitted_object(self):
@@ -130,29 +125,9 @@ class PermissionsItem(PermissionedModel):
     def is_foundational(self):
         return self.get_state_change_object().is_foundational
 
-    # Get change type and configuration info (replace with customfield?)
-
     def match_change_type(self, change_type):
         """Checks if the given change type matches the PermissionItem's change_type."""
         return self.change_type == change_type
-
-    def get_configuration(self):
-        """Get the configuration of the permissoin."""
-        return json.loads(self.configuration) if self.configuration else {}
-
-    def set_configuration(self, configuration_dict):
-        """Set the configuration of the permission."""
-        if not configuration_dict:
-            configuration_dict = {}
-        self.configuration = json.dumps(configuration_dict)
-
-    def get_configured_field_data(self):
-        """Get the field data corresponding to the configuration."""
-        # Returns (possibly empty) dict with format { permissionfieldname : permissionfieldvalue }
-        return self.get_configuration()  # is it this simple?
-
-    def get_configuration_text(self):
-        return self.get_state_change_object().get_configured_field_text(self.get_configuration())
 
     # ActorList and RoleList related methods
 

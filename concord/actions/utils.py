@@ -6,12 +6,11 @@ from concord.utils.converters import ConcordConverterMixin
 
 class AutoDescription:
 
-    def __init__(self, verb, default_string, detail_string="", past_tense=None, configurations=None, preposition="to"):
+    def __init__(self, verb, default_string, detail_string="", past_tense=None, preposition="to"):
         self.verb = verb
         self.past_tense = past_tense
         self.default_string = default_string
         self.detail_string = detail_string if detail_string else ""
-        self.configurations = configurations if configurations else []
         self.preposition = preposition if preposition else "to"
 
     def __str__(self):
@@ -49,17 +48,6 @@ class AutoDescription:
             data_dict.update({field_name: getattr(change_obj, field_name)})
         return self.detail_string.format(**self.process_dict(data_dict))
 
-    def get_configured_field_text(self, configuration):
-        config_text = []
-        for config in self.configurations:
-            if config[0] in configuration:
-                config_text.append(config[1].format(**configuration))
-        if len(config_text) == 1:
-            return f", but only {config_text[0]}"
-        elif len(config_text) > 1:
-            return f", but only {' and '.join(config_text)}"
-        return ""
-
     # calls that return user-facing strings
 
     def basic_description(self, capitalize=True):
@@ -73,9 +61,6 @@ class AutoDescription:
     def description_past_tense(self, change_obj=None):
         additional_text = self.details_as_text(change_obj) if change_obj else self.default_string
         return f"{self.past_verb} {additional_text}"
-
-    def description_with_configuration(self, configuration):
-        return self.description_present_tense() + self.get_configured_field_text(configuration)
 
 
 class MockAction(ConcordConverterMixin):

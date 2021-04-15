@@ -35,17 +35,14 @@ class AddPermissionStateChange(BaseStateChange):
     change_type = field_utils.CharField(label="Type of action the permission covers", required=True)
     actors = field_utils.ActorListField(label="Actors who have this permission", null_value=list)
     roles = field_utils.RoleListField(label="Roles who have this permission", null_value=list)
-    configuration = field_utils.DictField(label="Configuration of the permission", null_value=dict)
     anyone = field_utils.BooleanField(label="Everyone has the permission", null_value=False)
     inverse = field_utils.BooleanField(label="Do the inverse of this permission", null_value=False)
 
     def description_present_tense(self):
-        config_str = f" (configuration: {str(self.configuration)})" if self.configuration else ""
-        return f"add permission '{get_verb_given_permission_type(self.change_type)}" + config_str + "'"
+        return f"add permission '{get_verb_given_permission_type(self.change_type)}'"
 
     def description_past_tense(self):
-        config_str = f" (configuration: {str(self.configuration)})" if self.configuration else ""
-        return f"added permission '{get_verb_given_permission_type(self.change_type)}" + config_str + "'"
+        return f"added permission '{get_verb_given_permission_type(self.change_type)}'"
 
     def is_conditionally_foundational(self, action):
         """Some state changes are only foundational in certain conditions. Those state changes override this
@@ -55,8 +52,7 @@ class AddPermissionStateChange(BaseStateChange):
         return action.change.is_foundational
 
     def validate(self, actor, target):
-        """We need to check configuration of permission is valid. Also need to check that the given
-        permission can be set on the target."""
+        """Need to check that the given permission can be set on the target."""
 
         if not super().validate(actor=actor, target=target):
             return False
@@ -70,13 +66,6 @@ class AddPermissionStateChange(BaseStateChange):
                                       + f"{target.__class__}, must be {settable_classes_str}")
             return False
 
-        # check configuration
-        if hasattr(permission, "check_configuration") and self.configuration:
-            is_valid, error_message = permission.check_configuration_is_valid(self.configuration)
-            if not is_valid:
-                self.set_validation_error(error_message)
-                return False
-
         return True
 
     def implement(self, actor, target, **kwargs):
@@ -84,8 +73,7 @@ class AddPermissionStateChange(BaseStateChange):
         permission = PermissionsItem()
         permission.set_fields(
             owner=target.get_owner(), permitted_object=target, anyone=self.anyone, change_type=self.change_type,
-            inverse=self.inverse, actors=self.actors, roles=self.roles, configuration=self.configuration
-        )
+            inverse=self.inverse, actors=self.actors, roles=self.roles)
         permission.save()
         return permission
 
@@ -216,29 +204,11 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
     }
 
     section = "Permissions"
-    configurable_fields = ["role_name"]
+    linked_filters = ["RoleMatchesFilter"]
     allowable_targets = [PermissionsItem]
     settable_classes = ["all_models"]
 
     role_name = field_utils.RoleField(label="Role to remove", required=True)
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "role_name" in configuration:
-            if not isinstance(configuration["role_name"], str):
-                return False, "Role name must be sent as string, not " + str(type(configuration["role_name"]))
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        """All configurations must pass for the configuration check to pass."""
-        configuration = permission.get_configuration()
-        if "role_name" in configuration:
-            if self.role_name not in configuration["role_name"]:
-                return False, f"Can't remove role {self.role_name} from permission, allowable fields are: " + \
-                              f"{', '.join(configuration['role_name'])}"
-        return True, None
 
     def validate(self, actor, target):
         if not super().validate(actor=actor, target=target):
@@ -250,34 +220,6 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
 
     def implement(self, actor, target, **kwargs):
         target.remove_role_from_permission(role=self.role_name)
-        target.save()
-        return target
-
-
-class ChangePermissionConfigurationStateChange(BaseStateChange):
-    """State change to change the configuration of a permission."""
-
-    descriptive_text = {
-        "verb": "change",
-        "default_string": "configuration of permission",
-        "detail_string": "field {configurable_field_name} to value {configurable_field_value} on permission",
-        "preposition": "for"
-    }
-
-    section = "Permissions"
-    allowable_targets = [PermissionsItem]
-    settable_classes = ["all_models"]
-
-    configurable_field_name = field_utils.CharField(label="Name of field to configure", required=True)
-    configurable_field_value = field_utils.CharField(label="Value to configure field to", required=True)
-
-    def implement(self, actor, target, **kwargs):
-
-        configuration = target.get_configuration()
-
-        configuration[self.configurable_field_name] = self.configurable_field_value
-        target.set_configuration(configuration)
-
         target.save()
         return target
 

@@ -1,235 +1,225 @@
-from abc import ABC
-from datetime import datetime, timezone
 from contextlib import suppress
+import json
 
-from concord.conditionals import utils, forms
 from concord.utils.dependent_fields import crawl_objects
 from concord.utils import field_utils
-from concord.utils.converters import ConcordConverterMixin
-from concord.utils.helpers import Client
 
 
-class FilterCondition(ConcordConverterMixin, ABC):
-    unique_name = None
-    descriptive_name = None
+class Filter(object):
 
-    def __str__(self):
-        return self.descriptive_name
+    linked = False
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def condition_status(self, action):
-        return self.check(action) if not self.inverse else not self.check(action)
+        result, message = self.check(action=action)
+        if not result:
+            action.add_log({"rejection_reason": message, "approved_through": None})
+        return "approved" if result else "rejected"
 
-    def description_for_passing_condition(self):
-        print(f"WARNING: description for passing condition not specified for {self}")
-        ...
+    @classmethod
+    def get_input_field_objects(cls):
+        return {key: value for key, value in cls.__dict__.items() if hasattr(value, "label")}
 
-    def __setattr__(self, attribute_name, attribute_value):
-        with suppress(AttributeError):
-            field = super().__getattribute__(attribute_name)
-            if field and hasattr(field, "value"):
-                field.value = attribute_value
-                return
-        super().__setattr__(attribute_name, attribute_value)
+    def get_input_field_values(self):
+        field_values = {}
+        for field_name, field in self.get_input_field_objects().items():
+            current_value = getattr(self, field_name)
+            if hasattr(current_value, "label"):
+                current_value = None  # if the value on the instance is a ConcordField, that means it's not set
+            field_values.update({field_name: current_value})
+        return field_values
 
-    def __getattribute__(self, attribute_name):
-        """If the attribute is a Concord field, returns the value when referenced."""
-        field = super().__getattribute__(attribute_name)
-        if field and hasattr(field, "value"):
-            return field.value
-        return field
+    def validate(self, change_object):
+        # should automatically validate values against input field types
+        return True, None
+
+    # text logic
+
+    @property
+    def configured_description(self):
+        return self.configured_description_text
+
+    def get_descriptive_name(self):
+        return self.descriptive_name
+
+    def get_configured_name(self):
+        if hasattr(self, "configured_name"):
+            return self.configured_name.format(**self.get_input_field_values())
+        return self.get_descriptive_name()
+
+    # form logic
+
+    @classmethod
+    def get_fields_as_form(cls):
+        form = {}
+        for field_name, field in cls.get_input_field_objects().items():
+            form_dict = field.to_form_field()
+            form_dict.update({"field_name": field_name, "can_depend": False, "display": field.label})
+            form.update({field_name: form_dict})
+        return form
+
+    def get_form_fields_with_data(self):
+        existing_data = self.get_input_field_values()
+        form_dict = {}
+        for field_name, form in self.get_fields_as_form().items():
+            if existing_data[field_name]:
+                form["value"] = existing_data[field_name]
+            form_dict.update({field_name: form})
+        return form_dict
 
     @classmethod
     def get_configurable_fields(cls):
-        """Returns field values as list instead of dict"""
-        return [value for key, value in forms.form_dict_for_filter_condition(cls).items()]
-
-    @property
-    @classmethod
-    def configurable_fields(cls):
-        return cls.get_concord_fields_with_names.values()
-
-    def get_configurable_fields_with_data(self, permission_data=None):
-        """Returns form_dict with condition data set as value."""
-        return forms.form_dict_for_filter_condition(self)
-
-    def validate(self, permission, target):
-        return True
-
-    def get_matching_field(self, *, field_to_match, permission=None, target=None, action=None):
-
-        # FIXME: target during validation and check are often the same but sometimes the target (aka thing being)
-        # set on is not the same as the action target, so it can't really be validated :/
-
-        tokens = field_to_match.split(".")
-
-        if tokens[0] == "action" and action:
-            return crawl_objects(tokens[1:], base=action)
-
-        if tokens[0] == "action" and tokens[1] == "actor":
-            ...
-
-        if tokens[0] == "action" and tokens[1] == "target":
-            return crawl_objects(tokens[2:], base=target)
-
-        if tokens[0] == "action" and tokens[1] == "change":
-            return crawl_objects(tokens[2:], base=permission)
-
-        if tokens[0] == "target":
-            return crawl_objects(tokens[1:], base=target)
-
-        if tokens[0].lower() == target.__class__.__name__.lower():
-            return crawl_objects(tokens[1:], base=target)
+        return cls.get_fields_as_form()  # included to fit with existing old naming system  #FIXME: refactor
 
 
-### REAL FILTERS ###
+class SelfMembershipFilter(Filter):
+    descriptive_name = "the actor is the member"
+    linked = True
+
+    def check(self, *, action, **kwargs):
+        """Action field should always be a list of user pks. We look to see if the action's actor is the
+        only pk in that field."""
+        return [action.actor.pk] == action.change.member_pk_list, "actor is not member"
 
 
-class ActorIsSameAs(FilterCondition):
-    """
-    Note: this replaces:
-        'self only' (actor is the same as member_pk_list)
-        'original creator only' (actor is the same as target.commented_on.creator)
-        'commenter only' (actor is the same as target.creator)
-    """
-    unique_name = "actor_is_same_as"
-    descriptive_name = "Actor is the same as"
-    field_to_match = field_utils.CharField(label="Field to match", required=True)
-    inverse = field_utils.BooleanField(label="Flip to inverse")
+class FieldMatchesFilter(Filter):
+    descriptive_name = "a field matches a value"
+    configured_name = "{field_to_match} matches '{value_to_match}'"
 
-    def __init__(self, field_to_match, inverse=False):
-        self.field_to_match = field_to_match
-        self.inverse = inverse
-
-    def validate(self, permission, target):
-
-        field = self.get_matching_field(self.field_to_match, permission=permission, target=target)
-        if not field:
-            return False, f"No field found for '{self.field_to_match}'"
-
-        convertible = field.can_convert_to("ActorField")
-
-        if not field:
-            return False, f"Field {self.field_to_match} cannot convert to Actor"
-
-        return True
-
-    def check(self, action):
-        field = self.get_matching_field(self.field_to_match, action=action)
-        if action.actor == field.to_ActorField:
-            return True
-        return False
-
-
-class TargetType(FilterCondition):
-    unique_name = "target_is_type"
-    descriptive_name = "Target is of type"
-    target_type = field_utils.PermissionedModelField(label="Limit targets to type", required=True)
-    inverse = field_utils.BooleanField(label="Flip to inverse")
-
-    def __init__(self, target_type, inverse=False):
-        self.target_type = target_type
-        self.inverse = inverse
-
-    def check(self, action):
-        if action.target.__class__.__name__ == self.target_type:
-            return True
-        return False
-
-
-class FieldIs(FilterCondition):
-    unique_name = "field_is"
-    descriptive_name = "Field X is value Y"
     field_to_match = field_utils.CharField(label="Field to match", required=True)
     value_to_match = field_utils.CharField(label="Value to match", required=True)
-    inverse = field_utils.BooleanField(label="Flip to inverse")
 
-    def __init__(self, field_to_match, value_to_match, inverse):
-        self.field_to_match = field_to_match
-        self.value_to_match = value_to_match
-        self.inverse = inverse
+    # TODO: for now we can only match change object fields, probably should be more flexible - use crawl objects?
 
-    def validate(self, permission, target):
-
-        field = getattr(permission.change, self.field_to_match)
-        if not field:
-            return False, f"No field found for '{self.field_to_match}'"
-
-        if not field.transform_to_valid_value(self.value_to_match):
-            return False, f"{self.value_to_match} is not a valid value for {self.field_to_match}"
-
+    def validate(self, permission):
+        change_obj = permission.get_state_change_object()
+        if not hasattr(change_obj, self.field_to_match):
+            return False, f"No field '{self.field_to_match}' on this permission"
         return True, None
 
-    def check(self, action):
-        field = getattr(action.change, self.field_to_match)
-        return field.value == self.value_to_match
+    def check(self, *, action, **kwargs):
+        """The contents of the action field should equal the custom text."""
+        field_value = getattr(action.change, self.field_to_match)
+        return field_value == self.value_to_match, "field does not match"
 
 
-### FIRST DRAFTS ####
+class FieldContainsFilter(Filter):
+    descriptive_name = "a field contains specific text"
+    configured_name = "{field_to_match} {verb} '{value_to_match}'"
 
+    field_to_match = field_utils.CharField(label="Field to look in", required=True)
+    value_to_match = field_utils.CharField(label="Text to search for", required=True)
+    inverse = field_utils.BooleanField(label="Reverse (only allowed if it does NOT contain above text)", default=False)
 
-class ActorUserCondition(FilterCondition):
-    unique_name = "actor_user_age"
-    descriptive_name = "Actor has been user longer than"
-    duration = field_utils.DurationField(label="Length of time that must pass", required=True)
-    inverse = field_utils.BooleanField(label="Flip to inverse (actor has been user less than...)")
+    # TODO: for now we can only match change object fields, probably should be more flexible - use crawl objects?
+    # TODO: should either restrict this to text fields or find a coherent way of translating non-text fields to text
 
-    def __init__(self, duration=None, inverse=False):
-        self.duration = duration
-        self.inverse = inverse
-
-    def description_for_passing_condition(self):
-        units = utils.parse_duration_into_units(self.duration, measured_in="seconds")
-        time_length = utils.display_duration_units(**units)
-        return f"actor has been user longer than {time_length}"
-
-    def check(self, action):
-        if (datetime.now(timezone.utc) - action.actor.date_joined).seconds >= self.duration:
-            return True
+    def does_not_contain(self):
+        if isinstance(self.inverse, bool):
+            return self.inverse
         return False
 
+    def validate(self, permission):
+        change_obj = permission.get_state_change_object()
+        if not hasattr(change_obj, self.field_to_match):
+            return False, f"No field '{self.field_to_match}' on this permission"
+        return True, None
 
-class ContainsText(FilterCondition):
-    unique_name = "field_contains_text"
-    descriptive_name = "Field contains text"
-    field_to_match = field_utils.CharField(label="Field to match", required=True)
-    inverse = field_utils.BooleanField(label="Flip to inverse")
+    def check(self, *, action, **kwargs):
+        """The contents of the action field should equal the custom text."""
+        field_value = getattr(action.change, self.field_to_match)
+        if self.does_not_contain:
+            failure_msg = f"field '{self.field_to_match}' contains '{self.value_to_match.lower()}'"
+            return self.value_to_match.lower() not in field_value.lower(), failure_msg
+        failure_msg = f"field '{self.field_to_match}' does not contain '{self.value_to_match.lower()}'"
+        return self.value_to_match.lower() in field_value.lower(), failure_msg
 
-    def __init__(self, field_to_match, text, inverse=False):
-        self.field_to_match = field_to_match
-        self.text = text
-        self.inverse = inverse
-
-    def validate(self, permission, target):
-
-        field = self.get_matching_field(self.field_to_match, permission=permission, target=target)
-        if not field:
-            return False, f"No field {self.field_to_match} on target"
-
-        convertible = field.can_convert_to("CharField")
-        if not field:
-            return False, f"Field {self.field_to_match} cannot convert to text"
-
-        return True
-
-    def check(self, action):
-        field = self.get_matched_field([action, action.target])
-        if self.text in field:
-            return True
-        return False
+    def get_configured_name(self):
+        if hasattr(self, "configured_name"):
+            text_dict = self.get_input_field_values()
+            text_dict["verb"] = "does not contain" if self.does_not_contain() else "contains"
+            return self.configured_name.format(**text_dict)
+        return self.get_descriptive_name()
 
 
-class ActorMemberCondition(FilterCondition):
-    unique_name = "actor_user_age"
-    descriptive_name = "Actor has been member of community longer than"
-    duration = field_utils.DurationField(label="Duration of membership required", required=True)
-    inverse = field_utils.BooleanField(label="Flip to inverse (actor has been member of community less than...)")
+class RoleMatchesFilter(Filter):
+    descriptive_name = "the role's name is a specific value"
+    configured_name = "the role's name is '{role_name}'"
+    linked = True
 
-    def __init__(self, duration, inverse=False):
-        self.duration = duration
-        self.inverse = inverse
+    role_name = field_utils.RoleField(label="Role to match", required=True)
 
-    def check(self, action):
-        date_joined = Client(target=action.target.get_owner().Community.user_joined(action.actor))
-        if datetime.datetime.now() - date_joined > self.duration:
-            return True
-        return False
+    def check(self, *, action, **kwargs):
+        return action.change.role_name == self.role_name, f"the role name does not match {self.role_name}"
+
+
+class TargetTypeFilter(Filter):
+    descriptive_name = "the target of the action is a specific type"
+    configured_name = "the target of the action is {target_type}"
+
+    target_type = field_utils.PermissionedModelField(label="Limit targets to type", required=True)
+
+    def check(self, *, action, **kwargs):
+        failure_msg = f"target is not {self.target_type}"
+        return action.target.__class__.__name__.lower() == self.target_type.lower(), failure_msg
+
+
+class CreatorOfCommentedFilter(Filter):
+    linked = True
+    descriptive_name = "the actor created the thing being commented on"
+
+    def check(self, action, **kwargs):
+        failure_msg = "the actor did not create the thing being commented on"
+        with suppress(AttributeError):
+            return action.actor == action.target.commented_object.creator, failure_msg  # action target is a comment
+        with suppress(AttributeError):
+            return action.actor == action.target.creator, failure_msg  # action target is the thing itself
+        with suppress(AttributeError):
+            return action.actor == action.target.commented_object.author, failure_msg  # creator is called author
+        with suppress(AttributeError):
+            return action.actor == action.target.author, failure_msg
+        return False, failure_msg
+
+
+class CreatorFilter(Filter):
+    descriptive_name = "the actor is the creator"
+
+    def check(self, action, **kwargs):
+        failure_msg = "the actor is not the creator"
+        with suppress(AttributeError):
+            if action.target.creator:
+                return action.actor == action.target.creator, failure_msg
+        with suppress(AttributeError):
+            if action.target.author:
+                return action.actor == action.target.author, failure_msg  # sometimes creator is called author
+        return False, failure_msg
+
+
+class CommenterFilter(Filter):
+    linked = True
+    descriptive_name = "the actor wrote the comment"
+
+    def check(self, *, action, **kwargs):
+        return action.actor == action.target.commentor, "the actor didn't write the comment"
+
+
+class LimitedFieldsFilter(Filter):
+    linked = True
+    descriptive_name = "fields are limited"
+    configured_name = "fields are limited to {limited_fields}"
+
+    limited_fields = field_utils.ListField(label="Limit fields to", required=True)
+
+    def check(self, *, action, **kwargs):
+        failure_msg = f"fields were limited to {self.limited_fields}"
+        if not action.change.fields_to_include:
+            # We're limited our fields, but if 'fields_to_include' is not set that means "get everything"
+            return False, failure_msg
+        limited_fields = json.loads(self.limited_fields)
+        for field in action.change.fields_to_include:
+            if field not in limited_fields:
+                return False, failure_msg
+        return True, failure_msg

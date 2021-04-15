@@ -29,7 +29,7 @@ def update_permission_field_dict(field_name, field_dict, permission_data):
     value = get_value_from_permission_data(field_dict["type"], permission)
     return {"can_depend": True, "field_name": field_name, "type": field_dict["type"],
             "required": field_dict.get("required", False), "full_name": field_dict["full_name"],
-            "display": field_dict["display"], "value": value}
+            "display": field_dict["display"], "value": value, "for_permission": True}
 
 
 def form_dict_for_field(field):
@@ -58,7 +58,7 @@ def form_dict_for_fields_with_data(condition, permission_data=None):
 
     for field_name, field_dict in fields_dict.items():
 
-        if field_dict.get("type", None) in ["RoleField", "RoleListField", "ActorField", "ActorListField"]:
+        if field_dict.get("for_permission", None):
             combined_form_dict[field_name] = update_permission_field_dict(field_name, field_dict, permission_data)
         else:
             combined_form_dict[field_name] = update_regular_field_dict(field_name, field_dict, condition)
@@ -66,54 +66,55 @@ def form_dict_for_fields_with_data(condition, permission_data=None):
     return combined_form_dict
 
 
-def form_dict_for_filter_condition(condition):
-    combined_form_dict = {}
-    for field_name, field in condition.get_concord_fields_with_names().items():
-        form_dict = field.to_form_field()
-        form_dict.update({"field_name": field_name, "can_depend": False, "display": field.label})
-        combined_form_dict.update({field_name: form_dict})
-    return combined_form_dict
+# def form_dict_for_filter_condition(condition):
+#     combined_form_dict = {}
+#     for field_name, field in condition.get_concord_fields_with_names().items():
+#         form_dict = field.to_form_field()
+#         form_dict.update({"field_name": field_name, "can_depend": False, "display": field.label})
+#         combined_form_dict.update({field_name: form_dict})
+#     return combined_form_dict
 
 
 # Condition Manager Forms
 
 
-def get_for_acceptance_condition(condition_object, element_id, dataclass):
+def get_for_acceptance_condition(condition_object, data):
 
-    field_data = form_dict_for_fields_with_data(condition_object, dataclass.data['permission_data'])
-    how_to_pass = condition_object.description_for_passing_condition(
-        permission_data=dataclass.data['permission_data'])
+    field_data = form_dict_for_fields_with_data(condition_object, data.permission_data)
+    how_to_pass = condition_object.description_for_passing_condition(permission_data=data.permission_data)
 
     field_form = {"type": condition_object.__class__.__name__, "display_name": condition_object.descriptive_name,
-                  "how_to_pass": how_to_pass, "fields": field_data, "element_id": element_id}
+                  "how_to_pass": how_to_pass, "fields": field_data, "element_id": data.element_id}
 
     return field_form, how_to_pass
 
 
-def get_for_filter_condition(condition_object, element_id, dataclass):
-    field_data = form_dict_for_filter_condition(condition_object)
-    how_to_pass = condition_object.description_for_passing_condition()
-    field_form = {"type": dataclass.data["condition_type"], "display_name": condition_object.descriptive_name,
-                  "fields": field_data, "how_to_pass": how_to_pass, "element_id": element_id}
+def get_for_filter_condition(condition_object, data, permission):
+
+    field_data = condition_object.get_form_fields_with_data()
+    how_to_pass = condition_object.get_configured_name()
+
+    field_form = {"type": data.condition_type, "display_name": condition_object.descriptive_name,
+                  "fields": field_data, "how_to_pass": how_to_pass, "element_id": data.element_id}
+
     return field_form, how_to_pass
 
 
-def condition_manager_form(manager):
+def condition_manager_form(manager, permission):
 
     form = {}
     how_to_pass_overall = []
 
-    for element_id, dataclass in manager.get_condition_dataclasses().items():
+    for data in manager.get_conditions_as_data():
 
-        condition_model = utils.get_condition_model(condition_type=dataclass.data["condition_type"])
-        condition_object = condition_model(**dataclass.data["condition_data"])
+        condition_object = data.get_unsaved_condition_object()
 
-        if dataclass.mode == "acceptance":
-            field_form, how_to_pass = get_for_acceptance_condition(condition_object, element_id, dataclass)
+        if data.mode == "acceptance":
+            field_form, how_to_pass = get_for_acceptance_condition(condition_object, data)
         else:
-            field_form, how_to_pass = get_for_filter_condition(condition_object, element_id, dataclass)
+            field_form, how_to_pass = get_for_filter_condition(condition_object, data, permission)
 
-        form.update({element_id: field_form})
+        form.update({data.element_id: field_form})
         how_to_pass_overall.append(how_to_pass)
 
     form["how_to_pass_overall"] = ", and ".join(how_to_pass_overall)

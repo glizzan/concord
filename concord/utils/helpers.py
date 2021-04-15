@@ -70,6 +70,14 @@ class Client(object):
         for client in self.get_clients():
             client.set_target(target=target)
 
+    def update(self, *, target=None, actor=None):
+        if target:
+            self.update_target_on_all(target)
+        if actor:
+            self.update_actor_on_all(actor)
+        if not target and not actor:
+            print("Warning: tried to update client with neither target nor actor")
+
     def set_mode_for_all(self, mode):
         for client in self.get_clients():
             client.mode = mode

@@ -8,7 +8,8 @@ def refactor_permissions_and_conditions(apps, schema_editor):
     import json
     from concord.permission_resources.models import PermissionsItem
     from concord.conditionals.models import ConditionManager
-    # Note: tried to load PermissionsItem from apps but raised too many errors
+
+    oldPermissionsItemModel = apps.get_model('permission_resources', 'PermissionsItem')
 
     # first, migrate all conditions
     for manager in ConditionManager.objects.all():
@@ -27,7 +28,9 @@ def refactor_permissions_and_conditions(apps, schema_editor):
 
     for item in PermissionsItem.objects.all():
 
-        configuration = json.loads(item.configuration) if item.configuration else {}
+        old_item = oldPermissionsItemModel.objects.get(pk=item.pk)
+
+        configuration = json.loads(old_item.configuration) if old_item.configuration else {}
 
         if configuration:
 

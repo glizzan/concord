@@ -1,10 +1,8 @@
 """State Changes for conditional models"""
-from django.core.exceptions import ValidationError
-
 from concord.actions.state_changes import BaseStateChange
 from concord.utils.helpers import Client
-from concord.utils.lookups import get_state_change_object
 from concord.conditionals.models import VoteCondition, ApprovalCondition, ConsensusCondition
+from concord.conditionals.utils import validate_condition
 from concord.actions.models import Action
 from concord.permission_resources.models import PermissionsItem
 from concord.utils import field_utils
@@ -31,7 +29,6 @@ class AddConditionStateChange(BaseStateChange):
     condition_data = field_utils.DictField(label="Data for condition", null_value=dict)
     permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
     leadership_type = field_utils.CharField(label="Type of leadership condition is set on")
-    mode = field_utils.CharField(label="Condition mode", null_value="acceptance")
 
     def validate(self, actor, target):
 
@@ -57,55 +54,10 @@ class AddConditionStateChange(BaseStateChange):
                 self.set_validation_error(message="leadership_type must be 'owner' or 'governor'")
                 return False
 
-        ### validate condition_data
-
-        condition_model = Client(actor="system").Conditional.get_condition_class(condition_type=self.condition_type)
-        model_instance = condition_model()
-
-        for field_name, field_value in self.condition_data.items():
-
-            if type(field_value) == str and field_value[:2] == "{{":
-                continue  # don't validate if it's a replaced field
-
-            try:
-                if hasattr(model_instance, "_meta") and hasattr(model_instance._meta, "get_field"):
-                    field_instance = model_instance._meta.get_field(field_name)
-                else:
-                    field_instance = getattr(model_instance, field_name)
-            except AttributeError:
-                self.set_validation_error(message=f"There is no field {field_name} on condition {self.condition_type}")
-                return False
-
-            try:
-                if hasattr(field_instance, "clean"):
-                    field_instance.clean(field_value, model_instance)
-            except ValidationError:
-                self.set_validation_error(message=f"{field_value} is not valid value for {field_name}")
-                return False
-
-        ### validate permission_data
-
-        for permission in self.permission_data:
-
-            state_change_object = get_state_change_object(permission["permission_type"])
-            if condition_model not in state_change_object.get_allowable_targets():
-                message = f"Permission type {permission['permission_type']} cannot be set on {condition_model}"
-                self.set_validation_error(message=message)
-                return False
-
-            if "permission_roles" not in permission and "permission_actors" not in permission:
-                message = f"Must supply either roles or actors to permission {permission['permission_type']}"
-                self.set_validation_error(message=message)
-                return False
-
-            for field_name, field_value in permission.get("permission_configuration", {}):
-                if field_name not in [field.name for field in state_change_object.input_fields]:
-                    message = f"{field_name} is not an input field for {permission['permission_type']}"
-                    self.set_validation_error(message=message)
-                    return False
-                # TODO: check field type specified in change object's InputFields against field_value
-                # (skipping replaced fields)
-
+        is_valid, message = validate_condition(self.condition_type, self.condition_data, self.permission_data, target)
+        if not is_valid:
+            self.set_validation_error(message=message)
+            return is_valid
         return True
 
     def implement(self, actor, target, **kwargs):
@@ -121,9 +73,10 @@ class AddConditionStateChange(BaseStateChange):
             setattr(target, attr_name, manager)
             target.save()
 
-        condition_data = {"condition_type": self.condition_type, "condition_data": self.condition_data,
-                          "permission_data": self.permission_data}
-        manager.add_condition(condition_data, mode=self.mode)
+        condition_dict = self.condition_data if self.condition_data else {}
+        data = {"condition_type": self.condition_type, "condition_data": condition_dict,
+                "permission_data": self.permission_data}
+        manager.add_condition(data_for_condition=data)
         manager.save()
 
         return manager
@@ -143,7 +96,7 @@ class EditConditionStateChange(BaseStateChange):
 
     element_id = field_utils.IntegerField(label="Element ID", required=True)
     condition_data = field_utils.DictField(label="New condition data", null_value=dict)
-    permission_data = field_utils.DictField(label="New permission data", null_value=list)
+    permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
     leadership_type = field_utils.CharField(label="Leadership type to set condition on")
 
     def validate(self, actor, target):
@@ -166,66 +119,23 @@ class EditConditionStateChange(BaseStateChange):
         else:
             condition_manager = target.condition
 
-        condition_element = condition_manager.get_condition_dataclass(self.element_id)
+        element = condition_manager.get_condition_data(self.element_id)
+        is_valid, message = validate_condition(
+            element.condition_type, self.condition_data, self.permission_data, target)
 
-        condition_model = Client(actor="system").Conditional.get_condition_class(
-            condition_type=condition_element.data["condition_type"])
-        model_instance = condition_model()
-
-        ### validate condition_data
-        for field_name, field_value in self.condition_data.items():
-
-            if type(field_value) == str and field_value[:2] == "{{":
-                continue  # don't validate if it's a replaced field
-
-            try:
-                field_instance = model_instance._meta.get_field(field_name)
-            except AttributeError:
-                self.set_validation_error(message=f"There is no field {field_name} on condition {self.condition_type}")
-                return False
-
-            try:
-                field_instance.clean(field_value, model_instance)
-            except ValidationError:
-                self.set_validation_error(message=f"{field_value} is not valid value for {field_name}")
-                return False
-
-        ## validate permission data
-        for permission in self.permission_data:
-
-            state_change_object = get_state_change_object(permission["permission_type"])
-            if condition_model not in state_change_object.get_allowable_targets():
-                message = f"Permission type {permission['permission_type']} cannot be set on {condition_model}"
-                self.set_validation_error(message=message)
-                return False
-
-            if "permission_roles" not in permission and "permission_actors" not in permission:
-                message = f"Must supply either roles or actors to permission {permission['permission_type']}"
-                self.set_validation_error(message=message)
-                return False
-
-            for field_name, field_value in permission.get("permission_configuration", {}):
-                if field_name not in [field.name for field in state_change_object.input_fields]:
-                    message = f"{field_name} is not an input field for {permission['permission_type']}"
-                    self.set_validation_error(message=message)
-                    return False
-                # TODO: check field type specified in change object's InputFields against field_value
-                # (skipping replaced fields)
-
+        if not is_valid:
+            self.set_validation_error(message=message)
+            return is_valid
         return True
 
     def implement(self, actor, target, **kwargs):
 
         attr_name = "condition" if not self.leadership_type else self.leadership_type + "_condition"
         manager = getattr(target, attr_name)
-
-        if self.condition_data:
-            manager.edit_condition_by_key(self.element_id, "condition_data", self.condition_data)
-
-        if self.permission_data:
-            manager.edit_condition_by_key(self.element_id, "permission_data", self.permission_data)
-
+        data = {"condition_data": self.condition_data, "permission_data": self.permission_data}
+        manager.edit_condition(element_id=self.element_id, data_for_condition=data)
         manager.save()
+
         return manager
 
 

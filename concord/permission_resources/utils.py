@@ -1,6 +1,6 @@
 """Permission Resource utilities."""
 
-import logging
+import logging, copy
 from collections import OrderedDict
 
 from concord.utils.lookups import get_default_permissions
@@ -45,7 +45,7 @@ def set_default_permissions(actor, instance):
     """Given an actor, target, and model, set the default permissions associated with that model."""
 
     from concord.utils.helpers import Client
-    client = Client(actor=actor, target=instance)
+    client = Client(actor=actor)
 
     if hasattr(instance, "is_community") and instance.is_community:
         model_type = "community"
@@ -55,9 +55,17 @@ def set_default_permissions(actor, instance):
     default_permissions = get_default_permissions()
 
     for permission in default_permissions.get(model_type, []):
+
         logger.debug(f"Adding permission with parameters {permission} to {instance}")
-        condition_data = permission.pop("condition", None)
-        action, permission = client.PermissionResource.add_permission(**permission)
-        if condition_data:
-            client.update_target_on_all(target=permission)
-            client.Conditional.add_condition(**condition_data)
+        client.update_target_on_all(target=instance)
+
+        if "conditions" in permission:
+            permission_dict = copy.deepcopy(permission)
+            conditions = permission_dict.pop("conditions", [])
+            action, created_permission = client.PermissionResource.add_permission(**permission_dict)
+
+            client.update_target_on_all(target=created_permission)
+            for condition_data in conditions:
+                action, result = client.Conditional.add_condition(**condition_data)
+        else:
+            action, created_permission = client.PermissionResource.add_permission(**permission)

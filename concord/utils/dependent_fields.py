@@ -133,10 +133,10 @@ def replace_fields(*, action, mock_action, context):
 
                 if change_field_name == "permission_data":
                     for index, permission_dict in enumerate(change_field_value):
-                        for dict_key, dict_value in permission_dict.items():
-                            new_value = replacer(dict_value, context)
+                        for perm_key, perm_value in permission_dict.items():
+                            new_value = replacer(perm_value, context)
                             if new_value is not ...:
-                                action.change.permission_data[index][dict_key] = new_value
+                                action.change.permission_data[index][perm_key] = new_value
 
     action.fields_replaced = True  # indicates action has passed through replace_fields and is safe to use
     return action

@@ -95,6 +95,7 @@ class BaseClient(object):
     def change_is_valid(self, change):
         """Returns True if the change passed in is valid, given the Client's actor and target, and False if
         it is not."""
+        result = change.validate(self.actor, self.target)
         if change.validate(self.actor, self.target):
             return True
         return False

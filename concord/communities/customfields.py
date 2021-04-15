@@ -361,6 +361,12 @@ class RoleHandler(ConcordConverterMixin):
 
     # Governors
 
+    def change_governors(self, pks, roles):
+        if pks:
+            self.governors['actors'] = pks
+        if roles:
+            self.governors['roles'] = roles
+
     def add_governor(self, pk):
         """Add governor given pk."""
         if pk not in self.governors['actors']:

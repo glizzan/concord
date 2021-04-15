@@ -23,8 +23,8 @@ class BaseStateChange(ConcordConverterMixin):
     context_keys: List[str] = list()
     is_foundational = False
     section: str = "Miscellaneous"
-    configurable_fields = list()
     allowable_targets = ["all_models"]
+    linked_filters = None
 
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -99,6 +99,7 @@ class BaseStateChange(ConcordConverterMixin):
 
     # Field methods
 
+    # FIXME: delete now, I think?
     @classmethod
     def get_configurable_form_fields(cls):
         """Gets the configurable fields of a change object as form fields."""
@@ -172,8 +173,7 @@ class BaseStateChange(ConcordConverterMixin):
             default_string=cls.descriptive_text["default_string"],
             detail_string=cls.descriptive_text.get("detail_string", ""),
             preposition=cls.descriptive_text.get("preposition", "to"),
-            past_tense=cls.descriptive_text.get("past_tense", None),
-            configurations=cls.descriptive_text.get("configurations", None)
+            past_tense=cls.descriptive_text.get("past_tense", None)
         )
 
     @classmethod
@@ -185,13 +185,8 @@ class BaseStateChange(ConcordConverterMixin):
         return cls._description().preposition
 
     @classmethod
-    def get_uninstantiated_description(cls, configuration=None):
-        return cls._description().description_with_configuration(configuration if configuration else {})
-
-    @classmethod
-    def get_configured_field_text(cls, configuration):
-        """Gets additional text for permissions item instance descriptions from configured fields."""
-        return cls._description().get_configured_field_text(configuration)
+    def get_uninstantiated_description(cls):
+        return cls._description().description_present_tense()
 
     def description_present_tense(self):
         """Returns the description of the state change object, in present tense."""
@@ -364,34 +359,10 @@ class ViewStateChange(BaseStateChange):
         "preposition": "for"
     }
 
-    configurable_fields = ["fields_to_include"]
+    linked_filters = ["LimitedFieldsFilter"]
 
     # Fields
     fields_to_include = field_utils.ListField(label="Fields that can be viewed")
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "fields_to_include" in configuration:
-            if not isinstance(configuration["fields_to_include"], list):
-                field_type = str(type(configuration['fields_to_include']))
-                return False, f"fields_to_include must be type list, not {field_type}"
-            if not all(isinstance(field, str) for field in configuration["fields_to_include"]):
-                return False, "fields_to_include must be a list of strings"
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        '''All configurations must pass for the configuration check to pass.'''
-        configuration = permission.get_configuration()
-        missing_fields = []
-        if "fields_to_include" in configuration:
-            for targeted_field in self.fields_to_include:
-                if targeted_field not in configuration["fields_to_include"]:
-                    missing_fields.append(targeted_field)
-        if missing_fields:
-            return False, f"Cannot view fields {', '.join(missing_fields)}"
-        return True, None
 
     def validate(self, actor, target):
         """Checks if any specified fields are not on the target and, if there are any, returns False."""
@@ -430,39 +401,16 @@ class ApplyTemplateStateChange(BaseStateChange):
         "verb": "apply",
         "past_tense": "applied",
         "default_string": "template",
-        "preposition": "for",
-        "configurations": [("original_creator_only", "if the user is the creator of the template's target")]
+        "preposition": "for"
     }
 
     pass_action = True
-    configurable_fields = ["original_creator_only"]
+    linked_filters = ["CreatorFilter"]
 
     # Fields
     template_model_pk = field_utils.IntegerField(label="PK of Template to apply", required=True)
     supplied_fields = field_utils.DictField(label="Fields to supply when applying template", null_value=dict)
     template_is_foundational = field_utils.BooleanField(label="Template makes foundational changes")
-    original_creator_only = field_utils.BooleanField(label="Only allow original creator")
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        if "original_creator_only" in configuration and configuration['original_creator_only']:
-            if configuration["original_creator_only"] not in [True, False, "True", "False", "true", "false"]:
-                e = f"original_creator_only must be set to True or False, not {configuration['original_creator_only']}"
-                return False, e
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        configuration = permission.get_configuration()
-        if "original_creator_only" in configuration and configuration['original_creator_only']:
-            error_message = "original_creator_only is true, so the actor must have created the target of the template"
-            if hasattr(action.target, "creator") and action.target.creator:
-                if action.actor.pk != action.target.creator.pk:
-                    return False, error_message
-            else:
-                return False, "original_creator_only is set but target does not have a creator"
-        return True, None
 
     def validate(self, actor, target):
 

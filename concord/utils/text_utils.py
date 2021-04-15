@@ -162,7 +162,8 @@ def condition_to_text(condition_change_object):
     # For now, we ignore the configuration in condition_action, and build our text from the permissions_actions
 
     phrases = []
-    for permission in condition_change_object.permission_data:
+    permissions = condition_change_object.condition_data.get("permission_data", [])
+    for permission in permissions:
 
         roles_and_actors_string = roles_and_actors({"roles": permission.get("permission_roles", []),
                                                     "actors": permission.get("permission_actors", [])})
@@ -318,7 +319,7 @@ def mock_action_to_text(action, trigger_action=None):
 def permission_change_to_text(permission):
     """Gets the text description of the change object on a permission."""
     state_change_object = permission.get_state_change_object()
-    return state_change_object.get_uninstantiated_description(permission.get_configuration())
+    return state_change_object.get_uninstantiated_description()
 
 
 def permission_to_text(permission):
@@ -326,8 +327,7 @@ def permission_to_text(permission):
 
     change_obj = permission.get_state_change_object()
 
-    action_str = change_obj.change_description(capitalize=False) + change_obj.get_configured_field_text(
-        permission.get_configuration())
+    action_str = change_obj.change_description(capitalize=False)
 
     if permission.anyone:
         return f"anyone has permission to {action_str}"

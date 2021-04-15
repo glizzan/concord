@@ -1,4 +1,5 @@
 """Utils for conditionals package."""
+from django.core.exceptions import ValidationError
 
 from concord.utils.helpers import Changes
 from concord.utils.text_utils import roles_and_actors
@@ -11,36 +12,148 @@ from concord.permission_resources.models import PermissionsItem
 ### Management Utils ###
 ########################
 
-# Get utils
 
-def get_condition_model(*, condition_type):
+def get_condition_model(condition_type):
     for condition_model in get_all_conditions():
         if condition_model.__name__.lower() == condition_type.lower():
             return condition_model
 
 
-def get_acceptance_condition(*, element_id, manager, condition_dataclass, action):
-    condition_model = get_condition_model(condition_type=condition_dataclass.data["condition_type"])
+def validate_condition_data(model_instance, condition_data):
+
+    if not condition_data: return True, None
+
+    for field_name, field_value in condition_data.items():
+
+        if type(field_value) == str and field_value[:2] == "{{":
+            continue  # don't validate if it's a replaced field
+
+        try:
+            if hasattr(model_instance, "_meta") and hasattr(model_instance._meta, "get_field"):
+                field_instance = model_instance._meta.get_field(field_name)
+            else:
+                field_instance = getattr(model_instance, field_name)
+        except AttributeError:
+            return False, f"There is no field {field_name} on condition {model_instance.__class__}"
+
+        try:
+            if hasattr(field_instance, "clean"):
+                field_instance.clean(field_value, model_instance)
+        except ValidationError:
+            return False, f"{field_value} is not valid value for {field_name}"
+
+    return True, None
+
+
+def validate_permission_data(model_instance, permission_data):
+
+    if not permission_data: return True, None
+
+    for permission in permission_data:
+
+        state_change_object = get_state_change_object(permission["permission_type"])
+        if model_instance.__class__ not in state_change_object.get_allowable_targets():
+            return False, f"Permission type {permission['permission_type']} cannot be set on {model_instance}"
+
+        if "permission_roles" not in permission and "permission_actors" not in permission:
+            return False, f"Must supply either roles or actors to permission {permission['permission_type']}"
+
+    return True, None
+
+
+class ConditionData(object):
+    condition_type: str = None
+    element_id: int = None
+
+    condition_data: dict = None
+    permission_data: dict = None
+
+    def __str__(self):
+        return f"{self.condition_type} ({self.element_id})"
+
+    def __repr__(self):
+        return f"{self.condition_type} ({self.element_id}); " + \
+            f"condition data: {self.condition_data}, permission data: {self.permission_data}"
+
+    def __init__(self, condition_type, element_id, **kwargs):
+        self.condition_type, self.element_id = condition_type, element_id
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        self.condition_data = self.condition_data if self.condition_data else {}
+        self.clean_permission_data()
+
+    @property
+    def mode(self):
+        return "filter" if "Filter" in self.condition_type else "acceptance"
+
+    def serialize(self):
+        new_dict = self.get_fields_as_dict()
+        new_dict.update({"condition_type": self.condition_type, "element_id": self.element_id})
+        return new_dict
+
+    def get_fields_as_dict(self):
+        fields_to_get = ["condition_data"] if self.mode == "filter" else ["condition_data", "permission_data"]
+        return {field: getattr(self, field) for field in fields_to_get}
+
+    def update_data(self, data):
+        for key, value in data.items():
+            setattr(self, key, value)
+
+    def clean_permission_data(self):
+        if self.permission_data:
+            for perm in self.permission_data:
+                if "permission_actors" in perm and perm["permission_actors"] is None:
+                    del(perm["permission_actors"])
+                if "permission_roles" in perm and perm["permission_roles"] is None:
+                    del(perm["permission_roles"])
+
+    def get_unsaved_condition_object(self):
+        model = get_condition_model(self.condition_type)
+        return model(**self.condition_data) if self.condition_data else model()
+
+    def validate(self, change_object):
+
+        model_instance = self.get_unsaved_condition_object()
+
+        if self.mode == "acceptance":
+            is_valid, message = validate_condition_data(model_instance, self.condition_data)
+            if not is_valid:
+                return is_valid, message
+            is_valid, message = validate_permission_data(model_instance, self.permission_data)
+            return is_valid, message
+
+        if self.mode == "filter":
+            return model_instance.validate(change_object)
+
+
+def validate_condition(condition_type, condition_data, permission_data, change_object):
+    return ConditionData(condition_type=condition_type, element_id=None, condition_data=condition_data,
+                         permission_data=permission_data).validate(change_object)
+
+
+# Get utils
+
+def get_acceptance_condition(*, element_id, manager, data, action):
+    condition_model = get_condition_model(condition_type=data.condition_type)
     instances = condition_model.objects.filter(action=action.pk, source=manager.pk, element_id=element_id)
     return instances[0] if instances else None
 
 
-def get_filter_condition(*, condition_data):
+def get_filter_condition(*, data, action):
     for condition in get_filter_conditions():
-        if condition.__name__ == condition_data.data["condition_type"]:
-            return condition(**condition_data.data["condition_data"])
-    raise ValueError(f"No matching filter condition found for {condition_data.data['condition_type']}")
+        if condition.__name__ == data.condition_type:
+            return condition(**data.get_fields_as_dict()["condition_data"])
+    raise ValueError(f"No matching filter condition found for {data.condition_type}")
 
 
 def get_condition_instances(*, manager, action):
     conditions = {}
-    for element_id, condition_dataclass in manager.get_condition_dataclasses().items():
-        if condition_dataclass.mode == "acceptance":
-            condition_instance = get_acceptance_condition(element_id=element_id, manager=manager, action=action,
-                                                          condition_dataclass=condition_dataclass)
-        else:
-            condition_instance = get_filter_condition(condition_data=condition_dataclass)
-        conditions.update({element_id: condition_instance})
+    for data in manager.get_conditions_as_data():
+        if data.mode == "acceptance":
+            instance = get_acceptance_condition(element_id=data.element_id, manager=manager, action=action, data=data)
+        if data.mode == "filter":
+            instance = get_filter_condition(data=data, action=action)
+        conditions.update({data.element_id: instance})
     return conditions
 
 
@@ -48,8 +161,7 @@ def get_condition_status(condition, action):
     if hasattr(condition, "pk"):   # acceptance condition
         return condition.condition_status()
     else:
-        result = condition.condition_status(action)
-        return "approved" if result else "rejected"
+        return condition.condition_status(action)
 
 
 def get_condition_statuses(*, manager, action):
@@ -81,63 +193,82 @@ def waiting_condition_names(*, manager, action):
                       in waiting_conditions(manager=manager, action=action)])
 
 
+def get_condition_target_filter(manager):
+    for data in manager.get_conditions_as_data():
+        if data.mode == "filter":
+            instance = get_filter_condition(data=data, action=None)
+            if instance.__class__.__name__ == "TargetTypeFilter":
+                return instance.target_type
+
 # Create utils
 
 
-def replace_condition_fields(*, condition_dataclass, action):
-    context = {"context": {"action": action}}
-    for field_name, field_value in condition_dataclass.data["condition_data"].items():
-        result = replacer(field_value, context)
-        condition_dataclass.data["condition_data"][field_name] = result if result != ... else field_value
-
-
-def replace_permission_fields(*, condition_dataclass, action):
-    for index, permission in enumerate(condition_dataclass.data["permission_data"]):
-        change_object = get_state_change_object(permission["permission_type"])
-        context = {"context": change_object.all_context_instances(action)}
-        for field_name, field_value in permission.items():
+def replace_condition_fields(*, data, action):
+    if data.condition_data:
+        context = {"context": {"action": action}}
+        for field_name, field_value in data.condition_data.items():
             result = replacer(field_value, context)
-            result = result if result != ... else field_value
-            condition_dataclass.data["permission_data"][index][field_name] = result
+            data.condition_data[field_name] = result if result != ... else field_value
 
 
-def create_condition(*, manager, element_id, condition_dataclass, action):
+def replace_permission_fields(*, data, action):
+    if data.permission_data:
+        for index, permission in enumerate(data.permission_data):
+            change_object = get_state_change_object(permission["permission_type"])
+            context = {"context": change_object.all_context_instances(action)}
+            for field_name, field_value in permission.items():
+                result = replacer(field_value, context)
+                result = result if result != ... else field_value
+                data.permission_data[index][field_name] = result
 
-    replace_condition_fields(condition_dataclass=condition_dataclass, action=action)
-    replace_permission_fields(condition_dataclass=condition_dataclass, action=action)
 
-    if condition_dataclass.mode == "acceptance":
+def create_acceptance_condition(manager, element_id, data, action):
 
-        condition_model = get_condition_model(condition_type=condition_dataclass.data["condition_type"])
-        condition_instance = condition_model(
-            action=action.pk, source=manager.pk, element_id=element_id, **condition_dataclass.data["condition_data"])
+    condition_model = get_condition_model(condition_type=data.condition_type)
+    condition_data = data.condition_data if data.condition_data else {}
+    condition_instance = condition_model(
+        action=action.pk, source=manager.pk, element_id=element_id, **condition_data)
 
-        condition_instance.owner = manager.get_owner()
-        condition_instance.initialize_condition(action.target, condition_dataclass, manager.set_on)
-        condition_instance.save()
+    condition_instance.owner = manager.get_owner()
+    condition_instance.initialize_condition(action.target, data, manager.set_on)
+    condition_instance.save()
 
-        for permission in condition_dataclass.data["permission_data"]:
+    if data.permission_data:
+        for permission in data.permission_data:
             permission_item = PermissionsItem()
             permission_item.set_fields(
                 owner=condition_instance.owner, permitted_object=condition_instance,
                 change_type=permission["permission_type"], actors=permission.get("permission_actors", []),
-                roles=permission.get("permission_roles", []),
-                configuration=permission.get("permission_configuration", {}))
+                roles=permission.get("permission_roles", []))
             permission_item.save()
 
-        return condition_instance
+    return condition_instance
+
+
+def create_condition(*, manager, element_id, data, action):
+
+    # filter conditions should always be created by get_condition_instances, so we can skip them here
+
+    if data.mode == "acceptance":
+
+        replace_condition_fields(data=data, action=action)
+        replace_permission_fields(data=data, action=action)
+
+        return create_acceptance_condition(manager, element_id, data, action)
 
 
 def create_conditions(*, manager, action):
-    created_instances = []
-    for element_id, condition_dataclass in manager.get_condition_dataclasses().items():
-        condition_instance = get_acceptance_condition(element_id=element_id, manager=manager,
-                                                      condition_dataclass=condition_dataclass, action=action)
-        if not condition_instance:
-            instance = create_condition(manager=manager, element_id=element_id,
-                                        condition_dataclass=condition_dataclass, action=action)
-            created_instances.append(instance)
-    return created_instances
+    """Gets already created instances, then loops through the conditions set in the manager. If any are not
+    already created, creates and returns them."""
+
+    created_instances = get_condition_instances(manager=manager, action=action)
+
+    for data in manager.get_conditions_as_data():
+        if not created_instances.get(data.element_id, None):
+            instance = create_condition(manager=manager, element_id=data.element_id, data=data, action=action)
+            created_instances.update({data.element_id: instance})
+
+    return created_instances.values()
 
 
 ##################
@@ -147,8 +278,7 @@ def create_conditions(*, manager, action):
 
 def get_permission_value(permission_data, permission_type, assignee_type):
     """Given permission data in the form of a list of dicts, with keys 'permission_type',
-    'permission_roles', 'permission_actors' and 'permission_configuration, gets the
-    value being looked up."""
+    'permission_roles', 'permission_actors' gets the value being looked up."""
 
     if not permission_data:
         return []

@@ -2,10 +2,9 @@
 
 import logging
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from concord.resources.models import Resource, Item, Comment, SimpleList
+from django.core.exceptions import ValidationError
+from concord.resources.models import Comment, SimpleList
 from concord.actions.state_changes import BaseStateChange
-from concord.utils.lookups import get_all_permissioned_models
 from concord.utils import field_utils
 
 
@@ -22,23 +21,16 @@ class AddCommentStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "add",
-        "default_string": "comment",
-        "configurations": [
-            ("original_creator_only", "if the user is the creator of the object commented on"),
-            ("target_type", "if the target is of type {target_type}")
-        ]
+        "default_string": "comment"
     }
 
     section = "Comment"
     model_based_validation = (Comment, ["text"])
     context_keys = ["commented_object"]
-    configurable_fields = ["original_creator_only", "target_type"]
+    linked_filters = ["TargetTypeFilter", "CreatorOfCommentedFilter"]
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    original_creator_only = field_utils.BooleanField(
-        label="Only the creator of this comment's target can add comment", null_value=False)
-    target_type = field_utils.CharField(label="Add comments only to this type of target")
 
     @classmethod
     def get_context_instances(cls, action):
@@ -47,39 +39,6 @@ class AddCommentStateChange(BaseStateChange):
         commented_object = action.target
         model_name = commented_object.__class__.__name__.lower()
         return {"commented_object": commented_object, model_name: commented_object}
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        original_creator_only = "original_creator_only" in configuration and configuration['original_creator_only']
-        if original_creator_only:
-            if configuration["original_creator_only"] not in [True, False, "True", "False", "true", "false"]:
-                e = f"original_creator_only must be set to True or False, not {configuration['original_creator_only']}"
-                return False, e
-        if "target_type" in configuration and configuration["target_type"]:
-            allowable_types = [mclass.__name__.lower() for mclass in get_all_permissioned_models()] + ["action"]
-            if configuration["target_type"] not in allowable_types:
-                return False, f'target_type must be a permissioned model or action, not {configuration["target_type"]}'
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        configuration = permission.get_configuration()
-        original_creator_only = "original_creator_only" in configuration and configuration['original_creator_only']
-        if original_creator_only:
-            error_message = "original_creator_only is true, so the actor must have created the target of the comment"
-            if hasattr(action.target, "author"):
-                if action.actor.pk != action.target.author:
-                    return False, error_message
-            if hasattr(action.target, "creator"):
-                if action.actor.pk != action.target.creator:
-                    return False, error_message
-        if "target_type" in configuration and configuration["target_type"]:
-            target_type = configuration["target_type"]
-            target_class = action.target.__class__.__name__.lower()
-            if target_class != target_type and not (target_class == "commentcatcher" and target_type == "action"):
-                return False, f'target type {configuration["target_type"]} does not match {target_class}'
-        return True, None
 
     def implement(self, actor, target, **kwargs):
 
@@ -98,60 +57,18 @@ class EditCommentStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "edit",
-        "default_string": "comment",
-        "configurations": [
-            ("commenter_only", "if the user is the commenter"),
-            ("original_creator_only", "if the user is the creator of the object commented on")
-        ]
+        "default_string": "comment"
     }
 
     section = "Comment"
     context_keys = ["comment", "commented_object"]
     model_based_validation = (Comment, ["text"])
-    configurable_fields = ["original_creator_only", "commenter_only"]
+    linked_filters = ["CommenterFilter", "CreatorOfCommentedFilter"]
     allowable_targets = [Comment]
     settable_classes = ["all_models"]
 
     # Fields
     text = field_utils.CharField(label="Comment text", required=True)
-    commenter_only = field_utils.BooleanField(label="Only the commenter can edit the comment", null_value=False)
-    original_creator_only = field_utils.BooleanField(
-        label="Only the creator of this comment's target can add comment", null_value=False)
-
-    @classmethod
-    def return_configured_settings(self, configuration):
-        commenter_only = "commenter_only" in configuration and configuration['commenter_only']
-        original_creator_only = "original_creator_only" in configuration and configuration['original_creator_only']
-        return commenter_only, original_creator_only
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        commenter_only, original_creator_only = cls.return_configured_settings(configuration)
-        if commenter_only:
-            if configuration["commenter_only"] not in [True, False, "True", "False", "true", "false"]:
-                return False, f"commenter_only must be set to True or False, not {configuration['commenter_only']}"
-        if original_creator_only:
-            if configuration["original_creator_only"] not in [True, False, "True", "False", "true", "false"]:
-                e = f"original_creator_only must be set to True or False, not {configuration['original_creator_only']}"
-                return False, e
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        commenter_only, original_creator_only = self.return_configured_settings(permission.get_configuration())
-        if commenter_only:
-            if action.actor.pk != action.target.commenter.pk:
-                return False, "commenter_only is set to true, so the actor must the person who made the comment"
-        if original_creator_only:
-            error_message = "original_creator_only is true, so the actor must have created the target of the comment"
-            if hasattr(action.target.commented_object, "author"):
-                if action.actor.pk != action.target.commented_object.author:
-                    return False, error_message
-            if hasattr(action.target.commented_object, "creator"):
-                if action.actor.pk != action.target.commented_object.creator:
-                    return False, error_message
-        return True, None
 
     @classmethod
     def get_context_instances(cls, action):
@@ -173,58 +90,14 @@ class DeleteCommentStateChange(BaseStateChange):
 
     descriptive_text = {
         "verb": "delete",
-        "default_string": "comment",
-        "configurations": [
-            ("commentor_only", "if the user is the commenter"),
-            ("original_creator_only", "if the user is the creator of the object commented on")
-        ]
+        "default_string": "comment"
     }
 
     section = "Comment"
     context_keys = ["comment", "commented_object"]
-    configurable_fields = ["original_creator_only", "commenter_only"]
+    linked_filters = ["CommenterFilter", "CreatorOfCommentedFilter"]
     allowable_targets = [Comment]
     settable_classes = ["all_models"]
-
-    # Fields
-    commenter_only = field_utils.BooleanField(label="Only the commenter can delete the comment", null_value=False)
-    original_creator_only = field_utils.BooleanField(
-        label="Only the creator of this comment's target can delete comment", null_value=False)
-
-    @classmethod
-    def return_configured_settings(self, configuration):
-        commenter_only = "commenter_only" in configuration and configuration['commenter_only']
-        original_creator_only = "original_creator_only" in configuration and configuration['original_creator_only']
-        return commenter_only, original_creator_only
-
-    @classmethod
-    def check_configuration_is_valid(cls, configuration):
-        """Used primarily when setting permissions, this method checks that the supplied configuration is a valid one.
-        By contrast, check_configuration checks a specific action against an already-validated configuration."""
-        commenter_only, original_creator_only = cls.return_configured_settings(configuration)
-        if commenter_only:
-            if configuration["commenter_only"] not in [True, False, "True", "False", "true", "false"]:
-                return False, f"commenter_only must be set to True or False, not {configuration['commenter_only']}"
-        if original_creator_only:
-            if configuration["original_creator_only"] not in [True, False, "True", "False", "true", "false"]:
-                e = f"original_creator_only must be set to True or False, not {configuration['original_creator_only']}"
-                return False, e
-        return True, ""
-
-    def check_configuration(self, action, permission):
-        commenter_only, original_creator_only = self.return_configured_settings(permission.get_configuration())
-        if commenter_only:
-            if action.actor.pk != action.target.commenter.pk:
-                return False, "commenter_only is set to true, so the actor must the person who made the comment"
-        if original_creator_only:
-            error_message = "original_creator_only is true, so the actor must have created the target of the comment"
-            if hasattr(action.target.commented_object, "author"):
-                if action.actor.pk != action.target.commented_object.author:
-                    return False, error_message
-            if hasattr(action.target.commented_object, "creator"):
-                if action.actor.pk != action.target.commented_object.creator:
-                    return False, error_message
-        return True, None
 
     @classmethod
     def get_context_instances(cls, action):
@@ -241,80 +114,6 @@ class DeleteCommentStateChange(BaseStateChange):
         delete_permissions_on_target(target)
         target.delete()
         return pk
-
-
-#####################################
-### Resource & Item State Changes ###
-#####################################
-
-
-class ChangeResourceNameStateChange(BaseStateChange):
-    """State Change to change a resource name."""
-
-    descriptive_text = {
-        "verb": "change",
-        "default_string": "name of resource",
-        "detail_string": "name of resource to {name}",
-        "preposition": "for"
-    }
-
-    model_based_validation = ("target", ["name"])
-    allowable_targets = [Resource, Item]
-    settable_classes = ["all_models"]
-
-    # Fields
-    name = field_utils.CharField(label="New name", required=True)
-
-    def implement(self, actor, target, **kwargs):
-        target.name = self.name
-        target.save()
-        return target
-
-
-class AddItemStateChange(BaseStateChange):
-    """State Change to add item to a resource."""
-
-    descriptive_text = {
-        "verb": "add",
-        "default_string": "item to resource",
-        "detail_string": "item {name} to resource"
-    }
-
-    model_based_validation = (Item, ["name"])
-    allowable_targets = [Resource]
-    settable_classes = ["all_community_models", Resource]
-
-    # Fields
-    name = field_utils.CharField(label="New name", required=True)
-
-    def implement(self, actor, target, **kwargs):
-        item = Item.objects.create(name=self.name, resource=target, owner=actor.default_community)
-        self.set_default_permissions(actor, item)
-        return item
-
-
-class RemoveItemStateChange(BaseStateChange):
-    """State Change to remove item from a resource."""
-
-    descriptive_text = {
-        "verb": "remove",
-        "default_string": "item from resource",
-        "detail_string": "item {name} from resource",
-        "preposition": "from"
-    }
-
-    allowable_targets = [Item]
-    settable_classes = ["all_community_models", Resource, Item]
-
-    def implement(self, actor, target, **kwargs):
-        try:
-            from concord.permission_resources.utils import delete_permissions_on_target
-            delete_permissions_on_target(target)
-            target.delete()
-            return True
-        except ObjectDoesNotExist as exception:
-            logger.warning(exception)
-            return False
 
 
 ################################

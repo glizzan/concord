@@ -1,6 +1,5 @@
 """Resource models."""
 
-from typing import List
 import json
 
 from django.db import models
@@ -48,46 +47,6 @@ class CommentCatcher(PermissionedModel):
 
     def get_nested_objects(self):
         return [self.get_owner()]
-
-
-class Resource(PermissionedModel):
-    """Simple resource model.
-
-    Will eventually be removed when a more usable resource is added."""
-
-    name = models.CharField(max_length=200)
-
-    def get_nested_objects(self):
-        """Get objects that Resource is nested on, in this case the owner."""
-        return [self.get_owner()]
-
-    # Basics
-
-    def get_name(self):
-        """Gets name of abstract resource."""
-        return self.name
-
-    # Read-only
-
-    def get_items(self) -> List[str]:
-        """Gets item associated with resource."""
-        result = []
-        for item in self.item_set.all():
-            result.append(item.name)
-        return result
-
-
-class Item(PermissionedModel):
-    """Simple item model.
-
-    Will eventually be removed when more usable resource is added."""
-
-    name = models.CharField(max_length=200)
-    resource = models.ForeignKey(Resource, on_delete=models.CASCADE)
-
-    def get_name(self):
-        """Get name of item."""
-        return self.name
 
 
 class SimpleList(PermissionedModel):

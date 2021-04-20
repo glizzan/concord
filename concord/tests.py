@@ -2467,3 +2467,53 @@ class FilterConditionTest(DataTestCase):
         self.client.update(target=second_list)
         action, comment = self.client.Comment.add_comment(text="Weee a comment")
         self.assertEquals(action.status, "rejected")
+
+
+class DocumentTest(DataTestCase):
+
+    def setUp(self):
+
+        self.client = Client(actor=self.users.pinoe)
+
+        # Create a community with roles
+        self.instance = self.client.Community.create_community(name="USWNT")
+        self.client.update_target_on_all(self.instance)
+        self.client.Community.add_role_to_community(role_name="forwards")
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.tobin.pk, self.users.rose.pk])
+        self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
+
+    def test_basic_document_functionality(self):
+
+        # add a document
+        self.assertEquals(len(self.client.Document.get_all_documents_given_owner(self.instance)), 0)
+        action, doc = self.client.Document.add_document(name="What's Up Doc")
+        self.assertEquals(len(self.client.Document.get_all_documents_given_owner(self.instance)), 1)
+        self.assertEquals(doc.name, "What's Up Doc")
+        self.assertEquals(doc.description, "")
+        self.assertEquals(doc.content, "")
+
+        # edit name & description, content remains the default ("")
+        self.client.update_target_on_all(target=doc)
+        action, doc = self.client.Document.edit_document(name="What's up, doc?", description="test document")
+        self.assertEquals(len(self.client.Document.get_all_documents_given_owner(self.instance)), 1)
+        self.assertEquals(doc.name, "What's up, doc?")
+        self.assertEquals(doc.description, "test document")
+        self.assertEquals(doc.content, "")
+
+        # edit content, name and description remain what they were
+        action, doc = self.client.Document.edit_document(content="some content")
+        self.assertEquals(len(self.client.Document.get_all_documents_given_owner(self.instance)), 1)
+        self.assertEquals(doc.name, "What's up, doc?")
+        self.assertEquals(doc.description, "test document")
+        self.assertEquals(doc.content, "some content")
+
+        # edit nothing - invalid
+        action, empty_result = self.client.Document.edit_document()
+        self.assertEquals(action.error_message, "Must edit name, description or content")
+
+        # delete
+        pk = doc.pk
+        action, deleted_pk = self.client.Document.delete_document()
+        self.assertEquals(pk, deleted_pk)
+        self.assertEquals(len(self.client.Document.get_all_documents_given_owner(self.instance)), 0)
+

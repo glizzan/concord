@@ -3,7 +3,7 @@
 from django.contrib.contenttypes.models import ContentType
 
 from concord.actions.client import BaseClient
-from concord.resources.models import Comment, CommentCatcher, SimpleList
+from concord.resources.models import Comment, CommentCatcher, SimpleList, Document
 from concord.resources import state_changes as sc
 
 
@@ -71,4 +71,27 @@ class ListClient(BaseClient):
     def get_all_lists_given_owner(self, owner):
         content_type = ContentType.objects.get_for_model(owner)
         return SimpleList.objects.filter(
+            owner_content_type=content_type, owner_object_id=owner.id)
+
+
+######################
+### DocumentClient ###
+######################
+
+
+class DocumentClient(BaseClient):
+    """Client for interacting with Documents."""
+    app_name = "resources"
+
+    # Read methods
+
+    def get_document(self, pk):
+        return Document.objects.get(pk=pk)
+
+    def get_all_documents(self):
+        return Document.objects.all()
+
+    def get_all_documents_given_owner(self, owner):
+        content_type = ContentType.objects.get_for_model(owner)
+        return Document.objects.filter(
             owner_content_type=content_type, owner_object_id=owner.id)

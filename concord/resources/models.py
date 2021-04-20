@@ -195,3 +195,13 @@ class SimpleList(PermissionedModel):
         for index, row_dict in enumerate(self.get_rows()):
             rows.append({**row_dict, **{"index": index}})
         return columns, rows
+
+
+class Document(PermissionedModel):
+    """Document model."""
+    name = models.CharField(max_length=200)
+    description = models.CharField(max_length=200, default="")
+    content = models.TextField(default="")
+
+    def get_nested_objects(self):
+        return [self.get_owner()]

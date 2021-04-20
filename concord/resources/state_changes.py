@@ -3,7 +3,7 @@
 import logging
 
 from django.core.exceptions import ValidationError
-from concord.resources.models import Comment, SimpleList
+from concord.resources.models import Comment, SimpleList, Document
 from concord.actions.state_changes import BaseStateChange
 from concord.utils import field_utils
 
@@ -372,3 +372,84 @@ class DeleteRowStateChange(BaseStateChange):
         target.delete_row(int(self.index))
         target.save()
         return target
+
+
+##############################
+### Document State Changes ###
+##############################
+
+
+class CreateDocumentStateChange(BaseStateChange):
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "document",
+        "detail_string": "document with {name}"
+    }
+
+    section = "Document"
+    model_based_validation = (Document, ["name", "description", "content"])
+    allowable_targets = ["all_community_models"]
+
+    # Fields
+    name = field_utils.CharField(label="Name", required=True)
+    description = field_utils.CharField(label="Description")
+    content = field_utils.CharField(label="Content")
+
+    def implement(self, actor, target, **kwargs):
+        doc = Document(name=self.name, owner=target.get_owner(), creator=actor)
+        doc.description = self.description if self.description else doc.description
+        doc.content = self.content if self.content else doc.content
+        doc.save()
+        self.set_default_permissions(actor, doc)
+        return doc
+
+
+class EditDocumentStateChange(BaseStateChange):
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "document"
+    }
+
+    section = "Document"
+    model_based_validation = (Document, ["name", "description", "content"])
+    allowable_targets = [Document]
+    settable_classes = ["all_community_models", Document]
+
+    # Fields
+    name = field_utils.CharField(label="Name")
+    description = field_utils.CharField(label="Description")
+    content = field_utils.CharField(label="Content")
+
+    def validate(self, actor, target):
+        if not super().validate(actor=actor, target=target):
+            return False
+        if not self.name and not self.description and not self.content:
+            self.set_validation_error(message="Must edit name, description or content")
+            return False
+        return True
+
+    def implement(self, actor, target, **kwargs):
+        target.name = self.name if self.name else target.name
+        target.description = self.description if self.description else target.description
+        target.content = self.content if self.content else target.content
+        target.save()
+        return target
+
+
+class DeleteDocumentStateChange(BaseStateChange):
+
+    descriptive_text = {
+        "verb": "delete",
+        "default_string": "document"
+    }
+
+    section = "Document"
+    allowable_targets = [Document]
+    settable_classes = ["all_community_models", Document]
+
+    def implement(self, actor, target, **kwargs):
+        pk = target.pk
+        target.delete()
+        return pk

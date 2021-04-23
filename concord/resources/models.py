@@ -53,7 +53,7 @@ class SimpleList(PermissionedModel):
     """Model to store simple lists with arbitrary fields."""
 
     name = models.CharField(max_length=200)
-    description = models.CharField(max_length=200)
+    description = models.CharField(max_length=200, null=True, default="")
     rows = models.TextField(list)
     row_configuration = models.TextField(list)
 

@@ -33,10 +33,6 @@ class BaseStateChange(ConcordConverterMixin):
             if value is not None:
                 setattr(self, field_name, value)
                 continue
-            if field.required:
-                skip_validation = kwargs.get("skip_validation", False)
-                if not skip_validation:
-                    raise Exception(f"Field {field_name} is required")
             if field.null_value:
                 value = field.null_value
                 value = {} if value == dict else value
@@ -142,8 +138,10 @@ class BaseStateChange(ConcordConverterMixin):
                 return True
 
             except ValidationError as error:
-
-                message = f"Error validating value {field_value} for field {field_name}: " + str(error)
+                if error.message in ['This field cannot be null.', 'This field cannot be blank.']:
+                    message = f"Field '{field_name}' cannot be empty."
+                else:
+                    message = f"Error validating value {field_value} for field {field_name}: " + str(error)
                 self.set_validation_error(message=message)
                 return False
 

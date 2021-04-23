@@ -384,7 +384,7 @@ class CreateDocumentStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "add",
         "default_string": "document",
-        "detail_string": "document with {name}"
+        "detail_string": "document with name '{name}'"
     }
 
     section = "Document"

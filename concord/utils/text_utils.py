@@ -300,10 +300,10 @@ def mock_action_to_text(action, trigger_action=None):
             if trigger_action:
                 target_name = trigger_action.target.get_name()
             else:
-                target_name = "the target of the action that triggered the template"
+                target_name = None
         else:
             changed, new_name = replaceable_field_check(action.target)
-            target_name = new_name if changed else action.target
+            target_name = new_name if changed else action.target.get_name()
     else:
         target_name = action.target.get_name()
 
@@ -313,7 +313,12 @@ def mock_action_to_text(action, trigger_action=None):
         print(error)
         description = action.change.change_description()
 
-    return f"{description} {action.change.get_preposition()} {target_name}"
+    if target_name:
+        target_str = f"{action.change.get_preposition()} {target_name}"
+    else:
+        target_str = ""
+
+    return f"{description} {target_str}"
 
 
 def permission_change_to_text(permission):

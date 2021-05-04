@@ -202,7 +202,7 @@ class CommenterFilter(Filter):
     descriptive_name = "the actor wrote the comment"
 
     def check(self, *, action, **kwargs):
-        return action.actor == action.target.commentor, "the actor didn't write the comment"
+        return action.actor == action.target.commenter, "the actor didn't write the comment"
 
 
 class LimitedFieldsFilter(Filter):

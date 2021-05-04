@@ -42,7 +42,7 @@ class AddCommentStateChange(BaseStateChange):
 
     def implement(self, actor, target, **kwargs):
 
-        comment = Comment(text=self.text, commentor=actor)
+        comment = Comment(text=self.text, commenter=actor)
         comment.commented_object = target
         comment.owner = target.get_owner()
         comment.save()

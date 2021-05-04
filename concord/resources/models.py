@@ -18,7 +18,7 @@ class Comment(PermissionedModel):
     commented_object_id = models.PositiveIntegerField()
     commented_object = GenericForeignKey('commented_object_content_type', 'commented_object_id')
 
-    commentor = models.ForeignKey(User, on_delete=models.CASCADE)
+    commenter = models.ForeignKey(User, on_delete=models.CASCADE)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -31,7 +31,7 @@ class Comment(PermissionedModel):
         return self.text[:30] + "..."
 
     def export(self):
-        return {"commentor": self.commentor.username, "text": self.text, "created_at": str(self.created_at),
+        return {"commenter": self.commenter.username, "text": self.text, "created_at": str(self.created_at),
                 "updated_at": str(self.updated_at)}
 
 

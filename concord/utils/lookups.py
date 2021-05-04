@@ -142,7 +142,7 @@ def get_all_templates():
 
 def process_field_type(field):
     """Helper method to inspect field and return appropriate type."""
-    if field.name in ["actor", "commentor", "author"]:
+    if field.name in ["actor", "commenter", "author"]:
         return "ActorField"
     if field.name in ["foundational_permission_enabled", "governing_permission_enabled"]:
         return

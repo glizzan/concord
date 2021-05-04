@@ -162,8 +162,11 @@ class TargetTypeFilter(Filter):
     target_type = field_utils.PermissionedModelField(label="Limit targets to type", required=True)
 
     def check(self, *, action, **kwargs):
+        """Filters action based on target. Handles edge case of action/comment catcher."""
         failure_msg = f"target is not {self.target_type}"
-        return action.target.__class__.__name__.lower() == self.target_type.lower(), failure_msg
+        action_target = action.target.__class__.__name__.lower()
+        action_target = "action" if action_target == "commentcatcher" else action_target
+        return action_target == self.target_type.lower(), failure_msg
 
 
 class CreatorOfCommentedFilter(Filter):

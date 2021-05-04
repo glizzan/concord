@@ -99,6 +99,10 @@ class EditConditionStateChange(BaseStateChange):
     permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
     leadership_type = field_utils.CharField(label="Leadership type to set condition on")
 
+    def is_conditionally_foundational(self, action):
+        """Edit condition is foundational when the condition is owner/governor."""
+        return self.leadership_type in ["owner", "governor"]
+
     def validate(self, actor, target):
 
         if not super().validate(actor=actor, target=target):

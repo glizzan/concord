@@ -6,6 +6,7 @@ from typing import List, Any
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
+from django.db import models, transaction
 
 from concord.actions.models import TemplateModel
 from concord.utils.lookups import get_all_permissioned_models, get_all_community_models
@@ -158,9 +159,16 @@ class BaseStateChange(ConcordConverterMixin):
 
         return self.validate_against_model(target)
 
-    def implement(self, actor, target):
+    def implement(self, actor, target, **kwargs):
         """Method that carries out the change of state."""
         ...
+
+    def implement_action(self, actor, target, action=None):
+        """Wrapper for implement so we can refresh from database and make sure
+        all actions touching this target happen sequentially and consistently."""
+        with transaction.atomic():
+            target = target._meta.model.objects.select_related().select_for_update().get(pk=target.pk)
+            return self.implement(actor, target, action=action)
 
     # Text / description methods
 

@@ -772,6 +772,7 @@ class BasicCommunityTest(DataTestCase):
     def test_add_governor_to_community(self):
         community = self.client.Community.create_community(name="A New Community")
         self.client.Community.set_target(community)
+        action, result = self.client.Community.add_members_to_community(member_pk_list=[self.users.crystal.pk])
         action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.crystal.pk)
         self.assertEquals(community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
@@ -1117,7 +1118,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe is the owner, Sully and Pinoe are governors.
         self.client.Community.set_target(self.community)
-        self.client.Community.add_members_to_community(member_pk_list=[self.users.sully.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.sully.pk, self.users.aubrey.pk])
         action, result = self.client.Community.add_governor_to_community(governor_pk=self.users.sully.pk)
         self.assertEquals(self.community.roles.get_governors(),
             {'actors': [self.users.pinoe.pk, self.users.sully.pk], 'roles': []})
@@ -1148,7 +1149,7 @@ class FoundationalAuthorityTest(DataTestCase):
 
         # Pinoe adds Crystal as owner.  There are now two owners with no conditions.
         self.client.Community.set_target(self.community)
-        self.client.Community.add_members_to_community(member_pk_list=[self.users.crystal.pk])
+        self.client.Community.add_members_to_community(member_pk_list=[self.users.crystal.pk, self.users.christen.pk])
         action, result = self.client.Community.add_owner_to_community(owner_pk=self.users.crystal.pk)
         self.assertEquals(self.community.roles.get_owners(),
             {'actors': [self.users.pinoe.pk, self.users.crystal.pk], 'roles': []})
@@ -1262,6 +1263,7 @@ class RolesetTest(DataTestCase):
         self.client.update_actor_on_all(actor=self.users.pinoe)
         self.client.update_target_on_all(target=self.community)
         action, result = self.client.Community.add_role_to_community(role_name="list_mod")
+
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.client.Community.refresh_target()
         roles = self.client.Community.get_custom_roles()
@@ -1274,7 +1276,9 @@ class RolesetTest(DataTestCase):
         # Pinoe adds Aubrey to the 'namers' role in the community
         action, result = self.client.Community.add_people_to_role(role_name="list_mod",
             people_to_add=[self.users.aubrey.pk])
+
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.community.refresh_from_db()
         roles = self.client.Community.get_roles()
         self.assertCountEqual(roles["list_mod"], [self.users.aubrey.pk])
 
@@ -1292,6 +1296,7 @@ class RolesetTest(DataTestCase):
         action, result = self.client.Community.remove_people_from_role(role_name="list_mod",
             people_to_remove=[self.users.aubrey.pk])
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
+        self.community.refresh_from_db()
         roles = self.client.Community.get_roles()
         self.assertCountEqual(roles["list_mod"], [])
 

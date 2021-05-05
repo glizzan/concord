@@ -114,7 +114,7 @@ class Template(ConcordConverterMixin):
                         validation_errors.append(action_model.change.validation_error)
 
                     # implement and save results to context
-                    result = action_model.change.implement(actor=action_model.actor, target=action_model.target)
+                    result = action_model.change.implement_action(actor=action_model.actor, target=action_model.target)
                     action_model.status = "implemented"
                     action_model.add_log({"approved_through": "part of template"})
                     action_model.save()

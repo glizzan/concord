@@ -7,6 +7,7 @@ import logging
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet
+from django.core.exceptions import ObjectDoesNotExist
 
 from concord.actions.models import Action, TemplateModel
 from concord.utils.lookups import get_all_permissioned_models, get_all_state_changes
@@ -161,10 +162,21 @@ class BaseClient(object):
             raise ValueError(message=action.get_logs())
         return action, result
 
+    def try_target_refresh(self, response):
+        if isinstance(response, tuple) and response[0].status == "implemented":
+            try:
+                self.target.refresh_from_db()
+            except AttributeError:
+                pass
+            except ObjectDoesNotExist:
+                pass
+
     def create_and_take_action(self, change, proposed=False):
         """Creates an action and takes it."""
         action = self.create_action(change)
-        return self.take_action(action, proposed)
+        response = self.take_action(action, proposed)
+        self.try_target_refresh(response)
+        return response
 
     def get_object_given_model_and_pk(self, model, pk):
         """Given a model string and a pk, returns the instance. Only works on Permissioned models."""

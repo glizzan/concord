@@ -231,7 +231,7 @@ def action_pipeline(action, do_create_conditions=True):
         save_logs(matches, action)
 
     if action.status == "approved":
-        result = action.change.implement(actor=action.actor, target=action.target, action=action)
+        result = action.change.implement_action(actor=action.actor, target=action.target, action=action)
         action.status = "implemented"
 
     action.save()

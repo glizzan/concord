@@ -483,7 +483,6 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return True
 
     def implement(self, actor, target, **kwargs):
-        target.refresh_from_db()
         target.roles.add_people_to_role(self.role_name, self.people_to_add)
         target.save()
         return target
@@ -543,7 +542,6 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         return False
 
     def implement(self, actor, target, **kwargs):
-        target.refresh_from_db()
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)
         target.save()
         return target

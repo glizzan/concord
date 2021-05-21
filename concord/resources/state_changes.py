@@ -136,22 +136,12 @@ class AddListStateChange(BaseStateChange):
 
     # Fields
     name = field_utils.CharField(label="Name", required=True)
-    configuration = field_utils.DictField(label="Configuration", required=True)
     description = field_utils.CharField(label="Description")
 
-    def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-        try:
-            SimpleList().validate_configuration(self.configuration)
-            return True
-        except ValidationError as error:
-            self.set_validation_error(message=error.message)
-            return False
-
     def implement(self, actor, target, **kwargs):
-        simple_list = SimpleList(name=self.name, description=self.description, owner=target.get_owner(), creator=actor)
-        simple_list.set_row_configuration(self.configuration)
+        simple_list = SimpleList(name=self.name, owner=target.get_owner(), creator=actor)
+        if self.description:
+            simple_list.description = self.description
         simple_list.save()
         self.set_default_permissions(actor, simple_list)
         return simple_list
@@ -173,30 +163,15 @@ class EditListStateChange(BaseStateChange):
 
     # Fields
     name = field_utils.CharField(label="Name")
-    configuration = field_utils.DictField(label="Configuration")
     description = field_utils.CharField(label="Description")
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-        if not self.name and not self.description and not self.configuration:
-            self.set_validation_error(message="Must supply new name, description, or configuration when editing List.")
-            return False
-        if self.configuration:
-            try:
-                target.validate_configuration(self.configuration)
-                target.adjust_rows_to_new_configuration(self.configuration)
-                return True
-            except ValidationError as error:
-                self.set_validation_error(message=error.message)
-                return False
-        return True
+        if not self.name and not self.description:
+            raise ValidationError("Must supply new name or description when editing List.")
 
     def implement(self, actor, target, **kwargs):
         target.name = self.name if self.name else target.name
         target.description = self.description if self.description else target.description
-        if self.configuration:
-            target.set_row_configuration(self.configuration)
         target.save()
         return target
 
@@ -219,6 +194,82 @@ class DeleteListStateChange(BaseStateChange):
         return pk
 
 
+class AddColumnStateChange(BaseStateChange):
+    """State change to add column to a list."""
+
+    descriptive_text = {
+        "verb": "add",
+        "default_string": "column to list",
+        "detail_string": "column '{column_name}' to list"
+    }
+
+    section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
+
+    # Fields
+    column_name = field_utils.CharField(label="Name of column", required=True)
+    required = field_utils.CharField(label="Is column required")
+    default_value = field_utils.CharField(label="Default value of column")
+
+    def validate(self, actor, target):
+        target.add_column(**self.get_field_data(with_unset=False))
+
+    def implement(self, actor, target, **kwargs):
+        target.add_column(**self.get_field_data(with_unset=False))
+        target.save()
+        return target
+
+
+class EditColumnStateChange(BaseStateChange):
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "column in list",
+        "detail_string": "column '{column_name}' in list"
+    }
+
+    section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
+
+    # Fields
+    column_name = field_utils.CharField(label="Name of column", required=True)
+    new_name = field_utils.CharField(label="New name of column")
+    required = field_utils.CharField(label="Is column required")
+    default_value = field_utils.CharField(label="Default value of column")
+
+    def validate(self, actor, target):
+        target.edit_column(**self.get_field_data(with_unset=False))
+
+    def implement(self, actor, target, **kwargs):
+        target.edit_column(**self.get_field_data(with_unset=False))
+        target.save()
+        return target
+
+
+class DeleteColumnStateChange(BaseStateChange):
+    descriptive_text = {
+        "verb": "delete",
+        "default_string": "column from list",
+        "detail_string": "column '{column_name}' from list"
+    }
+
+    section = "List"
+    allowable_targets = [SimpleList]
+    settable_classes = ["all_community_models", SimpleList]
+
+    # Fields
+    column_name = field_utils.CharField(label="Name of column", required=True)
+
+    def validate(self, actor, target):
+        target.delete_column(self.column_name)
+
+    def implement(self, actor, target, **kwargs):
+        target.delete_column(self.column_name)
+        target.save()
+        return target
+
+
 class AddRowStateChange(BaseStateChange):
     """State Change to add a row to a list."""
 
@@ -234,25 +285,15 @@ class AddRowStateChange(BaseStateChange):
 
     # Fields
     row_content = field_utils.CharField(label="Content of row", required=True)
-    index = field_utils.IntegerField(label="Index of row")
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-        try:
-            target.check_row_against_configuration(self.row_content)
-        except ValidationError as error:
-            self.set_validation_error(message=error.message)
-            return False
-        if self.index and not isinstance(self.index, int):
-            self.set_validation_error(message="Index must be an integer.")
-            return False
-        return True
+        target.add_row(self.row_content)
+        target.refresh_from_db()
 
     def implement(self, actor, target, **kwargs):
-        target.add_row(self.row_content, self.index)
+        unique_id = target.add_row(self.row_content)
         target.save()
-        return target
+        return (target, unique_id)
 
 
 class EditRowStateChange(BaseStateChange):
@@ -261,7 +302,7 @@ class EditRowStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "edit",
         "default_string": "row in list",
-        "detail_string": "row with index {index} to have new content {row_content}"
+        "detail_string": "row with ID {unique_id} to have new content {row_content}"
     }
 
     section = "List"
@@ -269,74 +310,14 @@ class EditRowStateChange(BaseStateChange):
     settable_classes = ["all_community_models", SimpleList]
 
     row_content = field_utils.CharField(label="Content of row", required=True)
-    index = field_utils.IntegerField(label="Index of row", required=True)
+    unique_id = field_utils.CharField(label="Unique ID of row", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-        try:
-            target.check_row_against_configuration(self.row_content)
-        except ValidationError as error:
-            self.set_validation_error(message=error.message)
-            return False
-        if not isinstance(self.index, int):
-            self.set_validation_error(message="Index must be an integer.")
-            return False
-        if not 0 <= self.index < len(target.get_rows()):
-            self.set_validation_error(message=f"Index must be within 0 and {len(target.get_rows())} not {self.index}")
-            return False
-        return True
+        target.edit_row(self.row_content, self.unique_id)
+        target.refresh_from_db()
 
     def implement(self, actor, target, **kwargs):
-        target.edit_row(self.row_content, self.index)
-        target.save()
-        return target
-
-
-class MoveRowStateChange(BaseStateChange):
-    """State Change to move a row in a list."""
-
-    descriptive_text = {
-        "verb": "move",
-        "default_string": "row in list",
-        "detail_string": "row with current index {old_index} to new index {new_index}"
-    }
-
-    section = "List"
-    allowable_targets = [SimpleList]
-    settable_classes = ["all_community_models", SimpleList]
-
-    # Fields
-    old_index = field_utils.IntegerField(label="Old index of row", required=True)
-    new_index = field_utils.IntegerField(label="New index of row", required=True)
-
-    def validate(self, actor, target):
-
-        if not super().validate(actor=actor, target=target):
-            return False
-
-        if not isinstance(self.old_index, int):
-            self.set_validation_error(message="Current index must be an integer.")
-            return False
-
-        if not isinstance(self.new_index, int):
-            self.set_validation_error(message="New index must be an integer.")
-            return False
-
-        if not 0 <= self.old_index < len(target.get_rows()):
-            message = f"Current index must be within 0 and {len(target.get_rows())} not {self.old_index}"
-            self.set_validation_error(message=message)
-            return False
-
-        if not 0 <= self.new_index < len(target.get_rows()):
-            message = f"New index must be within 0 and {len(target.get_rows())} not {self.new_index}"
-            self.set_validation_error(message=message)
-            return False
-
-        return True
-
-    def implement(self, actor, target, **kwargs):
-        target.move_row(self.old_index, self.new_index)
+        target.edit_row(self.row_content, self.unique_id)
         target.save()
         return target
 
@@ -347,7 +328,7 @@ class DeleteRowStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "delete",
         "default_string": "row in list",
-        "detail_string": "row with index {index}"
+        "detail_string": "row with id {unique_id}"
     }
 
     section = "List"
@@ -355,21 +336,10 @@ class DeleteRowStateChange(BaseStateChange):
     settable_classes = ["all_community_models", SimpleList]
 
     # Fields
-    index = field_utils.IntegerField(label="Index of row to delete", required=True)
-
-    def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-        if not isinstance(self.index, int):
-            self.set_validation_error(message="Index must be an integer.")
-            return False
-        if not 0 <= self.index < len(target.get_rows()):
-            self.set_validation_error(message=f"Index must be within 0 and {len(target.get_rows())} not {self.index}")
-            return False
-        return True
+    unique_id = field_utils.CharField(label="Unique ID of row to delete", required=True)
 
     def implement(self, actor, target, **kwargs):
-        target.delete_row(int(self.index))
+        target.delete_row(self.unique_id)
         target.save()
         return target
 
@@ -423,12 +393,8 @@ class EditDocumentStateChange(BaseStateChange):
     content = field_utils.CharField(label="Content")
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
         if not self.name and not self.description and not self.content:
-            self.set_validation_error(message="Must edit name, description or content")
-            return False
-        return True
+            raise ValidationError("Must edit name, description or content")
 
     def implement(self, actor, target, **kwargs):
         target.name = self.name if self.name else target.name

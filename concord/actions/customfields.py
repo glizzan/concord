@@ -109,9 +109,10 @@ class Template(ConcordConverterMixin):
                     action_model = replace_fields(action=action_model, mock_action=mock_action, context=context)
                     action_model.save()
 
-                    is_valid = action_model.change.validate(actor=action_model.actor, target=action_model.target)
+                    is_valid = action_model.change.validate_state_change(
+                        actor=action_model.actor, target=action_model.target)
                     if not is_valid:
-                        validation_errors.append(action_model.change.validation_error)
+                        validation_errors.append(action_model.change.validation_error_message)
 
                     # implement and save results to context
                     result = action_model.change.implement_action(actor=action_model.actor, target=action_model.target)

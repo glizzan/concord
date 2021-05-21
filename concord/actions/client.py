@@ -96,8 +96,8 @@ class BaseClient(object):
     def change_is_valid(self, change):
         """Returns True if the change passed in is valid, given the Client's actor and target, and False if
         it is not."""
-        result = change.validate(self.actor, self.target)
-        if change.validate(self.actor, self.target):
+        result = change.validate_state_change(self.actor, self.target)
+        if result:
             return True
         return False
 
@@ -137,9 +137,9 @@ class BaseClient(object):
                                          change=change)
         else:
             logging.info(f"Invalid action by {self.actor} on target {self.target} with change type {change}: "
-                         + f"{change.validation_error.message}")
+                         + f"{change.validation_error_message}")
             InvalidAction = namedtuple('InvalidAction', ['error_message', 'status'])
-            return InvalidAction(error_message=change.validation_error.message, status="invalid")
+            return InvalidAction(error_message=change.validation_error_message, status="invalid")
 
     def take_action(self, action, proposed=False):
         """If the action is a mock, invalid, or proposed, return without taking it, otherwise take the

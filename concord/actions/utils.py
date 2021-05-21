@@ -107,7 +107,7 @@ def check_permissions_for_action_group(list_of_actions):
 
     for index, action in enumerate(list_of_actions):
 
-        is_valid = action.change.validate(actor=action.actor, target=action.target)
+        is_valid = action.change.validate_state_change(actor=action.actor, target=action.target)
         action.status = "taken"
 
         if is_valid:
@@ -117,7 +117,7 @@ def check_permissions_for_action_group(list_of_actions):
             status_log = info
         else:
             status = "invalid"
-            status_log = action.change.validation_error.message
+            status_log = action.change.validation_error_message
 
         action_log[index] = {"action": action, "status": status, "log": status_log}
 

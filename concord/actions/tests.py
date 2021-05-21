@@ -8,7 +8,7 @@ from concord.resources.client import CommentClient
 class AutoDesciptionTestCase(TestCase):
 
     def setUp(self):
-        self.add_row_state_change = AddRowStateChange(index=3, row_content="new stuff for row")
+        self.add_row_state_change = AddRowStateChange(row_content="new stuff for row")
 
     def test_simple_autodescription(self):
         auto = AutoDescription(verb="add", default_string="comment")
@@ -22,11 +22,11 @@ class AutoDesciptionTestCase(TestCase):
         self.assertEquals(auto.description_past_tense(), "began vote")
 
     def test_with_change_data(self):
-        auto = AutoDescription(verb="add", default_string="row", detail_string="row with index {index} to have new content '{row_content}'")
+        auto = AutoDescription(verb="add", default_string="row", detail_string="row with new content '{row_content}'")
         self.assertEquals(auto.description_present_tense(self.add_row_state_change),
-            "add row with index 3 to have new content 'new stuff for row'")
+            "add row with new content 'new stuff for row'")
         self.assertEquals(auto.description_past_tense(self.add_row_state_change),
-            "added row with index 3 to have new content 'new stuff for row'")
+            "added row with new content 'new stuff for row'")
 
     def test_uninstantiated_description(self):
         self.assertEquals(AddRowStateChange.get_uninstantiated_description(), "add row to list")

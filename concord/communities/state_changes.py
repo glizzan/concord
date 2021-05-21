@@ -1,5 +1,7 @@
 """Community state changes."""
 
+from django.core.exceptions import ValidationError
+
 from concord.actions.state_changes import BaseStateChange
 from concord.utils.text_utils import list_to_text
 from concord.utils.helpers import Client
@@ -49,17 +51,10 @@ class AddMembersStateChange(BaseStateChange):
     member_pk_list = field_utils.ActorListField(label="People to add as members", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if not isinstance(self.member_pk_list, list):
-            self.set_validation_error(message=f"member_pk_list must be list, not {type(self.member_pk_list)}")
-            return False
+            raise ValidationError(f"member_pk_list must be list, not {type(self.member_pk_list)}")
         if not all([isinstance(member_pk, int) for member_pk in self.member_pk_list]):
-            self.set_validation_error(message="member_pk_list must contain only integers")
-            return False
-
-        return True
+            raise ValidationError(message="member_pk_list must contain only integers")
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_members(self.member_pk_list)
@@ -87,9 +82,6 @@ class RemoveMembersStateChange(BaseStateChange):
         """If any of the members to be removed are an owner or governor (either directly, or through
         being in an owner or governor role) the action is not valid."""
 
-        if not super().validate(actor=actor, target=target):
-            return False
-
         governor_list, owner_list = [], []
         for pk in self.member_pk_list:
             is_governor, result = target.roles.is_governor(pk)
@@ -101,9 +93,7 @@ class RemoveMembersStateChange(BaseStateChange):
         if governor_list or owner_list:
             message = f"Cannot remove members as some are owners or governors. Owners: {', '.join(owner_list)}, " + \
                       f"Governors: {', '.join(governor_list)}"
-            self.set_validation_error(message)
-            return False
-        return True
+            raise ValidationError(message)
 
     def implement(self, actor, target, **kwargs):
 
@@ -176,14 +166,8 @@ class AddGovernorRoleStateChange(BaseStateChange):
     role_name = field_utils.RoleField(label="Role to make governor role", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if not target.roles.is_role(self.role_name):
-            self.set_validation_error(message=f"Role {self.role_name} must be role in community to be " +
-                                      "made a governing role")
-            return False
-        return True
+            raise ValidationError(f"Role {self.role_name} must be role in community to be made a governing role")
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_governor_role(self.role_name)
@@ -251,19 +235,16 @@ class RemoveOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """If removing the owner would leave the group with no owners, the action is invalid."""
-        if not super().validate(actor=actor, target=target):
-            return False
 
         if len(target.roles.get_owners()["actors"]) > 1:
-            return True  # community has at least one more actor who is an owner
+            return  # community has at least one more actor who is an owner
 
         for role in target.roles.get_owners()["roles"]:
             actors = target.roles.get_users_given_role(role)
             if len(actors) > 0:
-                return True  # there are actors in owner roles so we don't need this one
+                return  # there are actors in owner roles so we don't need this one
 
-        self.set_validation_error(message="Cannot remove owner as doing so would leave the community without an owner")
-        return False
+        raise ValidationError("Cannot remove owner as doing so would leave the community without an owner")
 
     def implement(self, actor, target, **kwargs):
         target.roles.remove_owner(self.owner_pk)
@@ -287,14 +268,8 @@ class AddOwnerRoleStateChange(BaseStateChange):
     role_name = field_utils.RoleField(label="Role to make owner role", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if not target.roles.is_role(self.role_name):
-            self.set_validation_error(message=f"Role {self.role_name} must be role in community to be " +
-                                      "made an owning role")
-            return False
-        return True
+            raise ValidationError(f"Role {self.role_name} must be role in community to be made an owning role")
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_owner_role(self.role_name)
@@ -320,25 +295,21 @@ class RemoveOwnerRoleStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """If removing the owner role would leave the group with no owners, the action is invalid."""
-        if not super().validate(actor=actor, target=target):
-            return False
 
         if self.role_name not in target.roles.get_owners()["roles"]:
-            self.set_validation_error(f"{self.role_name} is not an owner role in this community")
-            return False
+            raise ValidationError(f"{self.role_name} is not an owner role in this community")
 
         if len(target.roles.get_owners()["actors"]) > 0:
-            return True  # community has individual actor owners so it doesn't need roles
+            return  # community has individual actor owners so it doesn't need roles
 
         for role in target.roles.get_owners()["roles"]:
             if role == self.role_name:
                 continue
             actors = target.roles.get_users_given_role(role)
             if len(actors) > 0:
-                return True  # there are other owner roles with actors specified
+                return  # there are other owner roles with actors specified
 
-        self.set_validation_error(message="Cannot remove this role as doing so would leave the community " +
-                                  "without an owner")
+        raise ValidationError("Cannot remove this role as doing so would leave the community without an owner")
 
     def implement(self, actor, target, **kwargs):
         target.roles.remove_owner_role(self.role_name)
@@ -361,16 +332,10 @@ class AddRoleStateChange(BaseStateChange):
     role_name = field_utils.RoleField(label="Role to add to community", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if self.role_name in ["members", "governors", "owners"]:
-            self.set_validation_error("Role name cannot be one of protected names: members, governors, owners.")
-            return False
+            raise ValidationError("Role name cannot be one of protected names: members, governors, owners.")
         if target.roles.is_role(self.role_name):
-            self.set_validation_error("The role " + self.role_name + " already exists.")
-            return False
-        return True
+            raise ValidationError("The role " + self.role_name + " already exists.")
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_role(self.role_name)
@@ -407,8 +372,6 @@ class RemoveRoleStateChange(BaseStateChange):
     def validate(self, actor, target):
         """A role cannot be deleted without removing it from the permissions it's referenced in, and
         without removing it from owner and governor roles if it is there."""
-        if not super().validate(actor=actor, target=target):
-            return False
 
         role_references = []
         client = Client(actor=actor, target=target)
@@ -417,18 +380,12 @@ class RemoveRoleStateChange(BaseStateChange):
 
         if len(role_references) > 0:
             permission_string = ", ".join([str(permission.pk) for permission in role_references])
-            self.set_validation_error(
-                f"Role cannot be deleted until it is removed from permissions: {permission_string}")
-            return False
+            raise ValidationError(f"Role cannot be deleted until it is removed from permissions: {permission_string}")
 
         if self.role_name in target.roles.get_owners()["roles"]:
-            self.set_validation_error("Cannot remove role with ownership privileges")
-            return False
+            raise ValidationError("Cannot remove role with ownership privileges")
         if self.role_name in target.roles.get_governors()["roles"]:
-            self.set_validation_error("Cannot remove role with governorship privileges")
-            return False
-
-        return True
+            raise ValidationError("Cannot remove role with governorship privileges")
 
     def implement(self, actor, target, **kwargs):
         target.roles.remove_role(self.role_name)
@@ -463,24 +420,16 @@ class AddPeopleToRoleStateChange(BaseStateChange):
         return False
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if not isinstance(self.role_name, str):
-            self.set_validation_error(f"Role must be type str, not {str(type(self.role_name))}")
-            return False
+            raise ValidationError(f"Role must be type str, not {str(type(self.role_name))}")
         if not target.roles.is_role(self.role_name):
-            self.set_validation_error(f"Role {self.role_name} does not exist")
-            return False
+            raise ValidationError(f"Role {self.role_name} does not exist")
         people_already_in_role = []
         for person in self.people_to_add:
             if target.roles.has_specific_role(self.role_name, person):
                 people_already_in_role.append(str(person))
         if people_already_in_role:
-            message = f"Users {list_to_text(people_already_in_role)} already in role {self.role_name}"
-            self.set_validation_error(message)
-            return False
-        return True
+            raise ValidationError(f"Users {list_to_text(people_already_in_role)} already in role {self.role_name}")
 
     def implement(self, actor, target, **kwargs):
         target.roles.add_people_to_role(self.role_name, self.people_to_add)
@@ -517,29 +466,24 @@ class RemovePeopleFromRoleStateChange(BaseStateChange):
         """When removing people from a role, we must check that doing so does not leave us
         without any owners."""
 
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if self.role_name not in target.roles.get_owners()["roles"]:
-            return True  # this isn't an owner role
+            return  # this isn't an owner role
 
         if len(self.people_to_remove) < len(target.roles.get_users_given_role(self.role_name)):
-            return True  # removing these users will not result in empty role
+            return  # removing these users will not result in empty role
 
         if len(target.roles.get_owners()["actors"]) > 0:
-            return True  # community has individual actor owners so it doesn't need roles
+            return  # community has individual actor owners so it doesn't need roles
 
         for role in target.roles.get_owners()["roles"]:
             if role == self.role_name:
                 continue
             actors = target.roles.get_users_given_role(role)
             if len(actors) > 0:
-                return True  # there are other owner roles with actors specified
+                return  # there are other owner roles with actors specified
 
-        self.set_validation_error(message="Cannot remove everyone from this role as " +
-                                  "doing so would leave the community without an owner")
-
-        return False
+        raise ValidationError("Cannot remove everyone from this role as " +
+                              "doing so would leave the community without an owner")
 
     def implement(self, actor, target, **kwargs):
         target.roles.remove_people_from_role(self.role_name, self.people_to_remove)

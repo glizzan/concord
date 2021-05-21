@@ -2,7 +2,7 @@
 
 import logging
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 from concord.actions.state_changes import BaseStateChange
 from concord.permission_resources.models import PermissionsItem
@@ -53,20 +53,12 @@ class AddPermissionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """Need to check that the given permission can be set on the target."""
-
-        if not super().validate(actor=actor, target=target):
-            return False
-
         permission = get_state_change_object(self.change_type)
-
         # check that target is a valid class for the permission to be set on
         if target.__class__ not in permission.get_settable_classes():
             settable_classes_str = ", ".join([str(option) for option in permission.get_settable_classes()])
-            self.set_validation_error(f"This kind of permission cannot be set on target {target} of class "
-                                      + f"{target.__class__}, must be {settable_classes_str}")
-            return False
-
-        return True
+            raise ValidationError(f"This kind of permission cannot be set on target {target} of class " +
+                                  f"{target.__class__}, must be {settable_classes_str}")
 
     def implement(self, actor, target, **kwargs):
 
@@ -118,12 +110,8 @@ class AddActorToPermissionStateChange(BaseStateChange):
     actor = field_utils.ActorField(label="Actor to add", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
         if not isinstance(self.actor, str):
-            self.set_validation_error(message=f"Actor must be passed as string not {type(self.actor)}")
-            return False
-        return True
+            raise ValidationError(f"Actor must be passed as string not {type(self.actor)}")
 
     def implement(self, actor, target, **kwargs):
         target.actors.add_actors(actors=[self.actor])
@@ -148,13 +136,9 @@ class RemoveActorFromPermissionStateChange(BaseStateChange):
     actor = field_utils.ActorField(label="Actor to remove", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
         if target.actors.actor_in_list(int(self.actor)):
-            self.set_validation_error(message=f"Actor {self.actor} is not set as an actor on this " +
-                                      "permission so they cannot be removed.")
-            return False
-        return True
+            raise ValidationError(f"Actor {self.actor} is not set as an actor on this " +
+                                  "permission so they cannot be removed.")
 
     def implement(self, actor, target, **kwargs):
         target.actors.remove_actors(actors=[self.actor])
@@ -179,13 +163,9 @@ class AddRoleToPermissionStateChange(BaseStateChange):
     role_name = field_utils.RoleField(label="Role to add", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
         community_owner = target.get_owner()
         if not community_owner.roles.is_role(self.role_name):
-            self.set_validation_error(message=f"{self.role_name} is not a role and so can't be set on permission")
-            return False
-        return True
+            raise ValidationError(f"{self.role_name} is not a role and so can't be set on permission")
 
     def implement(self, actor, target, **kwargs):
         target.add_role_to_permission(role=self.role_name)
@@ -211,12 +191,8 @@ class RemoveRoleFromPermissionStateChange(BaseStateChange):
     role_name = field_utils.RoleField(label="Role to remove", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
         if not target.roles.role_name_in_list(self.role_name):
-            self.set_validation_error(message=f"{self.role_name} isn't a role on this permission so can't be removed")
-            return False
-        return True
+            raise ValidationError(f"{self.role_name} isn't a role on this permission so can't be removed")
 
     def implement(self, actor, target, **kwargs):
         target.remove_role_from_permission(role=self.role_name)
@@ -241,12 +217,8 @@ class ChangeInverseStateChange(BaseStateChange):
     change_to = field_utils.BooleanField(label="Change inverse field of permission to", required=True)
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
         if not isinstance(self.change_to, bool):
-            self.set_validation_error(message=f"'change_to' must be True or False, not {type(self.change_to)}")
-            return False
-        return True
+            raise ValidationError(f"'change_to' must be True or False, not {type(self.change_to)}")
 
     def implement(self, actor, target, **kwargs):
         target.inverse = self.change_to
@@ -315,15 +287,9 @@ class EditTemplateStateChange(BaseStateChange):
     new_field_data = field_utils.DictField(label="Data to edit", required=True)
 
     def validate(self, actor, target):
-
-        if not super().validate(actor=actor, target=target):
-            return False
-
         result = target.data.update_field(self.template_object_id, self.field_name, self.new_field_data)
         if result.__class__.__name__ == "ValidationError":
-            self.set_validation_error(result.message)
-            return False
-        return True
+            raise result
 
     def implement(self, actor, target, **kwargs):
 

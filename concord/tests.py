@@ -52,12 +52,6 @@ class DataTestCase(TestCase):
         for action in reversed(actions):
             print(action)
 
-    list_resource_params = {
-        "name": "Go USWNT!",
-        "configuration": {"player name": {"required": True}, "team": {"required": False}},
-        "description": "Our favorite players"
-    }
-
 
 class PermissionResourceModelTests(DataTestCase):
 
@@ -229,7 +223,9 @@ class PermissionSystemTest(DataTestCase):
     def test_nested_object_permission_no_conditions(self):
 
         # Pinoe adds a list to the group
-        action, new_list = self.client.List.add_list(**self.list_resource_params)
+        action, new_list = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = new_list
+        self.client.List.add_column_to_list(column_name="player name", required=True)
 
         # Tobin doesn't have permission to do anything to the list
         self.client.update_actor_on_all(actor=self.users.tobin)
@@ -252,7 +248,10 @@ class PermissionSystemTest(DataTestCase):
     def test_nested_object_permission_with_conditions(self):
 
         # Pinoe adds a list to the group & sets permissions for Tobin on both the list & group
-        action, new_list = self.client.List.add_list(**self.list_resource_params)
+        action, new_list = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = new_list
+        self.client.List.add_column_to_list(column_name="player name", required=True)
+
         action, permission_1 = self.client.PermissionResource.add_permission(
             change_type=Changes().Resources.AddRow, actors=[self.users.tobin.pk])
         self.client.update_target_on_all(target=new_list)
@@ -411,7 +410,10 @@ class ConditionalsTest(DataTestCase):
         self.instance = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(target=self.instance)
         self.client.Community.add_members_to_community(member_pk_list=[self.users.rose.pk])
-        action, self.new_list = self.client.List.add_list(**self.list_resource_params)
+
+        action, self.new_list = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = self.new_list
+        self.client.List.add_column_to_list(column_name="player name", required=True)
 
     def test_vote_conditional(self):
 
@@ -555,7 +557,7 @@ class ConditionalsTest(DataTestCase):
         self.assertEquals(Action.objects.get(pk=rose_action_one.pk).status, "implemented")
         self.assertEquals(Action.objects.get(pk=rose_action_two.pk).status, "rejected")
         self.new_list.refresh_from_db()
-        self.assertEquals(self.new_list.get_rows(), [{"player name": "Sam Staab", "team": ""}])
+        self.assertEquals(self.new_list.get_rows(keys=False), [{"player name": "Sam Staab"}])
 
         # Rose tries one more time - Andi can't approve and Crystal can't reject, so the action is waiting
         rose_action_three, result = self.client.List.add_row_to_list(row_content={"player name": "Paige Nielsen"})
@@ -1031,7 +1033,10 @@ class FoundationalAuthorityTest(DataTestCase):
         self.client = Client(actor=self.users.pinoe)
         self.community = self.client.Community.create_community(name="A New Community")
         self.client.update_target_on_all(target=self.community)
-        action, self.resource = self.client.List.add_list(**self.list_resource_params)
+
+        action, self.resource = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = self.resource
+        self.client.List.add_column_to_list(column_name="player name", required=True)
 
     def test_foundational_authority_override_on_community_owned_object(self):
 
@@ -1040,7 +1045,7 @@ class FoundationalAuthorityTest(DataTestCase):
         self.client.update_target_on_all(target=self.resource)
         action, result = self.client.List.add_row_to_list(row_content={"player name": "Sam Staab"})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
-        self.assertEquals(self.resource.get_rows(), [])
+        self.assertEquals(self.resource.get_rows(), {})
 
         # Owner Pinoe adds a specific permission for Aubrey
         self.client.update_actor_on_all(actor=self.users.pinoe)
@@ -1051,7 +1056,7 @@ class FoundationalAuthorityTest(DataTestCase):
         self.client.update_actor_on_all(actor=self.users.aubrey)
         action, result = self.client.List.add_row_to_list(row_content={"player name": "Sam Staab"})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
-        self.assertEquals(self.resource.get_rows(), [{'player name': 'Sam Staab', 'team': ''}])
+        self.assertEquals(self.resource.get_rows(keys=False), [{'player name': 'Sam Staab'}])
 
         # Now switch foundational override.
         self.client.update_actor_on_all(actor=self.users.pinoe)
@@ -1061,7 +1066,7 @@ class FoundationalAuthorityTest(DataTestCase):
         self.client.update_actor_on_all(actor=self.users.aubrey)
         action, result = self.client.List.add_row_to_list(row_content={"player name": "Trinity Rodman"})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
-        self.assertEquals(self.resource.get_rows(), [{'player name': 'Sam Staab', 'team': ''}])
+        self.assertEquals(self.resource.get_rows(keys=False), [{'player name': 'Sam Staab'}])
 
     def test_foundational_authority_override_on_community_owned_object_with_conditional(self):
 
@@ -1212,7 +1217,10 @@ class RolesetTest(DataTestCase):
         self.client = Client(actor=self.users.pinoe)
         self.community = self.client.Community.create_community(name="USWNT")
         self.client.update_target_on_all(target=self.community)
-        action, self.resource = self.client.List.add_list(**self.list_resource_params)
+
+        action, self.resource = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = self.resource
+        self.client.List.add_column_to_list(column_name="player name", required=True)
 
     # Test custom roles
 
@@ -1288,7 +1296,7 @@ class RolesetTest(DataTestCase):
         action, result = self.client.List.add_row_to_list(row_content={"player name": "Trinity Rodman"})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "implemented")
         self.resource.refresh_from_db()
-        self.assertEquals(self.resource.get_rows(), [{'player name': 'Trinity Rodman', 'team': ''}])
+        self.assertEquals(self.resource.get_rows(keys=False), [{'player name': 'Trinity Rodman'}])
 
         # Pinoe removes Aubrey from the namers role in the community
         self.client.update_actor_on_all(actor=self.users.pinoe)
@@ -1306,7 +1314,7 @@ class RolesetTest(DataTestCase):
         action, result = self.client.List.add_row_to_list(row_content={"player name": "Sam Staab"})
         self.assertEquals(Action.objects.get(pk=action.pk).status, "rejected")
         self.resource.refresh_from_db()
-        self.assertEquals(self.resource.get_rows(), [{'player name': 'Trinity Rodman', 'team': ''}])
+        self.assertEquals(self.resource.get_rows(keys=False), [{'player name': 'Trinity Rodman'}])
 
     def test_basic_role_works_with_governor(self):
 
@@ -1588,7 +1596,10 @@ class PermissionedReadTest(DataTestCase):
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
         # Create a resource
-        action, self.resource = self.client.List.add_list(**self.list_resource_params)
+        action, self.resource = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = self.resource
+        self.client.List.add_column_to_list(column_name="player name", required=True)
+        self.client.List.add_column_to_list(column_name="team", required=False)
 
         # create clients for users
         self.tobinClient = Client(actor=self.users.tobin, target=self.resource)
@@ -1612,8 +1623,8 @@ class PermissionedReadTest(DataTestCase):
                 'creator': self.users.pinoe,
                 'name': 'Go USWNT!',
                 'description': 'Our favorite players',
-                'rows': '[]',
-                'row_configuration': '{"player name": {"required": true, "default_value": null}, "team": {"required": false, "default_value": null}}',
+                'rows': '{}',
+                'columns': '{"player name": {"required": true, "default_value": null}, "team": {"required": false, "default_value": null}}',
                 'foundational_permission_enabled': False,
                 'governing_permission_enabled': True,
                 'owner': "USWNT"
@@ -1697,7 +1708,10 @@ class CommentTest(DataTestCase):
         self.client.Community.add_people_to_role(role_name="forwards", people_to_add=[self.users.tobin.pk])
 
         # Create a resource and put it in the community
-        action, self.resource = self.client.List.add_list(**self.list_resource_params)
+        action, self.resource = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+        self.client.List.target = self.resource
+        self.client.List.add_column_to_list(column_name="player name", required=True)
+        self.client.List.add_column_to_list(column_name="team", required=True)
 
         # Create target of comment client
         self.client.update_target_on_all(target=self.resource)
@@ -1759,9 +1773,7 @@ class SimpleListTest(DataTestCase):
 
         # add a list
         self.assertEquals(len(self.client.List.get_all_lists_given_owner(self.instance)), 0)
-        action, list_instance = self.client.List.add_list(name="Awesome Players",
-            configuration={"player name": {"required": True}, "team": {"required": False}},
-            description="Our fave players")
+        action, list_instance = self.client.List.add_list(name="Awesome Players", description="Our fave players")
         self.assertEquals(len(self.client.List.get_all_lists_given_owner(self.instance)), 1)
         self.assertEquals(list_instance.name, "Awesome Players")
 
@@ -1771,35 +1783,45 @@ class SimpleListTest(DataTestCase):
             description="Our fave players!")
         self.assertEquals(list_instance.name, "Awesome Players!")
 
+        # add a column
+        action, list_instance = self.client.List.add_column_to_list(column_name="player name", required=True)
+        action, list_instance = self.client.List.add_column_to_list(column_name="team", required=False)
+
         # add a few rows
         action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Sam Staab"})
         action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Tziarra King"}, index=0)
         action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Bethany Balcer"}, index=1)
         action, list_instance = self.client.List.add_row_to_list(row_content={"player name": "Ifeoma Onumonu"})
-        self.assertEquals(list_instance.get_rows(),
-            [{'player name': 'Tziarra King', 'team': ''},
-            {'player name': 'Bethany Balcer', 'team': ''},
-            {'player name': 'Sam Staab', 'team': ''},
-            {'player name': 'Ifeoma Onumonu', 'team': ''}])
+        list_instance = list_instance[0]
+        self.assertCountEqual(list_instance.get_rows(keys=False),
+            [{'player name': 'Tziarra King', 'team': None},
+            {'player name': 'Bethany Balcer', 'team': None},
+            {'player name': 'Sam Staab', 'team': None},
+            {'player name': 'Ifeoma Onumonu', 'team': None}])
 
         # edit a row
+        unique_id = list_instance.get_unique_id("player name", "Tziarra King")
         action, list_instance = self.client.List.edit_row_in_list(
-            row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, index=0)
+            row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, unique_id=unique_id)
+        unique_id = list_instance.get_unique_id("player name", "Bethany Balcer")
         action, list_instance = self.client.List.edit_row_in_list(
-            row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, index=1)
+            row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, unique_id=unique_id)
+        unique_id = list_instance.get_unique_id("player name", "Sam Staab")
         action, list_instance = self.client.List.edit_row_in_list(
-            row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, index=2)
+            row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, unique_id=unique_id)
+        unique_id = list_instance.get_unique_id("player name", "Ifeoma Onumonu")
         action, list_instance = self.client.List.edit_row_in_list(
-            row_content={'player name': 'Ifeoma Onumonu', "team": "Sky Blue FC"}, index=3)
-        self.assertEquals(list_instance.get_rows(),
+            row_content={'player name': 'Ifeoma Onumonu', "team": "Sky Blue FC"}, unique_id=unique_id)
+        self.assertCountEqual(list_instance.get_rows(keys=False),
             [{'player name': 'Tziarra King', 'team': 'Utah Royals'},
             {'player name': 'Bethany Balcer', 'team': 'OL Reign'},
             {'player name': 'Sam Staab', 'team': 'Washington Spirit'},
             {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
 
         # delete a row
-        action, list_instance = self.client.List.delete_row_in_list(index=1)
-        self.assertEquals(list_instance.get_rows(),
+        unique_id = list_instance.get_unique_id("player name", "Bethany Balcer")
+        action, list_instance = self.client.List.delete_row_in_list(unique_id=unique_id)
+        self.assertCountEqual(list_instance.get_rows(keys=False),
             [{'player name': 'Tziarra King', 'team': 'Utah Royals'},
             {'player name': 'Sam Staab', 'team': 'Washington Spirit'},
             {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
@@ -1807,63 +1829,6 @@ class SimpleListTest(DataTestCase):
         # delete list
         action, deleted_list_pk = self.client.List.delete_list()
         self.assertEquals(len(self.client.List.get_all_lists_given_owner(self.instance)), 0)
-
-    def test_edit_configuration_of_list(self):
-
-        # add a list & rows
-        action, list_instance = self.client.List.add_list(name="Awesome Players",
-            configuration={"player name": {"required": True}, "team": {"required": False}},
-            description="Our fave players")
-        self.client.List.set_target(list_instance)
-        action, list_instance = self.client.List.add_row_to_list(
-            row_content={'player name': 'Tziarra King', "team": "Utah Royals"}, index=0)
-        action, list_instance = self.client.List.add_row_to_list(
-            row_content={'player name': 'Bethany Balcer', "team": "OL Reign"}, index=1)
-        action, list_instance = self.client.List.add_row_to_list(
-            row_content={'player name': 'Sam Staab', "team": "Washington Spirit"}, index=2)
-        action, list_instance = self.client.List.add_row_to_list(
-            row_content={'player name': 'Ifeoma Onumonu'}, index=3)
-
-        # can't make team required since Ify is missing a team and there's no default value
-        action, list_instance = self.client.List.edit_list(
-            configuration={"player name": {"required": True}, "team": {"required": True}})
-        self.assertEquals(action.error_message, 'Need default value for required field team')
-
-        # add default value for Ify, and now we can make team required
-        action, list_instance = self.client.List.edit_row_in_list(
-            row_content={'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}, index=3)
-        action, list_instance = self.client.List.edit_list(
-            configuration={"player name": {"required": True}, "team": {"required": True}})
-        self.assertEquals(action.status, "implemented")
-
-        # now when we try to add a new player without a team it's rejected
-        action, list_instance = self.client.List.add_row_to_list(
-            row_content={'player name': 'Paige Nielson'}, index=3)
-        self.assertEquals(action.error_message,
-            'Field team is required with no default_value, so must be supplied')
-
-        # add position field with default value
-        action, list_instance = self.client.List.edit_list(
-            configuration={"player name": {"required": True}, "team": {"required": True},
-                "position": {"required": True, "default_value": "forward"} })
-        action, list_instance = self.client.List.add_row_to_list(
-            row_content={'player name': 'Paige Nielson', 'team': 'Washington Spirit'}, index=3)
-        self.assertEquals(list_instance.get_rows(),
-            [{'player name': 'Tziarra King', 'team': 'Utah Royals', 'position': 'forward'},
-            {'player name': 'Bethany Balcer', 'team': 'OL Reign', 'position': 'forward'},
-            {'player name': 'Sam Staab', 'team': 'Washington Spirit', 'position': 'forward'},
-            {'player name': 'Paige Nielson', 'team': 'Washington Spirit', 'position': 'forward'},
-            {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC', 'position': 'forward'}])
-
-        # remove position from config and it's gone
-        action, list_instance = self.client.List.edit_list(
-            configuration={"player name": {"required": True}, "team": {"required": True}})
-        self.assertEquals(list_instance.get_rows(),
-            [{'player name': 'Tziarra King', 'team': 'Utah Royals'},
-            {'player name': 'Bethany Balcer', 'team': 'OL Reign'},
-            {'player name': 'Sam Staab', 'team': 'Washington Spirit'},
-            {'player name': 'Paige Nielson', 'team': 'Washington Spirit'},
-            {'player name': 'Ifeoma Onumonu', 'team': 'Sky Blue FC'}])
 
 
 class ConsensusConditionTest(DataTestCase):
@@ -2446,7 +2411,8 @@ class FilterConditionTest(DataTestCase):
 
         # Midge can comment on lists
         self.client.update(target=self.instance, actor=self.users.midge)
-        action, first_list = self.client.List.add_list(**self.list_resource_params)
+        action, first_list = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
+
         self.client.update(target=first_list)
         action, comment = self.client.Comment.add_comment(text="Weee a comment")
         self.assertEquals(action.status, "implemented")
@@ -2461,7 +2427,7 @@ class FilterConditionTest(DataTestCase):
         action, condition = self.client.Conditional.add_condition(
             condition_type="CreatorOfCommentedFilter")
         self.client.update(target=self.instance)
-        action, second_list = self.client.List.add_list(**self.list_resource_params)
+        action, second_list = self.client.List.add_list(name="Go USWNT!", description="Our favorite players")
 
         # Midge can still comment on the list she made
         self.client.update(target=first_list, actor=self.users.midge)

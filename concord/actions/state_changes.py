@@ -6,13 +6,17 @@ from typing import List, Any
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
-from django.db import models, transaction
+from django.db import transaction
 
 from concord.actions.models import TemplateModel
 from concord.utils.lookups import get_all_permissioned_models, get_all_community_models
 from concord.actions.utils import MockAction, AutoDescription
 from concord.utils.converters import ConcordConverterMixin
 from concord.utils import field_utils
+
+
+class UnsetField(object):
+    ...
 
 
 class BaseStateChange(ConcordConverterMixin):
@@ -26,6 +30,7 @@ class BaseStateChange(ConcordConverterMixin):
     section: str = "Miscellaneous"
     allowable_targets = ["all_models"]
     linked_filters = None
+    validation_error_message = ""
 
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -110,54 +115,60 @@ class BaseStateChange(ConcordConverterMixin):
         return [{"value": field_name, "text": field_name, "type": field.__class__.__name__}
                 for field_name, field in cls.get_concord_fields_with_names().items() if field.required]
 
+    def get_field_data(self, with_unset=True):
+        field_data = {}
+        for field_name in self.get_concord_fields_with_names():
+            field = getattr(self, field_name)
+            field_data[field_name] = UnsetField if hasattr(field, "converts_to") else field
+        if with_unset:
+            return field_data
+        return {key: value for key, value in field_data.items() if value != UnsetField}
+
     # validation & implementation methods
 
-    def set_validation_error(self, message):
-        """Helper method so all state changes don't have to import ValidationError"""
-        self.validation_error = ValidationError(message)
+    def validate_state_change(self, actor, target):
+        try:
+            self.basic_validation(actor, target)
+            self.validate_against_model(target)
+            self.validate(actor, target)
+        except ValidationError as error:
+            self.validation_error_message = error.message
+            return False
+        return True
+
+    def validate(self, actor, target):
+        ...  # overwritten for custom validation
+
+    def basic_validation(self, actor, target):
+        """Tests that target is allowable and required fields are supplied."""
+        # Target is allowable
+        if target._meta.model not in self.get_allowable_targets():
+            raise ValidationError(f"Object {str(target)} of type {target._meta.model} is not an allowable target")
+        # Required fields are supplied
+        for field_name, field in self.get_concord_fields_with_names().items():
+            field_data = getattr(self, field_name)
+            if field.required and field_data is None:
+                raise ValidationError(f"Field {field_name} is required")
 
     def validate_against_model(self, target):
 
         if hasattr(self, "model_based_validation"):
 
-            try:
+            model_to_test = target if self.model_based_validation[0] == "target" else self.model_based_validation[0]
+            field_dict = self.get_concord_field_instances()
 
-                model_to_test = target if self.model_based_validation[0] == "target" else self.model_based_validation[0]
-                field_dict = self.get_concord_field_instances()
+            for field_name in self.model_based_validation[1]:
 
-                for field_name in self.model_based_validation[1]:
+                full_field = field_dict[field_name]
+                model_field = model_to_test._meta.get_field(field_name)
+                field_value = getattr(self, field_name)
 
-                    full_field = field_dict[field_name]
-                    model_field = model_to_test._meta.get_field(field_name)
-                    field_value = getattr(self, field_name)
+                if not field_value and not full_field.required:   # if no value but target field can be null
+                    continue
 
-                    if not field_value and not full_field.required:   # if no value but target field can be null
-                        continue
+                model_field.clean(field_value, model_to_test)
 
-                    model_field.clean(field_value, model_to_test)
-
-                return True
-
-            except ValidationError as error:
-                if error.message in ['This field cannot be null.', 'This field cannot be blank.']:
-                    message = f"Field '{field_name}' cannot be empty."
-                else:
-                    message = f"Error validating value {field_value} for field {field_name}: " + str(error)
-                self.set_validation_error(message=message)
-                return False
-
-        return True
-
-    def validate(self, actor, target):
-        """Method to check whether the data provided to a change object in an action is valid for the
-        change object. Optional exclude_fields tells us not to validate the given field."""
-
-        if target._meta.model not in self.get_allowable_targets():
-            self.set_validation_error(
-                message=f"Object {str(target)} of type {target._meta.model} is not an allowable target")
-            return False
-
-        return self.validate_against_model(target)
+            return True
 
     def implement(self, actor, target, **kwargs):
         """Method that carries out the change of state."""
@@ -263,19 +274,15 @@ class ChangeOwnerStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        if not super().validate(actor=actor, target=target): return False
-
         try:
             new_owner = self.get_new_owner()
         except ObjectDoesNotExist:
             message = f"Couldn't find instance of content type {self.new_owner_content_type} & id {self.new_owner_id}"
-            self.set_validation_error(message=message)
-            return False
+            raise ValidationError(message)
+
         if not hasattr(new_owner, "is_community") or not new_owner.is_community:
             message = f"New owner must be a descendant of community model, not {self.new_owner_content_type}"
-            self.set_validation_error(message=message)
-            return False
-        return True
+            raise ValidationError(message)
 
     def implement(self, actor, target, **kwargs):
         target.owner = self.get_new_owner()
@@ -372,18 +379,13 @@ class ViewStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """Checks if any specified fields are not on the target and, if there are any, returns False."""
-        if not super().validate(actor=actor, target=target):
-            return False
-
         missing_fields = []
         if self.fields_to_include:
             for field in self.fields_to_include:
                 if not hasattr(target, field):
                     missing_fields.append(field)
-        if not missing_fields:
-            return True
-        self.set_validation_error(f"Attempting to view field(s) {', '.join(missing_fields)} not on target {target}")
-        return False
+        if missing_fields:
+            raise ValidationError(f"Attempting to view field(s) {', '.join(missing_fields)} not on target {target}")
 
     def implement(self, actor, target, **kwargs):
         """Gets data from specified fields, or from all fields, and returns as dictionary."""
@@ -420,22 +422,17 @@ class ApplyTemplateStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        if not super().validate(actor=actor, target=target):
-            return False
-
         # check template_model_pk is valid
         template = TemplateModel.objects.filter(pk=self.template_model_pk)
         if not template:
-            self.set_validation_error(message=f"No template in database with ID {self.template_model_pk}")
-            return False
+            raise ValidationError(f"No template in database with ID {self.template_model_pk}")
 
         # check that supplied fields match template's siupplied fields
         needed_field_keys = set([key for key, value in template[0].get_supplied_fields().items()])
         supplied_field_keys = set([key for key, value in self.supplied_fields.items()])
         if needed_field_keys - supplied_field_keys:
             missing_fields = ', '.join(list(needed_field_keys - supplied_field_keys))
-            self.set_validation_error(f"Template needs values for fields {missing_fields}")
-            return False
+            raise ValidationError(f"Template needs values for fields {missing_fields}")
 
         # attempt to apply actions (but rollback commit regardless)
         mock_action = MockAction(actor=actor, target=target, change=self)
@@ -443,10 +440,7 @@ class ApplyTemplateStateChange(BaseStateChange):
             actor=actor, target=target, trigger_action=mock_action, supplied_fields=self.supplied_fields,
             rollback=True)
         if "errors" in result:
-            self.set_validation_error(f"Template errors: {'; '.join([error.message for error in result['errors']])}")
-            return False
-
-        return True
+            raise ValidationError(f"Template errors: {'; '.join([error for error in result['errors']])}")
 
     def implement(self, actor, target, **kwargs):
         """Implements the given template, relies on logic in apply_template."""

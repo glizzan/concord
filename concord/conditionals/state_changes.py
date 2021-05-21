@@ -1,4 +1,7 @@
 """State Changes for conditional models"""
+
+from django.core.exceptions import ValidationError
+
 from concord.actions.state_changes import BaseStateChange
 from concord.utils.helpers import Client
 from concord.conditionals.models import VoteCondition, ApprovalCondition, ConsensusCondition
@@ -32,33 +35,23 @@ class AddConditionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if not self.condition_type:
-            self.set_validation_error(message="condition_type cannont be None")
-            return False
+            raise ValidationError("condition_type cannont be None")
 
         if not Client().Conditional.is_valid_condition_type(self.condition_type):
-            message = f"condition_type must be a valid condition class not {self.condition_type}"
-            self.set_validation_error(message=message)
-            return False
+            raise ValidationError(f"condition_type must be a valid condition class not {self.condition_type}")
 
         if hasattr(target, "is_community") and target.is_community:
 
             if not self.leadership_type:
-                self.set_validation_error(message="leadership_type cannot be None")
-                return False
+                raise ValidationError("leadership_type cannot be None")
 
             if self.leadership_type not in ["owner", "governor"]:
-                self.set_validation_error(message="leadership_type must be 'owner' or 'governor'")
-                return False
+                raise ValidationError("leadership_type must be 'owner' or 'governor'")
 
         is_valid, message = validate_condition(self.condition_type, self.condition_data, self.permission_data, target)
         if not is_valid:
-            self.set_validation_error(message=message)
-            return is_valid
-        return True
+            raise ValidationError(message)
 
     def implement(self, actor, target, **kwargs):
 
@@ -105,18 +98,13 @@ class EditConditionStateChange(BaseStateChange):
 
     def validate(self, actor, target):
 
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if hasattr(target, "is_community") and target.is_community:
 
             if not self.leadership_type:
-                self.set_validation_error(message="leadership_type cannot be None")
-                return False
+                raise ValidationError("leadership_type cannot be None")
 
             if self.leadership_type not in ["owner", "governor"]:
-                self.set_validation_error(message="leadership_type must be 'owner' or 'governor'")
-                return False
+                raise ValidationError("leadership_type must be 'owner' or 'governor'")
 
         if self.leadership_type:
             condition_manager = getattr(target, self.leadership_type + "_condition")
@@ -126,11 +114,8 @@ class EditConditionStateChange(BaseStateChange):
         element = condition_manager.get_condition_data(self.element_id)
         is_valid, message = validate_condition(
             element.condition_type, self.condition_data, self.permission_data, target)
-
         if not is_valid:
-            self.set_validation_error(message=message)
-            return is_valid
-        return True
+            raise ValidationError(message)
 
     def implement(self, actor, target, **kwargs):
 
@@ -160,15 +145,8 @@ class RemoveConditionStateChange(BaseStateChange):
     leadership_type = field_utils.CharField(label="Leadership type to remove condition from")
 
     def validate(self, actor, target):
-
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if hasattr(target, "is_community") and target.is_community and not self.leadership_type:
-            self.set_validation_error(message="leadership_type cannot be None")
-            return False
-
-        return True
+            raise ValidationError("leadership_type cannot be None")
 
     def implement(self, actor, target, **kwargs):
 
@@ -209,19 +187,12 @@ class AddVoteStateChange(BaseStateChange):
         b) if the vote is abstain, abstentions are allowed
         """
 
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if self.vote not in ["yea", "nay", "abstain"]:
-            self.set_validation_error(f"Vote type must be 'yea', 'nay' or 'abstain', not {self.vote}")
-            return False
+            raise ValidationError(f"Vote type must be 'yea', 'nay' or 'abstain', not {self.vote}")
         if target.has_voted(actor):
-            self.set_validation_error("Actor may only vote once")
-            return False
+            raise ValidationError("Actor may only vote once")
         if not target.allow_abstain and self.vote == "abstain":
-            self.set_validation_error("Actor abstained but this vote does not allow abstentions.")
-            return False
-        return True
+            raise ValidationError("Actor abstained but this vote does not allow abstentions.")
 
     def implement(self, actor, target, **kwargs):
         target.add_vote(self.vote)
@@ -248,8 +219,6 @@ class ApproveStateChange(BaseStateChange):
     allowable_targets = [ApprovalCondition]
 
     def validate(self, actor, target):
-        if not super().validate(actor=actor, target=target):
-            return False
 
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:
@@ -257,10 +226,7 @@ class ApproveStateChange(BaseStateChange):
 
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
-            self.set_validation_error("Self approval is not allowed.")
-            return False
-
-        return True
+            raise ValidationError("Self approval is not allowed.")
 
     def implement(self, actor, target, **kwargs):
         target.approve()
@@ -284,8 +250,6 @@ class RejectStateChange(BaseStateChange):
     def validate(self, actor, target):
         """Checks if actor is the same user who sent the action that triggered the condition
         and, unless self approval is allowed, rejects them as invalid."""
-        if not super().validate(actor=actor, target=target):
-            return False
 
         # If approval condition allows self approval, we can simply return True here.
         if target.self_approval_allowed:
@@ -293,10 +257,7 @@ class RejectStateChange(BaseStateChange):
 
         action = Action.objects.get(pk=target.action)
         if action.actor == actor:
-            self.set_validation_error("Actor cannot approve or reject their own action.")
-            return False
-
-        return True
+            raise ValidationError("Actor cannot approve or reject their own action.")
 
     def implement(self, actor, target, **kwargs):
         target.reject()
@@ -325,15 +286,9 @@ class RespondConsensusStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """Checks that the actor is a participant."""
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if self.response not in target.response_choices:
-            self.set_validation_error(
+            raise ValidationError(
                 f"Response must be one of {', '.join(target.response_choices)}, not {self.response}")
-            return False
-
-        return True
 
     def implement(self, actor, target, **kwargs):
         target.add_response(actor, self.response)
@@ -355,14 +310,8 @@ class ResolveConsensusStateChange(BaseStateChange):
 
     def validate(self, actor, target):
         """Checks that the actor is a participant."""
-        if not super().validate(actor=actor, target=target):
-            return False
-
         if not target.ready_to_resolve():
-            self.set_validation_error("The minimum duration of discussion has not yet passed.")
-            return False
-
-        return True
+            raise ValidationError("The minimum duration of discussion has not yet passed.")
 
     def implement(self, actor, target, **kwargs):
         target.resolved = True

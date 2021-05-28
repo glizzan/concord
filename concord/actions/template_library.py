@@ -61,6 +61,14 @@ class TemplateLibraryObject(metaclass=ABCMeta):
         client.set_mode_for_all("mock")
         return client
 
+    def get_metacommunity(self):
+        """Gets or creates the meta-community in the database."""
+        client = self.get_client()
+        try:
+            return client.Community.get_community(community_name="Kybern Template Community")
+        except ObjectDoesNotExist:
+            return client.Community.create_community(name="Kybern Template Community")
+
     def create_template_model(self):
         """Creates the model in DB given above."""
         if self.name is None:
@@ -77,7 +85,7 @@ class TemplateLibraryObject(metaclass=ABCMeta):
         supplied_fields = json.dumps(self.supplied_fields if self.supplied_fields else {})
         t = TemplateModel.objects.create(
             template_data=template_data, user_description=self.get_description(), scopes=scopes,
-            name=self.name, supplied_fields=supplied_fields, owner=self.get_superuser())
+            name=self.name, supplied_fields=supplied_fields, owner=self.get_metacommunity())
         return t
 
 

@@ -60,8 +60,9 @@ class BaseClient(object):
                 change_name = state_change.change_description(capitalize=False).strip(" ").replace(" ", "_")
                 if change_name == name:
                     def state_change_function(**kwargs):
+                        proposed = kwargs.get("proposed", None)
                         change = state_change(**kwargs)
-                        return self.create_and_take_action(change)
+                        return self.create_and_take_action(change, proposed)
                     return state_change_function
 
     def set_target(self, target=None, target_pk=None, target_ct=None):
@@ -141,7 +142,7 @@ class BaseClient(object):
             InvalidAction = namedtuple('InvalidAction', ['error_message', 'status'])
             return InvalidAction(error_message=change.validation_error_message, status="invalid")
 
-    def take_action(self, action, proposed=False):
+    def take_action(self, action, proposed=None):
         """If the action is a mock, invalid, or proposed, return without taking it, otherwise take the
         action."""
         if self.mode == "mock":
@@ -153,7 +154,8 @@ class BaseClient(object):
             return action, None
 
         if proposed:
-            action.status = "proposed"
+            action.status = proposed
+            action.save()
             return action, None
 
         action.status = "taken"
@@ -171,17 +173,18 @@ class BaseClient(object):
             except ObjectDoesNotExist:
                 pass
 
-    def create_and_take_action(self, change, proposed=False):
+    def create_and_take_action(self, change, proposed=None):
         """Creates an action and takes it."""
         action = self.create_action(change)
         response = self.take_action(action, proposed)
-        self.try_target_refresh(response)
+        if not proposed:
+            self.try_target_refresh(response)
         return response
 
     def get_object_given_model_and_pk(self, model, pk):
         """Given a model string and a pk, returns the instance. Only works on Permissioned models."""
         for permissioned_model in get_all_permissioned_models():
-            if permissioned_model.__name__.lower() == model:
+            if permissioned_model.__name__.lower() == model.lower():
                 return permissioned_model.objects.get(pk=pk)
 
     def set_default_permissions(self, created_model):
@@ -267,9 +270,10 @@ class ActionClient(BaseClient):
         if not action and not pk:
             logger.warn("Take_action called with neither action nor pk")
         action = action if action else self.get_action_given_pk(pk=pk)
-        if action.status in ["created", "proposed"]:
+        if action.status in ["created", "propose-vol"]:
             action.status = "taken"
         action_pipeline(action)
+        return action
 
 
 class TemplateClient(BaseClient):

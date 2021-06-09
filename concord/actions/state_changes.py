@@ -45,6 +45,9 @@ class BaseStateChange(ConcordConverterMixin):
                 value = [] if value == list else value
             setattr(self, field_name, value)
 
+    def short_name(self):
+        return self.__class__.__name__[:-11]
+
     def serialize_fields(self):
         fields = {}
         for field_name, field in self.get_concord_fields_with_names().items():

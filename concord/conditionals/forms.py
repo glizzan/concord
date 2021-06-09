@@ -91,7 +91,7 @@ def get_for_filter_condition(condition_object, data, permission):
 
 def condition_manager_form(manager, permission):
 
-    form = {}
+    form = {"conditions": {}}
     how_to_pass_overall = []
 
     for data in manager.get_conditions_as_data():
@@ -103,7 +103,7 @@ def condition_manager_form(manager, permission):
         else:
             field_form, how_to_pass = get_for_filter_condition(condition_object, data, permission)
 
-        form.update({data.element_id: field_form})
+        form["conditions"].update({data.element_id: field_form})
         how_to_pass_overall.append(how_to_pass)
 
     form["how_to_pass_overall"] = ", and ".join(how_to_pass_overall)

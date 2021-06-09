@@ -121,6 +121,8 @@ def replace_fields(*, action, mock_action, context):
             for change_field_name, change_field in value.get_concord_field_instances().items():
 
                 change_field_value = getattr(value, change_field_name)
+                if not change_field_value:
+                    continue
                 new_value = replacer(change_field_value, context)
 
                 if new_value is not ...:

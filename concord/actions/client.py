@@ -40,6 +40,18 @@ class BaseClient(object):
         self.actor = actor
         self.target = target
 
+    def __getattribute__(self, name):
+        """Helper method to help debug when getattribute is erroring, switch True to False
+        to silence."""
+        if False:
+            try:
+                return object.__getattribute__(self, name)
+            except Exception as error:
+                print(f"Error when trying __getattribute {name} on {self}: {error} ")
+                raise error
+        else:
+            return object.__getattribute__(self, name)
+
     def __getattr__(self, name):
         """Getattr is only called if __getattribute__ fails with an attribute error. If you expect this to be called but
         it isn't, check that however you're calling it will fail otherwise."""
@@ -48,6 +60,15 @@ class BaseClient(object):
             return state_change_function
         raise AttributeError(f"No attribute {name} on {self}")
 
+    def match_state_change_app(self, state_change):
+        if state_change.__name__ == "BaseStateChange":
+            return False
+        if state_change.__module__[:8] == "concord.":
+            if state_change.__module__[:19] == "concord.communities":
+                return True
+            return f".{self.app_name}." in state_change.__module__
+        return f"{self.app_name}." in state_change.__module__
+
     def get_state_change_function(self, name):
         """This method, which should be called only within getattr by the client, allows us to instantiate state
         changes and create/take actions with them from the client without having to explicitly define methods for
@@ -55,15 +76,14 @@ class BaseClient(object):
         the state change, and the client that will be used to create and take the action."""
         if self.app_name:
             for state_change in get_all_state_changes():
-                if state_change.__name__ == "BaseStateChange":
-                    continue
-                change_name = state_change.change_description(capitalize=False).strip(" ").replace(" ", "_")
-                if change_name == name:
-                    def state_change_function(**kwargs):
-                        proposed = kwargs.get("proposed", None)
-                        change = state_change(**kwargs)
-                        return self.create_and_take_action(change, proposed)
-                    return state_change_function
+                if self.match_state_change_app(state_change):
+                    change_name = state_change.change_description(capitalize=False).strip(" ").replace(" ", "_")
+                    if change_name == name:
+                        def state_change_function(**kwargs):
+                            proposed = kwargs.get("proposed", None)
+                            change = state_change(**kwargs)
+                            return self.create_and_take_action(change, proposed)
+                        return state_change_function
 
     def set_target(self, target=None, target_pk=None, target_ct=None):
         """Sets target of the client. Accepts either a target model or the target's pk and ct and fetches,
@@ -77,7 +97,10 @@ class BaseClient(object):
         else:
             raise BaseException("Must supply target or target_pk and target_ct.")
         if not hasattr(self.target, "is_permissioned_model") or not self.target.is_permissioned_model:
-            raise BaseException(f"Target {self.target} must be a permissioned model.")
+            if self.target.__class__.__name__ == "Action":
+                print("Warning: using an action as target, this should only be done in rare circumstances")
+            else:
+                raise BaseException(f"Target {self.target} must be a permissioned model.")
 
     def get_target(self):
         """Gets the target of the client."""
@@ -181,11 +204,14 @@ class BaseClient(object):
             self.try_target_refresh(response)
         return response
 
-    def get_object_given_model_and_pk(self, model, pk):
+    def get_object_given_model_and_pk(self, model, pk, include_actions=False):
         """Given a model string and a pk, returns the instance. Only works on Permissioned models."""
         for permissioned_model in get_all_permissioned_models():
             if permissioned_model.__name__.lower() == model.lower():
                 return permissioned_model.objects.get(pk=pk)
+        if include_actions:
+            if model.lower() == "action":
+                return Action.objects.get(pk=pk)
 
     def set_default_permissions(self, created_model):
         """Gets sidewide default permissions and sets those corresponding to the given model, using
@@ -219,6 +245,8 @@ class ActionClient(BaseClient):
             The target that the change will be implemented on. Optional, but required for many
             Client methods.
     """
+
+    app_name = "actions"
 
     # Read only
 
@@ -288,6 +316,8 @@ class TemplateClient(BaseClient):
             Client methods.
     """
 
+    app_name = "actions"
+
     # Read-only methods
 
     def get_template(self, pk):
@@ -331,3 +361,4 @@ class TemplateClient(BaseClient):
         action.template_info = description
         action.save()
         return action, result
+

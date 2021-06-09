@@ -164,10 +164,10 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
             role_name="board", people_to_add="{{supplied_fields.initial_board_members}}")
 
         # Step 3: make 'board' role a governorship role
-        action_3 = client.Community.add_governor_role_to_community(role_name="board")
+        action_3 = client.Community.change_governors_of_community(roles_to_add=["board"])
 
         # Step 4: make members an ownership role
-        action_4 = client.Community.add_owner_role_to_community(role_name="members")
+        action_4 = client.Community.change_owners_of_community(roles_to_add=["members"])
 
         # Step 5: add vote condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.AddVote, "permission_roles": ["owners"]}]
@@ -226,10 +226,10 @@ class CommunityCoreTeamTemplate(TemplateLibraryObject):
             role_name="core team", people_to_add="{{supplied_fields.initial_core_team_members}}")
 
         # Step 3: make 'core team' role an ownership role
-        action_3 = client.Community.add_owner_role_to_community(role_name="core team")
+        action_3 = client.Community.change_owners_of_community(roles_to_add=["core team"])
 
         # Step 4: make 'core team' role an governorship role
-        action_4 = client.Community.add_governor_role_to_community(role_name="core team")
+        action_4 = client.Community.change_governors_of_community(roles_to_add=["core team"])
 
         # Step 5: add approval condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.Approve, "permission_roles": ["core team"]},
@@ -282,7 +282,7 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
         action_2.target = "{{context.action.target}}"
 
         # Step 3: make 'voting member' role an ownership role
-        action_3 = client.Community.add_owner_role_to_community(role_name="voting members")
+        action_3 = client.Community.change_owners_of_community(roles_to_add=["voting members"])
         action_3.target = "{{context.action.target}}"
 
         # Step 4: add vote condition to ownership role

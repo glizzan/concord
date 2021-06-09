@@ -107,212 +107,96 @@ class RemoveMembersStateChange(BaseStateChange):
         return target
 
 
-class AddGovernorStateChange(BaseStateChange):
-    """State change to add governor to Community."""
+class ChangeGovernorsStateChange(BaseStateChange):
+    """State change to add or remove governors from Community."""
 
     descriptive_text = {
-        "verb": "add",
-        "default_string": "governor to community",
-        "detail_string": "{governor_pk} as governor of community"
+        "verb": "change",
+        "default_string": "governors of community"
     }
 
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models"]
 
-    governor_pk = field_utils.ActorField(label="Person to add as governor", required=True)
+    roles_to_add = field_utils.ActorField(label="Roles to add")
+    roles_to_remove = field_utils.ActorField(label="Roles to remove")
+    actors_to_add = field_utils.ActorField(label="People to add")
+    actors_to_remove = field_utils.ActorField(label="People to remove")
 
-    def implement(self, actor, target, **kwargs):
-        target.roles.add_governor(self.governor_pk)
-        target.save()
+    def make_changes(self, actor, target):
+
+        if self.actors_to_add:
+            [target.roles.add_governor(pk) for pk in self.actors_to_add]
+
+        if self.actors_to_remove:
+            [target.roles.remove_governor(pk) for pk in self.actors_to_remove]
+
+        if self.roles_to_add:
+            [target.roles.add_governor_role(role) for role in self.roles_to_add]
+
+        if self.roles_to_remove:
+            [target.roles.remove_governor_role(role) for role in self.roles_to_remove]
+
         return target
-
-
-class RemoveGovernorStateChange(BaseStateChange):
-    """State change to remove governor from Community."""
-
-    descriptive_text = {
-        "verb": "remove",
-        "default_string": "governor from community",
-        "detail_string": "{governor_pk} as governor of community",
-        "preposition": "from"
-    }
-
-    section = "Leadership"
-    is_foundational = True
-    allowable_targets = ["all_community_models"]
-
-    governor_pk = field_utils.ActorField(label="Person to remove as governor", required=True)
-
-    def implement(self, actor, target, **kwargs):
-        target.roles.remove_governor(self.governor_pk)
-        target.save()
-        return target
-
-
-class AddGovernorRoleStateChange(BaseStateChange):
-    """State change to add governor role to Community."""
-
-    descriptive_text = {
-        "verb": "add",
-        "default_string": "governor role to community",
-        "detail_string": "governor role {role_name} to community",
-    }
-
-    is_foundational = True
-    section = "Leadership"
-    allowable_targets = ["all_community_models"]
-
-    role_name = field_utils.RoleField(label="Role to make governor role", required=True)
 
     def validate(self, actor, target):
-        if not target.roles.is_role(self.role_name):
-            raise ValidationError(f"Role {self.role_name} must be role in community to be made a governing role")
+        if not self.roles_to_add and not self.roles_to_remove and \
+            not self.actors_to_add and not self.actors_to_remove:
+            raise ValidationError("Must add or remove at least one individual governor or governing role.")
+        target = self.make_changes(actor, target)
+        target.roles.validate_role_handler()
+        target.refresh_from_db()
 
     def implement(self, actor, target, **kwargs):
-        target.roles.add_governor_role(self.role_name)
+        target = self.make_changes(actor, target)
         target.save()
         return target
 
 
-class RemoveGovernorRoleStateChange(BaseStateChange):
-    """State change to remove governor role from Community."""
+class ChangeOwnersStateChange(BaseStateChange):
+    """State change to add or remove owners from Community."""
 
     descriptive_text = {
-        "verb": "remove",
-        "default_string": "governor role from community",
-        "detail_string": "governor role {role_name} from community",
-    }
-
-    section = "Leadership"
-    is_foundational = True
-    allowable_targets = ["all_community_models"]
-
-    role_name = field_utils.RoleField(label="Role to remove from governor role", required=True)
-
-    def implement(self, actor, target, **kwargs):
-        target.roles.remove_governor_role(self.role_name)
-        target.save()
-        return target
-
-
-class AddOwnerStateChange(BaseStateChange):
-    """State change to add owner to Community."""
-
-    descriptive_text = {
-        "verb": "add",
-        "default_string": "owner to community",
-        "detail_string": "{owner_pk} as owner of community"
+        "verb": "change",
+        "default_string": "owners of community"
     }
 
     is_foundational = True
     section = "Leadership"
     allowable_targets = ["all_community_models"]
 
-    owner_pk = field_utils.ActorField(label="Person to add as owner", required=True)
+    roles_to_add = field_utils.RoleListField(label="Roles to add")
+    roles_to_remove = field_utils.RoleListField(label="Roles to remove")
+    actors_to_add = field_utils.ActorListField(label="People to add")
+    actors_to_remove = field_utils.ActorListField(label="People to remove")
 
-    def implement(self, actor, target, **kwargs):
-        target.roles.add_owner(self.owner_pk)
-        target.save()
+    def make_changes(self, actor, target):
+
+        if self.actors_to_add:
+            [target.roles.add_owner(pk) for pk in self.actors_to_add]
+
+        if self.actors_to_remove:
+            [target.roles.remove_owner(pk) for pk in self.actors_to_remove]
+
+        if self.roles_to_add:
+            [target.roles.add_owner_role(role) for role in self.roles_to_add]
+
+        if self.roles_to_remove:
+            [target.roles.remove_owner_role(role) for role in self.roles_to_remove]
+
         return target
-
-
-class RemoveOwnerStateChange(BaseStateChange):
-    """State change remove owner from Community."""
-
-    descriptive_text = {
-        "verb": "remove",
-        "default_string": "owner from community",
-        "detail_string": "{owner_pk} as owner of community",
-        "preposition": "from"
-    }
-
-    section = "Leadership"
-    is_foundational = True
-    allowable_targets = ["all_community_models"]
-
-    owner_pk = field_utils.ActorField(label="Person to remove as owner", required=True)
 
     def validate(self, actor, target):
-        """If removing the owner would leave the group with no owners, the action is invalid."""
-
-        if len(target.roles.get_owners()["actors"]) > 1:
-            return  # community has at least one more actor who is an owner
-
-        for role in target.roles.get_owners()["roles"]:
-            actors = target.roles.get_users_given_role(role)
-            if len(actors) > 0:
-                return  # there are actors in owner roles so we don't need this one
-
-        raise ValidationError("Cannot remove owner as doing so would leave the community without an owner")
+        if not self.roles_to_add and not self.roles_to_remove and not self.actors_to_add \
+            and not self.actors_to_remove:
+            raise ValidationError("Must add or remove at least one individual owner or owning role.")
+        target = self.make_changes(actor, target)
+        target.roles.validate_role_handler()
+        target.refresh_from_db()
 
     def implement(self, actor, target, **kwargs):
-        target.roles.remove_owner(self.owner_pk)
-        target.save()
-        return target
-
-
-class AddOwnerRoleStateChange(BaseStateChange):
-    """State change to add owner role to Community."""
-
-    descriptive_text = {
-        "verb": "add",
-        "default_string": "owner role to community",
-        "detail_string": "role {role_name} ownership permissions in community",
-    }
-
-    is_foundational = True
-    section = "Leadership"
-    allowable_targets = ["all_community_models"]
-
-    role_name = field_utils.RoleField(label="Role to make owner role", required=True)
-
-    def validate(self, actor, target):
-        if not target.roles.is_role(self.role_name):
-            raise ValidationError(f"Role {self.role_name} must be role in community to be made an owning role")
-
-    def implement(self, actor, target, **kwargs):
-        target.roles.add_owner_role(self.role_name)
-        target.save()
-        return target
-
-
-class RemoveOwnerRoleStateChange(BaseStateChange):
-    """State change to remove owner role from Community."""
-
-    descriptive_text = {
-        "verb": "remove",
-        "default_string": "owner role from community",
-        "detail_string": "owner role {role_name} from community",
-        "preposition": "from"
-    }
-
-    section = "Leadership"
-    is_foundational = True
-    allowable_targets = ["all_community_models"]
-
-    role_name = field_utils.RoleField(label="Role to remove as owner role", required=True)
-
-    def validate(self, actor, target):
-        """If removing the owner role would leave the group with no owners, the action is invalid."""
-
-        if self.role_name not in target.roles.get_owners()["roles"]:
-            raise ValidationError(f"{self.role_name} is not an owner role in this community")
-
-        if len(target.roles.get_owners()["actors"]) > 0:
-            return  # community has individual actor owners so it doesn't need roles
-
-        for role in target.roles.get_owners()["roles"]:
-            if role == self.role_name:
-                continue
-            actors = target.roles.get_users_given_role(role)
-            if len(actors) > 0:
-                return  # there are other owner roles with actors specified
-
-        raise ValidationError("Cannot remove this role as doing so would leave the community without an owner")
-
-    def implement(self, actor, target, **kwargs):
-        target.roles.remove_owner_role(self.role_name)
+        target = self.make_changes(actor, target)
         target.save()
         return target
 
@@ -399,7 +283,7 @@ class AddPeopleToRoleStateChange(BaseStateChange):
     descriptive_text = {
         "verb": "add",
         "default_string": "people to role",
-        "detail_string": "people with IDs ({people_to_add}) to role '{role_name}'",
+        "detail_string": "people {people_to_add} to role '{role_name}'",
         "preposition": "in"
     }
 

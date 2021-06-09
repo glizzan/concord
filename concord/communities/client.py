@@ -161,66 +161,6 @@ class CommunityClient(BaseClient):
 
     # Complex state updates
 
-    def update_owners(self, *, new_owner_data):
-        """Takes in a list of owners, adds those that are missing and removes those that
-        are no longer there."""
-
-        actions = []
-
-        existing_owners = self.get_ownership_info()
-
-        for new_owner in new_owner_data["individuals"]:
-            if new_owner not in existing_owners["actors"]:
-                action, result = self.add_owner_to_community(owner_pk=new_owner)
-                actions.append(action)
-
-        for old_owner in existing_owners["actors"]:
-            if old_owner not in new_owner_data["individuals"]:
-                action, result = self.remove_owner_from_community(owner_pk=old_owner)
-                actions.append(action)
-
-        for new_owner_role in new_owner_data["roles"]:
-            if new_owner_role not in existing_owners["roles"]:
-                action, result = self.add_owner_role_to_community(role_name=new_owner_role)
-                actions.append(action)
-
-        for old_owner_role in existing_owners["roles"]:
-            if old_owner_role not in new_owner_data["roles"]:
-                action, result = self.remove_owner_role_from_community(role_name=old_owner_role)
-                actions.append(action)
-
-        return actions
-
-    def update_governors(self, *, new_governor_data):
-        """Takes in a list of governors, adds those that are missing and removes
-        those that are no longer there."""
-
-        actions = []
-
-        existing_governors = self.get_governorship_info()
-
-        for new_governor in new_governor_data["individuals"]:
-            if new_governor not in existing_governors["actors"]:
-                action, result = self.add_governor_to_community(governor_pk=new_governor)
-                actions.append(action)
-
-        for old_governor in existing_governors["actors"]:
-            if old_governor not in new_governor_data["individuals"]:
-                action, result = self.remove_governor_from_community(governor_pk=old_governor)
-                actions.append(action)
-
-        for new_governor_role in new_governor_data["roles"]:
-            if new_governor_role not in existing_governors["roles"]:
-                action, result = self.add_governor_role_to_community(role_name=new_governor_role)
-                actions.append(action)
-
-        for old_governor_role in existing_governors["roles"]:
-            if old_governor_role not in new_governor_data["roles"]:
-                action, result = self.remove_governor_role_from_community(role_name=old_governor_role)
-                actions.append(action)
-
-        return actions
-
     def update_roles(self, *, role_data):
         """Takes in a list of roles and adds any which are missing from community."""
 

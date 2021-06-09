@@ -44,11 +44,12 @@ class CommentClient(BaseClient):
 
     # state change method
 
-    def add_comment(self, text):
-        """Add a comment to the target."""
+    def add_comment(self, *, text=None, skip_validation=False, proposed=False):
+        """Add a comment to the target. Overridden so we can call 'swap target if needed' to handle comments on
+        actions. Text is a required field but the state change itself will enforce that constraint."""
         self.swap_target_if_needed(create=True)
-        change = sc.AddCommentStateChange(text=text)
-        return self.create_and_take_action(change)
+        change = sc.AddCommentStateChange(text=text, skip_validation=skip_validation)
+        return self.create_and_take_action(change, proposed)
 
 
 ##################

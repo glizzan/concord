@@ -40,6 +40,7 @@ class Action(ConcordConverterMixin, models.Model):
     status = models.CharField(max_length=15, default="default")
     template_info = models.CharField(max_length=2000, blank=True, null=True)
     logs = models.CharField(max_length=800, blank=True, null=True)
+    note = models.CharField(max_length=200, default="")
 
     # Regular old attributes
     created_at = models.DateTimeField(auto_now_add=True)
@@ -295,6 +296,9 @@ class TemplateModel(PermissionedModel):
     def __repr__(self):
         return f"TemplateModel(pk={self.pk}, name={self.name}, user_description={self.user_description}, " + \
                f"supplied_fields={self.supplied_fields}, scopes={self.scopes}, template_data={self.template_data})"
+
+    def get_nested_objects(self):
+        return [self.get_owner()]
 
     def get_scopes(self):
         """Gets list of scopes the template model applies to."""

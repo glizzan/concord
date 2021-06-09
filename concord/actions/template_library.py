@@ -61,6 +61,14 @@ class TemplateLibraryObject(metaclass=ABCMeta):
         client.set_mode_for_all("mock")
         return client
 
+    def get_metacommunity(self):
+        """Gets or creates the meta-community in the database."""
+        client = self.get_client()
+        try:
+            return client.Community.get_community(community_name="Kybern Template Community")
+        except ObjectDoesNotExist:
+            return client.Community.create_community(name="Kybern Template Community")
+
     def create_template_model(self):
         """Creates the model in DB given above."""
         if self.name is None:
@@ -77,7 +85,7 @@ class TemplateLibraryObject(metaclass=ABCMeta):
         supplied_fields = json.dumps(self.supplied_fields if self.supplied_fields else {})
         t = TemplateModel.objects.create(
             template_data=template_data, user_description=self.get_description(), scopes=scopes,
-            name=self.name, supplied_fields=supplied_fields, owner=self.get_superuser())
+            name=self.name, supplied_fields=supplied_fields, owner=self.get_metacommunity())
         return t
 
 
@@ -156,10 +164,10 @@ class CommunityMembersAndBoardTemplate(TemplateLibraryObject):
             role_name="board", people_to_add="{{supplied_fields.initial_board_members}}")
 
         # Step 3: make 'board' role a governorship role
-        action_3 = client.Community.add_governor_role_to_community(role_name="board")
+        action_3 = client.Community.change_governors_of_community(roles_to_add=["board"])
 
         # Step 4: make members an ownership role
-        action_4 = client.Community.add_owner_role_to_community(role_name="members")
+        action_4 = client.Community.change_owners_of_community(roles_to_add=["members"])
 
         # Step 5: add vote condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.AddVote, "permission_roles": ["owners"]}]
@@ -218,10 +226,10 @@ class CommunityCoreTeamTemplate(TemplateLibraryObject):
             role_name="core team", people_to_add="{{supplied_fields.initial_core_team_members}}")
 
         # Step 3: make 'core team' role an ownership role
-        action_3 = client.Community.add_owner_role_to_community(role_name="core team")
+        action_3 = client.Community.change_owners_of_community(roles_to_add=["core team"])
 
         # Step 4: make 'core team' role an governorship role
-        action_4 = client.Community.add_governor_role_to_community(role_name="core team")
+        action_4 = client.Community.change_governors_of_community(roles_to_add=["core team"])
 
         # Step 5: add approval condition to ownership role
         permission_data = [{"permission_type": Changes().Conditionals.Approve, "permission_roles": ["core team"]},
@@ -274,7 +282,7 @@ class CommunityVotingMembersTemplate(TemplateLibraryObject):
         action_2.target = "{{context.action.target}}"
 
         # Step 3: make 'voting member' role an ownership role
-        action_3 = client.Community.add_owner_role_to_community(role_name="voting members")
+        action_3 = client.Community.change_owners_of_community(roles_to_add=["voting members"])
         action_3.target = "{{context.action.target}}"
 
         # Step 4: add vote condition to ownership role

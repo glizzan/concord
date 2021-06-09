@@ -261,10 +261,11 @@ def action_to_text(action, with_actor=True, with_target=True):
     actor_string = action.actor.username if with_actor else ""
 
     if action.status == "implemented":
-        return f"{actor_string} {action.change.description_past_tense()}" + target_string
+        final_string = f"{actor_string} {action.change.description_past_tense()}" + target_string
     else:
-        return f"{actor_string} asked to {action.change.description_present_tense()}" + target_string
+        final_string = f"{actor_string} asked to {action.change.description_present_tense()}" + target_string
 
+    return final_string.strip(" ")
 
 def supplied_fields_to_text(supplied_field_data, supplied_field_options):
     """Creates an English description of supplied fields."""

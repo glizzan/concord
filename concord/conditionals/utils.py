@@ -1,4 +1,6 @@
 """Utils for conditionals package."""
+import math
+
 from django.core.exceptions import ValidationError
 
 from concord.utils.helpers import Changes
@@ -389,15 +391,15 @@ def display_duration_units(weeks=0, days=0, hours=0, minutes=0, seconds=0):
     time_pieces = []
 
     if weeks > 0:
-        time_pieces.append(f"{weeks} weeks" if weeks > 1 else "1 week")
+        time_pieces.append(f"{int(weeks)} weeks" if weeks > 1 else "1 week")
     if days > 0:
-        time_pieces.append(f"{days} days" if days > 1 else "1 day")
+        time_pieces.append(f"{int(days)} days" if days > 1 else "1 day")
     if hours > 0:
-        time_pieces.append(f"{hours} hours" if hours > 1 else "1 hour")
+        time_pieces.append(f"{int(hours)} hours" if hours > 1 else "1 hour")
     if minutes > 0:
-        time_pieces.append(f"{minutes} minutes" if minutes > 1 else "1 minute")
+        time_pieces.append(f"{int(minutes)} minutes" if minutes > 1 else "1 minute")
     if seconds > 0:
-        time_pieces.append(f"{seconds} seconds" if seconds > 1 else "1 second")
+        time_pieces.append(f"{int(seconds)} seconds" if seconds > 1 else "1 second")
 
     if len(time_pieces) == 1:
         return time_pieces[0]

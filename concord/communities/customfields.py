@@ -4,6 +4,7 @@ from typing import List, Dict
 import logging
 
 from django.db import models
+from django.core.exceptions import ValidationError
 
 from concord.utils.converters import ConcordConverterMixin
 
@@ -66,11 +67,11 @@ class RoleHandler(ConcordConverterMixin):
     def validate_members(self, members):
         """Members should be a list of integers.  For now, we do not check that these are real users."""
         if not isinstance(members, list):
-            raise TypeError(f"Members must be a list, not {str(type(members))}")
+            raise ValidationError(f"Members must be a list, not {str(type(members))}")
         if not members:
-            raise ValueError("Members list must contain at least one member.")
+            raise ValidationError("Members list must contain at least one member.")
         if not isinstance(members[0], int):
-            raise TypeError(f"Individual members in list must be integers, not {str(type(members[0]))}")
+            raise ValidationError(f"Individual members in list must be integers, not {str(type(members[0]))}")
 
     def validate_owners(self, owners):
         """Owners dict should look like:
@@ -80,19 +81,19 @@ class RoleHandler(ConcordConverterMixin):
         All actors must be members and all roles must be a protected role or custom role."""
 
         if set(owners.keys()) != set(["actors", "roles"]):
-            raise KeyError("Owners must be a dict with keys 'actors' and 'roles', not %s" % ", ".join(owners.keys()))
+            raise ValidationError("Owners must be a dict with keys 'actors' and 'roles', not %s" % ", ".join(owners.keys()))
 
         for actor in owners["actors"]:
             if not isinstance(actor, int):
-                raise TypeError(f"Actor {actor} must be supplied as integer, not {str(type(actor))}")
+                raise ValidationError(f"Actor {actor} must be supplied as integer, not {str(type(actor))}")
             if not self.is_member(actor):
-                raise ValueError(f"Actor {actor} must be added as member before they can be an owner.")
+                raise ValidationError(f"Actor {actor} must be added as member before they can be an owner.")
 
         for role in owners["roles"]:
             if not isinstance(role, str):
-                raise TypeError(f"Role {role} must be supplied as string, not {str(type(role))}.")
+                raise ValidationError(f"Role {role} must be supplied as string, not {str(type(role))}.")
             if not self.is_role(role):
-                raise ValueError(f"Role {role} must be added as a custom role before it can be assigned ownership.")
+                raise ValidationError(f"Role {role} must be added as a custom role before it can be assigned ownership.")
 
     def validate_governors(self, governors):
         """Governors dict should look like:
@@ -102,19 +103,19 @@ class RoleHandler(ConcordConverterMixin):
         All actors must be members and all roles must be a protected role or custom role."""
 
         if set(governors.keys()) != set(["actors", "roles"]):
-            raise KeyError(f"Governors must be dict with keys 'actors' and 'roles', not {', '.join(governors.keys())}")
+            raise ValidationError(f"Governors must be dict with keys 'actors' and 'roles', not {', '.join(governors.keys())}")
 
         for actor in governors["actors"]:
             if not isinstance(actor, int):
-                raise TypeError(f"Actor {actor} must be supplied as integer, not {str(type(actor))}.")
+                raise ValidationError(f"Actor {actor} must be supplied as integer, not {str(type(actor))}.")
             if not self.is_member(actor):
-                raise ValueError(f"Actor {actor} must be added as member before they can be a governor.")
+                raise ValidationError(f"Actor {actor} must be added as member before they can be a governor.")
 
         for role in governors["roles"]:
             if not isinstance(role, str):
-                raise TypeError(f"Role {role} must be supplied as string, {str(type(role))}.")
+                raise ValidationError(f"Role {role} must be supplied as string, {str(type(role))}.")
             if not self.is_role(role):
-                raise ValueError(f"Role {role} must be added as role before it can be assigned governorship.")
+                raise ValidationError(f"Role {role} must be added as role before it can be assigned governorship.")
 
     def validate_custom_roles(self, custom_roles):
         """Custom roles dict should look like:
@@ -125,14 +126,14 @@ class RoleHandler(ConcordConverterMixin):
 
         for role_name, role_actors in custom_roles.items():
             if role_name in self.protected_roles:
-                raise ValueError(f"The role name {role_name} is protected, please pick a different name.")
+                raise ValidationError(f"The role name {role_name} is protected, please pick a different name.")
             if not isinstance(role_actors, list):
-                raise TypeError(f"Actors must be supplied to role in RoleDict in a list, not {str(type(role_actors))}")
+                raise ValidationError(f"Actors must be supplied to role in RoleDict in a list, not {str(type(role_actors))}")
             for actor in role_actors:
                 if not isinstance(actor, int):
-                    raise TypeError(f"Actor {actor} must be supplied as integer, not {str(type(actor))}")
+                    raise ValidationError(f"Actor {actor} must be supplied as integer, not {str(type(actor))}")
                 if not self.is_member(actor):
-                    raise ValueError(f"Actor {actor} must be added as member before they can be assigned a role.")
+                    raise ValidationError(f"Actor {actor} must be added as member before they can be assigned a role.")
 
     def validate_role_handler(self):
         """Validates role handler by calling individual validate methods and verifying there's at least one owner."""
@@ -143,14 +144,15 @@ class RoleHandler(ConcordConverterMixin):
         self.validate_governors(governors=self.governors)
 
         # Also confirm that there is at least one owner
-        no_owners = True
+
         if not self.owners["actors"]:
+            no_owners = True
             for role in self.owners["roles"]:
-                if self.owners["roles"][role]:
+                if self.custom_roles[role]:
                     no_owners = False
                     break
-        if no_owners:
-            raise ValueError("At least one owner must be assigned")
+            if no_owners:
+                raise ValidationError("At least one owner must be assigned")
 
     ###############################
     ### Check Methods (Boolean) ###

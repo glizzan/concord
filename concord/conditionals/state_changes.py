@@ -33,6 +33,10 @@ class AddConditionStateChange(BaseStateChange):
     permission_data = field_utils.DictField(label="Data for permissions set on condition", null_value=list)
     leadership_type = field_utils.CharField(label="Type of leadership condition is set on")
 
+    def is_conditionally_foundational(self, action):
+        """Edit condition is foundational when the condition is owner/governor."""
+        return self.leadership_type in ["owner", "governor"]
+
     def validate(self, actor, target):
 
         if not self.condition_type:
@@ -143,6 +147,10 @@ class RemoveConditionStateChange(BaseStateChange):
 
     element_id = field_utils.IntegerField(label="Element ID to remove")
     leadership_type = field_utils.CharField(label="Leadership type to remove condition from")
+
+    def is_conditionally_foundational(self, action):
+        """Edit condition is foundational when the condition is owner/governor."""
+        return self.leadership_type in ["owner", "governor"]
 
     def validate(self, actor, target):
         if hasattr(target, "is_community") and target.is_community and not self.leadership_type:

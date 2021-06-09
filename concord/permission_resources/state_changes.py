@@ -11,6 +11,8 @@ from concord.utils.lookups import get_state_change_object
 from concord.actions.models import TemplateModel
 from concord.permission_resources.utils import delete_permissions_on_target
 from concord.utils import field_utils
+from concord.conditionals.utils import validate_condition
+from concord.conditionals.models import ConditionManager
 
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ class AddPermissionStateChange(BaseStateChange):
     roles = field_utils.RoleListField(label="Roles who have this permission", null_value=list)
     anyone = field_utils.BooleanField(label="Everyone has the permission", null_value=False)
     inverse = field_utils.BooleanField(label="Do the inverse of this permission", null_value=False)
+    condition_data = field_utils.CharField(label="Condition for this permission")
 
     def description_present_tense(self):
         return f"add permission '{get_verb_given_permission_type(self.change_type)}'"
@@ -52,13 +55,22 @@ class AddPermissionStateChange(BaseStateChange):
         return action.change.is_foundational
 
     def validate(self, actor, target):
-        """Need to check that the given permission can be set on the target."""
+
         permission = get_state_change_object(self.change_type)
+
         # check that target is a valid class for the permission to be set on
         if target.__class__ not in permission.get_settable_classes():
             settable_classes_str = ", ".join([str(option) for option in permission.get_settable_classes()])
             raise ValidationError(f"This kind of permission cannot be set on target {target} of class " +
                                   f"{target.__class__}, must be {settable_classes_str}")
+
+        # validate condition data
+        if self.condition_data:
+            for condition in self.condition_data:
+                is_valid, message = validate_condition(condition["condition_type"],
+                    condition["condition_data"], condition["permission_data"], target)
+                if not is_valid:
+                    raise ValidationError(message)
 
     def implement(self, actor, target, **kwargs):
 
@@ -67,7 +79,54 @@ class AddPermissionStateChange(BaseStateChange):
             owner=target.get_owner(), permitted_object=target, anyone=self.anyone, change_type=self.change_type,
             inverse=self.inverse, actors=self.actors, roles=self.roles)
         permission.save()
+
+        # if condition, add and save
+        if self.condition_data:
+
+            # create initial manager
+            owner = permission.get_owner()
+            manager = ConditionManager.objects.create(owner=owner, community=owner.pk, set_on="permission")
+            permission.condition = manager
+
+            # add conditions
+            for condition in self.condition_data:
+                data = {"condition_type": condition["condition_type"], "condition_data": condition["condition_data"],
+                        "permission_data": condition["permission_data"]}
+                manager.add_condition(data_for_condition=data)
+                manager.save()
+
         return permission
+
+
+class EditPermissionStateChange(BaseStateChange):
+
+    descriptive_text = {
+        "verb": "edit",
+        "default_string": "permission",
+        "preposition": "on"
+    }
+
+    section = "Permissions"
+    allowable_targets = [PermissionsItem]
+    settable_classes = ["all_models"]
+    model_based_validation = (PermissionsItem, ["anyone", "roles", "actors"])
+
+    actors = field_utils.ActorListField(label="Actors who have this permission", null_value=list)
+    roles = field_utils.RoleListField(label="Roles who have this permission", null_value=list)
+    anyone = field_utils.BooleanField(label="Everyone has the permission", null_value=False)
+
+    def validate(self, actor, target):
+        if not self.actors and not self.roles and not self.anyone:
+            raise ValidationError("Must change at least one field to edit permission.")
+
+    def implement(self, actor, target, **kwargs):
+        field_dict = {}
+        if self.actors: field_dict["actors"] = self.actors
+        if self.roles: field_dict["roles"] = self.roles
+        if self.anyone: field_dict["anyone"] = self.anyone
+        target.set_fields(**field_dict)
+        target.save()
+        return target
 
 
 class RemovePermissionStateChange(BaseStateChange):
@@ -85,9 +144,10 @@ class RemovePermissionStateChange(BaseStateChange):
 
     def implement(self, actor, target, **kwargs):
         try:
+            pk = target.pk
             delete_permissions_on_target(target)
             target.delete()
-            return True
+            return pk
         except ObjectDoesNotExist as exception:
             logger.warning(exception)
             return False
